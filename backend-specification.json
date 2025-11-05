@@ -1,0 +1,2695 @@
+{
+  "project": {
+    "name": "electro-costa-erp-backend",
+    "description": "Backend API para el sistema ERP Financiero de Electro Costa",
+    "framework": "NestJS",
+    "version": "1.0.0",
+    "nodeVersion": ">=18.0.0",
+    "packageManager": "npm"
+  },
+  "configuration": {
+    "port": 3001,
+    "globalPrefix": "api/v1",
+    "cors": {
+      "enabled": true,
+      "origin": ["http://localhost:3000", "https://yourdomain.com"],
+      "credentials": true
+    },
+    "swagger": {
+      "enabled": true,
+      "title": "Electro Costa ERP API",
+      "description": "API documentation for financial ERP system",
+      "version": "1.0",
+      "path": "api/docs"
+    },
+    "rateLimit": {
+      "ttl": 60,
+      "limit": 100
+    },
+    "fileUpload": {
+      "maxFileSize": 10485760,
+      "allowedMimeTypes": [
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "text/csv"
+      ]
+    }
+  },
+  "dependencies": {
+    "core": ["@nestjs/common", "@nestjs/core", "@nestjs/platform-express", "@nestjs/config", "@nestjs/swagger"],
+    "database": ["@nestjs/typeorm", "typeorm", "pg", "class-validator", "class-transformer"],
+    "authentication": [
+      "@nestjs/jwt",
+      "@nestjs/passport",
+      "passport",
+      "passport-jwt",
+      "passport-local",
+      "bcrypt",
+      "@types/bcrypt"
+    ],
+    "utilities": ["@nestjs/throttler", "@nestjs/schedule", "nodemailer", "exceljs", "pdfkit", "date-fns", "uuid"]
+  },
+  "authentication": {
+    "strategy": "JWT",
+    "jwtSecret": "ENV:JWT_SECRET",
+    "jwtExpiresIn": "24h",
+    "refreshTokenExpiresIn": "7d",
+    "bcryptSaltRounds": 10,
+    "passwordPolicy": {
+      "minLength": 8,
+      "requireUppercase": true,
+      "requireLowercase": true,
+      "requireNumbers": true,
+      "requireSpecialChars": true
+    },
+    "sessionManagement": {
+      "maxActiveSessions": 3,
+      "sessionTimeout": 1800
+    }
+  },
+  "authorization": {
+    "roles": [
+      {
+        "name": "SUPER_ADMIN",
+        "description": "Acceso total al sistema",
+        "permissions": ["*"]
+      },
+      {
+        "name": "ADMIN",
+        "description": "Administrador general",
+        "permissions": ["users:*", "accounts:*", "reports:*", "settings:read"]
+      },
+      {
+        "name": "FINANCE_MANAGER",
+        "description": "Gerente financiero",
+        "permissions": ["accounts:*", "reports:*", "payments:approve"]
+      },
+      {
+        "name": "ACCOUNTANT",
+        "description": "Contador",
+        "permissions": ["accounts:read", "accounts:create", "accounts:update", "reports:read", "payments:create"]
+      },
+      {
+        "name": "COLLECTOR",
+        "description": "Cobrador",
+        "permissions": ["receivables:read", "receivables:update", "payments:create"]
+      },
+      {
+        "name": "VIEWER",
+        "description": "Solo lectura",
+        "permissions": ["accounts:read", "reports:read"]
+      }
+    ],
+    "guards": ["JwtAuthGuard", "RolesGuard", "PermissionsGuard"]
+  },
+  "modules": [
+    {
+      "name": "auth",
+      "description": "Módulo de autenticación y autorización",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/auth/register",
+          "description": "Registro de nuevo usuario",
+          "auth": false,
+          "roles": [],
+          "requestBody": {
+            "email": "string",
+            "password": "string",
+            "firstName": "string",
+            "lastName": "string",
+            "phone": "string"
+          },
+          "response": {
+            "user": "UserEntity",
+            "accessToken": "string",
+            "refreshToken": "string"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/auth/login",
+          "description": "Inicio de sesión",
+          "auth": false,
+          "roles": [],
+          "requestBody": {
+            "email": "string",
+            "password": "string"
+          },
+          "response": {
+            "user": "UserEntity",
+            "accessToken": "string",
+            "refreshToken": "string"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/auth/refresh",
+          "description": "Renovar token de acceso",
+          "auth": false,
+          "roles": [],
+          "requestBody": {
+            "refreshToken": "string"
+          },
+          "response": {
+            "accessToken": "string",
+            "refreshToken": "string"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/auth/logout",
+          "description": "Cerrar sesión",
+          "auth": true,
+          "roles": ["*"],
+          "response": {
+            "message": "string"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/auth/forgot-password",
+          "description": "Solicitar recuperación de contraseña",
+          "auth": false,
+          "roles": [],
+          "requestBody": {
+            "email": "string"
+          },
+          "response": {
+            "message": "string"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/auth/reset-password",
+          "description": "Restablecer contraseña",
+          "auth": false,
+          "roles": [],
+          "requestBody": {
+            "token": "string",
+            "newPassword": "string"
+          },
+          "response": {
+            "message": "string"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/auth/me",
+          "description": "Obtener información del usuario actual",
+          "auth": true,
+          "roles": ["*"],
+          "response": "UserEntity"
+        }
+      ]
+    },
+    {
+      "name": "users",
+      "description": "Gestión de usuarios y roles",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/users",
+          "description": "Listar todos los usuarios",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN"],
+          "queryParams": {
+            "page": "number",
+            "limit": "number",
+            "search": "string",
+            "role": "string",
+            "status": "string"
+          },
+          "response": {
+            "data": "UserEntity[]",
+            "total": "number",
+            "page": "number",
+            "limit": "number"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/users/:id",
+          "description": "Obtener usuario por ID",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN"],
+          "response": "UserEntity"
+        },
+        {
+          "method": "POST",
+          "path": "/users",
+          "description": "Crear nuevo usuario",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN"],
+          "requestBody": {
+            "email": "string",
+            "password": "string",
+            "firstName": "string",
+            "lastName": "string",
+            "phone": "string",
+            "roleId": "string",
+            "departmentId": "string",
+            "status": "string"
+          },
+          "response": "UserEntity"
+        },
+        {
+          "method": "PATCH",
+          "path": "/users/:id",
+          "description": "Actualizar usuario",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN"],
+          "requestBody": {
+            "firstName": "string",
+            "lastName": "string",
+            "phone": "string",
+            "roleId": "string",
+            "departmentId": "string",
+            "status": "string"
+          },
+          "response": "UserEntity"
+        },
+        {
+          "method": "DELETE",
+          "path": "/users/:id",
+          "description": "Eliminar usuario (soft delete)",
+          "auth": true,
+          "roles": ["SUPER_ADMIN"],
+          "response": {
+            "message": "string"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/users/roles",
+          "description": "Listar todos los roles",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN"],
+          "response": "RoleEntity[]"
+        },
+        {
+          "method": "POST",
+          "path": "/users/roles",
+          "description": "Crear nuevo rol",
+          "auth": true,
+          "roles": ["SUPER_ADMIN"],
+          "requestBody": {
+            "name": "string",
+            "description": "string",
+            "permissions": "string[]"
+          },
+          "response": "RoleEntity"
+        },
+        {
+          "method": "PATCH",
+          "path": "/users/roles/:id",
+          "description": "Actualizar rol",
+          "auth": true,
+          "roles": ["SUPER_ADMIN"],
+          "requestBody": {
+            "name": "string",
+            "description": "string",
+            "permissions": "string[]"
+          },
+          "response": "RoleEntity"
+        }
+      ]
+    },
+    {
+      "name": "accounts-receivable",
+      "description": "Gestión de cuentas por cobrar",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/accounts-receivable",
+          "description": "Listar cuentas por cobrar",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "page": "number",
+            "limit": "number",
+            "search": "string",
+            "status": "string",
+            "clientId": "string",
+            "dateFrom": "date",
+            "dateTo": "date",
+            "minAmount": "number",
+            "maxAmount": "number"
+          },
+          "response": {
+            "data": "AccountReceivableEntity[]",
+            "total": "number",
+            "page": "number",
+            "limit": "number",
+            "summary": {
+              "totalAmount": "number",
+              "totalOverdue": "number",
+              "totalUpcoming": "number",
+              "totalCurrent": "number"
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/accounts-receivable/:id",
+          "description": "Obtener cuenta por cobrar por ID",
+          "auth": true,
+          "roles": ["*"],
+          "response": "AccountReceivableEntity"
+        },
+        {
+          "method": "POST",
+          "path": "/accounts-receivable",
+          "description": "Crear nueva cuenta por cobrar",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"],
+          "requestBody": {
+            "clientId": "string",
+            "invoiceNumber": "string",
+            "amount": "number",
+            "currency": "string",
+            "dueDate": "date",
+            "issueDate": "date",
+            "description": "string",
+            "projectId": "string",
+            "categoryId": "string",
+            "notes": "string"
+          },
+          "response": "AccountReceivableEntity"
+        },
+        {
+          "method": "PATCH",
+          "path": "/accounts-receivable/:id",
+          "description": "Actualizar cuenta por cobrar",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"],
+          "requestBody": {
+            "amount": "number",
+            "dueDate": "date",
+            "description": "string",
+            "notes": "string",
+            "status": "string"
+          },
+          "response": "AccountReceivableEntity"
+        },
+        {
+          "method": "DELETE",
+          "path": "/accounts-receivable/:id",
+          "description": "Eliminar cuenta por cobrar",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN"],
+          "response": {
+            "message": "string"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/accounts-receivable/overdue",
+          "description": "Obtener cuentas vencidas",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "page": "number",
+            "limit": "number",
+            "daysOverdue": "number"
+          },
+          "response": {
+            "data": "AccountReceivableEntity[]",
+            "total": "number",
+            "totalAmount": "number"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/accounts-receivable/upcoming",
+          "description": "Obtener cuentas próximas a vencer",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "days": "number"
+          },
+          "response": {
+            "data": "AccountReceivableEntity[]",
+            "total": "number",
+            "totalAmount": "number"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/accounts-receivable/:id/payments",
+          "description": "Registrar pago de cuenta por cobrar",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER", "ACCOUNTANT", "COLLECTOR"],
+          "requestBody": {
+            "amount": "number",
+            "paymentDate": "date",
+            "paymentMethod": "string",
+            "reference": "string",
+            "notes": "string"
+          },
+          "response": "PaymentEntity"
+        },
+        {
+          "method": "GET",
+          "path": "/accounts-receivable/:id/payments",
+          "description": "Obtener historial de pagos",
+          "auth": true,
+          "roles": ["*"],
+          "response": "PaymentEntity[]"
+        },
+        {
+          "method": "GET",
+          "path": "/accounts-receivable/analytics",
+          "description": "Obtener análisis de cuentas por cobrar",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "dateFrom": "date",
+            "dateTo": "date"
+          },
+          "response": {
+            "totalReceivable": "number",
+            "totalCollected": "number",
+            "totalOverdue": "number",
+            "averageDaysToCollect": "number",
+            "collectionRate": "number",
+            "byStatus": "object",
+            "byClient": "object[]",
+            "byMonth": "object[]"
+          }
+        }
+      ]
+    },
+    {
+      "name": "accounts-payable",
+      "description": "Gestión de cuentas por pagar",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/accounts-payable",
+          "description": "Listar cuentas por pagar",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "page": "number",
+            "limit": "number",
+            "search": "string",
+            "status": "string",
+            "supplierId": "string",
+            "categoryId": "string",
+            "dateFrom": "date",
+            "dateTo": "date",
+            "minAmount": "number",
+            "maxAmount": "number"
+          },
+          "response": {
+            "data": "AccountPayableEntity[]",
+            "total": "number",
+            "page": "number",
+            "limit": "number",
+            "summary": {
+              "totalAmount": "number",
+              "totalOverdue": "number",
+              "totalUpcoming": "number",
+              "totalCurrent": "number"
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/accounts-payable/:id",
+          "description": "Obtener cuenta por pagar por ID",
+          "auth": true,
+          "roles": ["*"],
+          "response": "AccountPayableEntity"
+        },
+        {
+          "method": "POST",
+          "path": "/accounts-payable",
+          "description": "Crear nueva cuenta por pagar",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"],
+          "requestBody": {
+            "supplierId": "string",
+            "invoiceNumber": "string",
+            "amount": "number",
+            "currency": "string",
+            "dueDate": "date",
+            "issueDate": "date",
+            "description": "string",
+            "categoryId": "string",
+            "projectId": "string",
+            "notes": "string"
+          },
+          "response": "AccountPayableEntity"
+        },
+        {
+          "method": "PATCH",
+          "path": "/accounts-payable/:id",
+          "description": "Actualizar cuenta por pagar",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"],
+          "requestBody": {
+            "amount": "number",
+            "dueDate": "date",
+            "description": "string",
+            "notes": "string",
+            "status": "string"
+          },
+          "response": "AccountPayableEntity"
+        },
+        {
+          "method": "DELETE",
+          "path": "/accounts-payable/:id",
+          "description": "Eliminar cuenta por pagar",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN"],
+          "response": {
+            "message": "string"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/accounts-payable/:id/schedule",
+          "description": "Programar pago",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER"],
+          "requestBody": {
+            "scheduledDate": "date",
+            "amount": "number",
+            "notes": "string"
+          },
+          "response": "PaymentScheduleEntity"
+        },
+        {
+          "method": "POST",
+          "path": "/accounts-payable/:id/approve",
+          "description": "Aprobar pago",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER"],
+          "requestBody": {
+            "notes": "string"
+          },
+          "response": "AccountPayableEntity"
+        },
+        {
+          "method": "POST",
+          "path": "/accounts-payable/:id/reject",
+          "description": "Rechazar pago",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER"],
+          "requestBody": {
+            "reason": "string"
+          },
+          "response": "AccountPayableEntity"
+        },
+        {
+          "method": "POST",
+          "path": "/accounts-payable/:id/payments",
+          "description": "Registrar pago realizado",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"],
+          "requestBody": {
+            "amount": "number",
+            "paymentDate": "date",
+            "paymentMethod": "string",
+            "reference": "string",
+            "notes": "string"
+          },
+          "response": "PaymentEntity"
+        },
+        {
+          "method": "GET",
+          "path": "/accounts-payable/:id/payments",
+          "description": "Obtener historial de pagos",
+          "auth": true,
+          "roles": ["*"],
+          "response": "PaymentEntity[]"
+        },
+        {
+          "method": "GET",
+          "path": "/accounts-payable/analytics",
+          "description": "Obtener análisis de cuentas por pagar",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "dateFrom": "date",
+            "dateTo": "date"
+          },
+          "response": {
+            "totalPayable": "number",
+            "totalPaid": "number",
+            "totalOverdue": "number",
+            "averageDaysToPay": "number",
+            "paymentRate": "number",
+            "byStatus": "object",
+            "bySupplier": "object[]",
+            "byCategory": "object[]",
+            "byMonth": "object[]"
+          }
+        }
+      ]
+    },
+    {
+      "name": "clients",
+      "description": "Gestión de clientes",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/clients",
+          "description": "Listar clientes",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "page": "number",
+            "limit": "number",
+            "search": "string",
+            "status": "string"
+          },
+          "response": {
+            "data": "ClientEntity[]",
+            "total": "number",
+            "page": "number",
+            "limit": "number"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/clients/:id",
+          "description": "Obtener cliente por ID",
+          "auth": true,
+          "roles": ["*"],
+          "response": "ClientEntity"
+        },
+        {
+          "method": "POST",
+          "path": "/clients",
+          "description": "Crear nuevo cliente",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"],
+          "requestBody": {
+            "name": "string",
+            "taxId": "string",
+            "email": "string",
+            "phone": "string",
+            "address": "string",
+            "city": "string",
+            "state": "string",
+            "zipCode": "string",
+            "country": "string",
+            "contactPerson": "string",
+            "creditLimit": "number",
+            "paymentTerms": "number",
+            "notes": "string"
+          },
+          "response": "ClientEntity"
+        },
+        {
+          "method": "PATCH",
+          "path": "/clients/:id",
+          "description": "Actualizar cliente",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"],
+          "requestBody": {
+            "name": "string",
+            "email": "string",
+            "phone": "string",
+            "address": "string",
+            "contactPerson": "string",
+            "creditLimit": "number",
+            "paymentTerms": "number",
+            "notes": "string",
+            "status": "string"
+          },
+          "response": "ClientEntity"
+        },
+        {
+          "method": "DELETE",
+          "path": "/clients/:id",
+          "description": "Eliminar cliente",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN"],
+          "response": {
+            "message": "string"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/clients/:id/accounts",
+          "description": "Obtener cuentas del cliente",
+          "auth": true,
+          "roles": ["*"],
+          "response": {
+            "receivables": "AccountReceivableEntity[]",
+            "totalBalance": "number",
+            "overdueBalance": "number"
+          }
+        }
+      ]
+    },
+    {
+      "name": "suppliers",
+      "description": "Gestión de proveedores",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/suppliers",
+          "description": "Listar proveedores",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "page": "number",
+            "limit": "number",
+            "search": "string",
+            "categoryId": "string",
+            "status": "string"
+          },
+          "response": {
+            "data": "SupplierEntity[]",
+            "total": "number",
+            "page": "number",
+            "limit": "number"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/suppliers/:id",
+          "description": "Obtener proveedor por ID",
+          "auth": true,
+          "roles": ["*"],
+          "response": "SupplierEntity"
+        },
+        {
+          "method": "POST",
+          "path": "/suppliers",
+          "description": "Crear nuevo proveedor",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"],
+          "requestBody": {
+            "name": "string",
+            "taxId": "string",
+            "email": "string",
+            "phone": "string",
+            "address": "string",
+            "city": "string",
+            "state": "string",
+            "zipCode": "string",
+            "country": "string",
+            "contactPerson": "string",
+            "categoryId": "string",
+            "paymentTerms": "number",
+            "bankAccount": "string",
+            "bankName": "string",
+            "notes": "string"
+          },
+          "response": "SupplierEntity"
+        },
+        {
+          "method": "PATCH",
+          "path": "/suppliers/:id",
+          "description": "Actualizar proveedor",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"],
+          "requestBody": {
+            "name": "string",
+            "email": "string",
+            "phone": "string",
+            "address": "string",
+            "contactPerson": "string",
+            "categoryId": "string",
+            "paymentTerms": "number",
+            "bankAccount": "string",
+            "notes": "string",
+            "status": "string"
+          },
+          "response": "SupplierEntity"
+        },
+        {
+          "method": "DELETE",
+          "path": "/suppliers/:id",
+          "description": "Eliminar proveedor",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN"],
+          "response": {
+            "message": "string"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/suppliers/:id/accounts",
+          "description": "Obtener cuentas del proveedor",
+          "auth": true,
+          "roles": ["*"],
+          "response": {
+            "payables": "AccountPayableEntity[]",
+            "totalBalance": "number",
+            "overdueBalance": "number"
+          }
+        }
+      ]
+    },
+    {
+      "name": "categories",
+      "description": "Gestión de categorías",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/categories",
+          "description": "Listar categorías",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "type": "string"
+          },
+          "response": "CategoryEntity[]"
+        },
+        {
+          "method": "POST",
+          "path": "/categories",
+          "description": "Crear nueva categoría",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN"],
+          "requestBody": {
+            "name": "string",
+            "description": "string",
+            "type": "string",
+            "color": "string"
+          },
+          "response": "CategoryEntity"
+        },
+        {
+          "method": "PATCH",
+          "path": "/categories/:id",
+          "description": "Actualizar categoría",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN"],
+          "requestBody": {
+            "name": "string",
+            "description": "string",
+            "color": "string"
+          },
+          "response": "CategoryEntity"
+        },
+        {
+          "method": "DELETE",
+          "path": "/categories/:id",
+          "description": "Eliminar categoría",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN"],
+          "response": {
+            "message": "string"
+          }
+        }
+      ]
+    },
+    {
+      "name": "projects",
+      "description": "Gestión de proyectos",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/projects",
+          "description": "Listar proyectos",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "page": "number",
+            "limit": "number",
+            "search": "string",
+            "status": "string"
+          },
+          "response": {
+            "data": "ProjectEntity[]",
+            "total": "number",
+            "page": "number",
+            "limit": "number"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/projects/:id",
+          "description": "Obtener proyecto por ID",
+          "auth": true,
+          "roles": ["*"],
+          "response": "ProjectEntity"
+        },
+        {
+          "method": "POST",
+          "path": "/projects",
+          "description": "Crear nuevo proyecto",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER"],
+          "requestBody": {
+            "name": "string",
+            "code": "string",
+            "description": "string",
+            "clientId": "string",
+            "startDate": "date",
+            "endDate": "date",
+            "budget": "number",
+            "status": "string"
+          },
+          "response": "ProjectEntity"
+        },
+        {
+          "method": "PATCH",
+          "path": "/projects/:id",
+          "description": "Actualizar proyecto",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER"],
+          "requestBody": {
+            "name": "string",
+            "description": "string",
+            "endDate": "date",
+            "budget": "number",
+            "status": "string"
+          },
+          "response": "ProjectEntity"
+        },
+        {
+          "method": "GET",
+          "path": "/projects/:id/financials",
+          "description": "Obtener información financiera del proyecto",
+          "auth": true,
+          "roles": ["*"],
+          "response": {
+            "budget": "number",
+            "totalIncome": "number",
+            "totalExpenses": "number",
+            "balance": "number",
+            "receivables": "AccountReceivableEntity[]",
+            "payables": "AccountPayableEntity[]"
+          }
+        }
+      ]
+    },
+    {
+      "name": "data-upload",
+      "description": "Carga masiva de información",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/data-upload/sales",
+          "description": "Cargar ventas desde archivo",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"],
+          "requestBody": {
+            "file": "multipart/form-data",
+            "format": "string"
+          },
+          "response": {
+            "success": "number",
+            "failed": "number",
+            "errors": "object[]"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/data-upload/expenses",
+          "description": "Cargar gastos desde archivo",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"],
+          "requestBody": {
+            "file": "multipart/form-data",
+            "format": "string"
+          },
+          "response": {
+            "success": "number",
+            "failed": "number",
+            "errors": "object[]"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/data-upload/projects",
+          "description": "Cargar proyectos desde archivo",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER"],
+          "requestBody": {
+            "file": "multipart/form-data",
+            "format": "string"
+          },
+          "response": {
+            "success": "number",
+            "failed": "number",
+            "errors": "object[]"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/data-upload/advances",
+          "description": "Cargar anticipos desde archivo",
+          "auth": true,
+          "roles": ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"],
+          "requestBody": {
+            "file": "multipart/form-data",
+            "format": "string"
+          },
+          "response": {
+            "success": "number",
+            "failed": "number",
+            "errors": "object[]"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/data-upload/templates/:type",
+          "description": "Descargar plantilla de carga",
+          "auth": true,
+          "roles": ["*"],
+          "response": "file"
+        },
+        {
+          "method": "GET",
+          "path": "/data-upload/history",
+          "description": "Historial de cargas",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "page": "number",
+            "limit": "number",
+            "type": "string"
+          },
+          "response": {
+            "data": "UploadHistoryEntity[]",
+            "total": "number"
+          }
+        }
+      ]
+    },
+    {
+      "name": "reports",
+      "description": "Generación de reportes",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/reports/cash-flow",
+          "description": "Reporte de flujo de efectivo",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "dateFrom": "date",
+            "dateTo": "date",
+            "format": "string"
+          },
+          "response": "object | file"
+        },
+        {
+          "method": "GET",
+          "path": "/reports/aging",
+          "description": "Reporte de antigüedad de saldos",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "type": "string",
+            "asOfDate": "date",
+            "format": "string"
+          },
+          "response": "object | file"
+        },
+        {
+          "method": "GET",
+          "path": "/reports/accounts-receivable",
+          "description": "Reporte detallado de cuentas por cobrar",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "dateFrom": "date",
+            "dateTo": "date",
+            "clientId": "string",
+            "status": "string",
+            "format": "string"
+          },
+          "response": "object | file"
+        },
+        {
+          "method": "GET",
+          "path": "/reports/accounts-payable",
+          "description": "Reporte detallado de cuentas por pagar",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "dateFrom": "date",
+            "dateTo": "date",
+            "supplierId": "string",
+            "categoryId": "string",
+            "status": "string",
+            "format": "string"
+          },
+          "response": "object | file"
+        },
+        {
+          "method": "GET",
+          "path": "/reports/payments",
+          "description": "Reporte de pagos",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "dateFrom": "date",
+            "dateTo": "date",
+            "type": "string",
+            "format": "string"
+          },
+          "response": "object | file"
+        },
+        {
+          "method": "GET",
+          "path": "/reports/by-client",
+          "description": "Reporte por cliente",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "clientId": "string",
+            "dateFrom": "date",
+            "dateTo": "date",
+            "format": "string"
+          },
+          "response": "object | file"
+        },
+        {
+          "method": "GET",
+          "path": "/reports/by-supplier",
+          "description": "Reporte por proveedor",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "supplierId": "string",
+            "dateFrom": "date",
+            "dateTo": "date",
+            "format": "string"
+          },
+          "response": "object | file"
+        },
+        {
+          "method": "GET",
+          "path": "/reports/by-project",
+          "description": "Reporte por proyecto",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "projectId": "string",
+            "format": "string"
+          },
+          "response": "object | file"
+        },
+        {
+          "method": "GET",
+          "path": "/reports/dashboard",
+          "description": "Datos para dashboard principal",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "dateFrom": "date",
+            "dateTo": "date"
+          },
+          "response": {
+            "kpis": "object",
+            "cashFlowChart": "object[]",
+            "expenseDistribution": "object[]",
+            "recentTransactions": "object[]",
+            "alerts": "object[]"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/reports/custom",
+          "description": "Generar reporte personalizado",
+          "auth": true,
+          "roles": ["*"],
+          "requestBody": {
+            "name": "string",
+            "filters": "object",
+            "columns": "string[]",
+            "format": "string"
+          },
+          "response": "object | file"
+        }
+      ]
+    },
+    {
+      "name": "notifications",
+      "description": "Sistema de notificaciones",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/notifications",
+          "description": "Listar notificaciones del usuario",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "page": "number",
+            "limit": "number",
+            "read": "boolean"
+          },
+          "response": {
+            "data": "NotificationEntity[]",
+            "total": "number",
+            "unreadCount": "number"
+          }
+        },
+        {
+          "method": "PATCH",
+          "path": "/notifications/:id/read",
+          "description": "Marcar notificación como leída",
+          "auth": true,
+          "roles": ["*"],
+          "response": "NotificationEntity"
+        },
+        {
+          "method": "PATCH",
+          "path": "/notifications/read-all",
+          "description": "Marcar todas como leídas",
+          "auth": true,
+          "roles": ["*"],
+          "response": {
+            "message": "string"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/notifications/settings",
+          "description": "Obtener configuración de notificaciones",
+          "auth": true,
+          "roles": ["*"],
+          "response": "NotificationSettingsEntity"
+        },
+        {
+          "method": "PATCH",
+          "path": "/notifications/settings",
+          "description": "Actualizar configuración de notificaciones",
+          "auth": true,
+          "roles": ["*"],
+          "requestBody": {
+            "emailEnabled": "boolean",
+            "overdueAlerts": "boolean",
+            "upcomingAlerts": "boolean",
+            "paymentAlerts": "boolean",
+            "daysBeforeDue": "number"
+          },
+          "response": "NotificationSettingsEntity"
+        }
+      ]
+    },
+    {
+      "name": "dashboard",
+      "description": "Datos para dashboards",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/dashboard/general",
+          "description": "Dashboard general",
+          "auth": true,
+          "roles": ["*"],
+          "response": {
+            "kpis": "object",
+            "charts": "object",
+            "recentActivity": "object[]"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dashboard/financial",
+          "description": "Dashboard financiero",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "dateFrom": "date",
+            "dateTo": "date"
+          },
+          "response": {
+            "totalReceivable": "number",
+            "totalPayable": "number",
+            "cashFlow": "number",
+            "overdueAccounts": "number",
+            "cashFlowChart": "object[]",
+            "expenseDistribution": "object[]"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/dashboard/by-area",
+          "description": "Dashboard por área",
+          "auth": true,
+          "roles": ["*"],
+          "queryParams": {
+            "areaId": "string"
+          },
+          "response": {
+            "areaMetrics": "object",
+            "projects": "object[]",
+            "expenses": "object[]"
+          }
+        }
+      ]
+    }
+  ],
+  "database": {
+    "type": "PostgreSQL",
+    "version": ">=14.0",
+    "schema": {
+      "users": {
+        "tableName": "users",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "email": {
+            "type": "varchar",
+            "length": 255,
+            "unique": true,
+            "nullable": false
+          },
+          "password": {
+            "type": "varchar",
+            "length": 255,
+            "nullable": false
+          },
+          "firstName": {
+            "type": "varchar",
+            "length": 100,
+            "nullable": false
+          },
+          "lastName": {
+            "type": "varchar",
+            "length": 100,
+            "nullable": false
+          },
+          "phone": {
+            "type": "varchar",
+            "length": 20,
+            "nullable": true
+          },
+          "roleId": {
+            "type": "uuid",
+            "nullable": false,
+            "foreignKey": {
+              "table": "roles",
+              "column": "id",
+              "onDelete": "RESTRICT"
+            }
+          },
+          "departmentId": {
+            "type": "uuid",
+            "nullable": true,
+            "foreignKey": {
+              "table": "departments",
+              "column": "id",
+              "onDelete": "SET NULL"
+            }
+          },
+          "status": {
+            "type": "enum",
+            "values": ["active", "inactive", "suspended"],
+            "default": "active"
+          },
+          "lastLogin": {
+            "type": "timestamp",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "updatedAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "deletedAt": {
+            "type": "timestamp",
+            "nullable": true
+          }
+        },
+        "indexes": [
+          {
+            "name": "idx_users_email",
+            "columns": ["email"]
+          },
+          {
+            "name": "idx_users_role",
+            "columns": ["roleId"]
+          }
+        ]
+      },
+      "roles": {
+        "tableName": "roles",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "name": {
+            "type": "varchar",
+            "length": 50,
+            "unique": true,
+            "nullable": false
+          },
+          "description": {
+            "type": "text",
+            "nullable": true
+          },
+          "permissions": {
+            "type": "jsonb",
+            "nullable": false,
+            "default": "[]"
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "updatedAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          }
+        }
+      },
+      "departments": {
+        "tableName": "departments",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "name": {
+            "type": "varchar",
+            "length": 100,
+            "nullable": false
+          },
+          "description": {
+            "type": "text",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "updatedAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          }
+        }
+      },
+      "clients": {
+        "tableName": "clients",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "name": {
+            "type": "varchar",
+            "length": 255,
+            "nullable": false
+          },
+          "taxId": {
+            "type": "varchar",
+            "length": 50,
+            "unique": true,
+            "nullable": false
+          },
+          "email": {
+            "type": "varchar",
+            "length": 255,
+            "nullable": true
+          },
+          "phone": {
+            "type": "varchar",
+            "length": 20,
+            "nullable": true
+          },
+          "address": {
+            "type": "text",
+            "nullable": true
+          },
+          "city": {
+            "type": "varchar",
+            "length": 100,
+            "nullable": true
+          },
+          "state": {
+            "type": "varchar",
+            "length": 100,
+            "nullable": true
+          },
+          "zipCode": {
+            "type": "varchar",
+            "length": 20,
+            "nullable": true
+          },
+          "country": {
+            "type": "varchar",
+            "length": 100,
+            "default": "México"
+          },
+          "contactPerson": {
+            "type": "varchar",
+            "length": 255,
+            "nullable": true
+          },
+          "creditLimit": {
+            "type": "decimal",
+            "precision": 15,
+            "scale": 2,
+            "default": 0
+          },
+          "paymentTerms": {
+            "type": "integer",
+            "default": 30,
+            "comment": "Días de crédito"
+          },
+          "notes": {
+            "type": "text",
+            "nullable": true
+          },
+          "status": {
+            "type": "enum",
+            "values": ["active", "inactive"],
+            "default": "active"
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "updatedAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "deletedAt": {
+            "type": "timestamp",
+            "nullable": true
+          }
+        },
+        "indexes": [
+          {
+            "name": "idx_clients_taxId",
+            "columns": ["taxId"]
+          },
+          {
+            "name": "idx_clients_name",
+            "columns": ["name"]
+          }
+        ]
+      },
+      "suppliers": {
+        "tableName": "suppliers",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "name": {
+            "type": "varchar",
+            "length": 255,
+            "nullable": false
+          },
+          "taxId": {
+            "type": "varchar",
+            "length": 50,
+            "unique": true,
+            "nullable": false
+          },
+          "email": {
+            "type": "varchar",
+            "length": 255,
+            "nullable": true
+          },
+          "phone": {
+            "type": "varchar",
+            "length": 20,
+            "nullable": true
+          },
+          "address": {
+            "type": "text",
+            "nullable": true
+          },
+          "city": {
+            "type": "varchar",
+            "length": 100,
+            "nullable": true
+          },
+          "state": {
+            "type": "varchar",
+            "length": 100,
+            "nullable": true
+          },
+          "zipCode": {
+            "type": "varchar",
+            "length": 20,
+            "nullable": true
+          },
+          "country": {
+            "type": "varchar",
+            "length": 100,
+            "default": "México"
+          },
+          "contactPerson": {
+            "type": "varchar",
+            "length": 255,
+            "nullable": true
+          },
+          "categoryId": {
+            "type": "uuid",
+            "nullable": true,
+            "foreignKey": {
+              "table": "categories",
+              "column": "id",
+              "onDelete": "SET NULL"
+            }
+          },
+          "paymentTerms": {
+            "type": "integer",
+            "default": 30,
+            "comment": "Días de crédito"
+          },
+          "bankAccount": {
+            "type": "varchar",
+            "length": 50,
+            "nullable": true
+          },
+          "bankName": {
+            "type": "varchar",
+            "length": 100,
+            "nullable": true
+          },
+          "notes": {
+            "type": "text",
+            "nullable": true
+          },
+          "status": {
+            "type": "enum",
+            "values": ["active", "inactive"],
+            "default": "active"
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "updatedAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "deletedAt": {
+            "type": "timestamp",
+            "nullable": true
+          }
+        },
+        "indexes": [
+          {
+            "name": "idx_suppliers_taxId",
+            "columns": ["taxId"]
+          },
+          {
+            "name": "idx_suppliers_name",
+            "columns": ["name"]
+          },
+          {
+            "name": "idx_suppliers_category",
+            "columns": ["categoryId"]
+          }
+        ]
+      },
+      "categories": {
+        "tableName": "categories",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "name": {
+            "type": "varchar",
+            "length": 100,
+            "nullable": false
+          },
+          "description": {
+            "type": "text",
+            "nullable": true
+          },
+          "type": {
+            "type": "enum",
+            "values": ["expense", "income", "supplier"],
+            "nullable": false
+          },
+          "color": {
+            "type": "varchar",
+            "length": 7,
+            "nullable": true,
+            "comment": "Código hexadecimal de color"
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "updatedAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          }
+        }
+      },
+      "projects": {
+        "tableName": "projects",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "name": {
+            "type": "varchar",
+            "length": 255,
+            "nullable": false
+          },
+          "code": {
+            "type": "varchar",
+            "length": 50,
+            "unique": true,
+            "nullable": false
+          },
+          "description": {
+            "type": "text",
+            "nullable": true
+          },
+          "clientId": {
+            "type": "uuid",
+            "nullable": true,
+            "foreignKey": {
+              "table": "clients",
+              "column": "id",
+              "onDelete": "SET NULL"
+            }
+          },
+          "startDate": {
+            "type": "date",
+            "nullable": false
+          },
+          "endDate": {
+            "type": "date",
+            "nullable": true
+          },
+          "budget": {
+            "type": "decimal",
+            "precision": 15,
+            "scale": 2,
+            "default": 0
+          },
+          "status": {
+            "type": "enum",
+            "values": ["planning", "active", "on-hold", "completed", "cancelled"],
+            "default": "planning"
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "updatedAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "deletedAt": {
+            "type": "timestamp",
+            "nullable": true
+          }
+        },
+        "indexes": [
+          {
+            "name": "idx_projects_code",
+            "columns": ["code"]
+          },
+          {
+            "name": "idx_projects_client",
+            "columns": ["clientId"]
+          }
+        ]
+      },
+      "accounts_receivable": {
+        "tableName": "accounts_receivable",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "clientId": {
+            "type": "uuid",
+            "nullable": false,
+            "foreignKey": {
+              "table": "clients",
+              "column": "id",
+              "onDelete": "RESTRICT"
+            }
+          },
+          "projectId": {
+            "type": "uuid",
+            "nullable": true,
+            "foreignKey": {
+              "table": "projects",
+              "column": "id",
+              "onDelete": "SET NULL"
+            }
+          },
+          "categoryId": {
+            "type": "uuid",
+            "nullable": true,
+            "foreignKey": {
+              "table": "categories",
+              "column": "id",
+              "onDelete": "SET NULL"
+            }
+          },
+          "invoiceNumber": {
+            "type": "varchar",
+            "length": 50,
+            "unique": true,
+            "nullable": false
+          },
+          "amount": {
+            "type": "decimal",
+            "precision": 15,
+            "scale": 2,
+            "nullable": false
+          },
+          "paidAmount": {
+            "type": "decimal",
+            "precision": 15,
+            "scale": 2,
+            "default": 0
+          },
+          "balance": {
+            "type": "decimal",
+            "precision": 15,
+            "scale": 2,
+            "nullable": false,
+            "comment": "Calculado: amount - paidAmount"
+          },
+          "currency": {
+            "type": "varchar",
+            "length": 3,
+            "default": "MXN"
+          },
+          "issueDate": {
+            "type": "date",
+            "nullable": false
+          },
+          "dueDate": {
+            "type": "date",
+            "nullable": false
+          },
+          "description": {
+            "type": "text",
+            "nullable": true
+          },
+          "notes": {
+            "type": "text",
+            "nullable": true
+          },
+          "status": {
+            "type": "enum",
+            "values": ["pending", "partial", "paid", "overdue", "cancelled"],
+            "default": "pending"
+          },
+          "createdBy": {
+            "type": "uuid",
+            "nullable": false,
+            "foreignKey": {
+              "table": "users",
+              "column": "id",
+              "onDelete": "RESTRICT"
+            }
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "updatedAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "deletedAt": {
+            "type": "timestamp",
+            "nullable": true
+          }
+        },
+        "indexes": [
+          {
+            "name": "idx_ar_client",
+            "columns": ["clientId"]
+          },
+          {
+            "name": "idx_ar_invoice",
+            "columns": ["invoiceNumber"]
+          },
+          {
+            "name": "idx_ar_status",
+            "columns": ["status"]
+          },
+          {
+            "name": "idx_ar_due_date",
+            "columns": ["dueDate"]
+          },
+          {
+            "name": "idx_ar_project",
+            "columns": ["projectId"]
+          }
+        ]
+      },
+      "accounts_payable": {
+        "tableName": "accounts_payable",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "supplierId": {
+            "type": "uuid",
+            "nullable": false,
+            "foreignKey": {
+              "table": "suppliers",
+              "column": "id",
+              "onDelete": "RESTRICT"
+            }
+          },
+          "projectId": {
+            "type": "uuid",
+            "nullable": true,
+            "foreignKey": {
+              "table": "projects",
+              "column": "id",
+              "onDelete": "SET NULL"
+            }
+          },
+          "categoryId": {
+            "type": "uuid",
+            "nullable": false,
+            "foreignKey": {
+              "table": "categories",
+              "column": "id",
+              "onDelete": "RESTRICT"
+            }
+          },
+          "invoiceNumber": {
+            "type": "varchar",
+            "length": 50,
+            "nullable": false
+          },
+          "amount": {
+            "type": "decimal",
+            "precision": 15,
+            "scale": 2,
+            "nullable": false
+          },
+          "paidAmount": {
+            "type": "decimal",
+            "precision": 15,
+            "scale": 2,
+            "default": 0
+          },
+          "balance": {
+            "type": "decimal",
+            "precision": 15,
+            "scale": 2,
+            "nullable": false,
+            "comment": "Calculado: amount - paidAmount"
+          },
+          "currency": {
+            "type": "varchar",
+            "length": 3,
+            "default": "MXN"
+          },
+          "issueDate": {
+            "type": "date",
+            "nullable": false
+          },
+          "dueDate": {
+            "type": "date",
+            "nullable": false
+          },
+          "description": {
+            "type": "text",
+            "nullable": true
+          },
+          "notes": {
+            "type": "text",
+            "nullable": true
+          },
+          "status": {
+            "type": "enum",
+            "values": ["pending", "scheduled", "approved", "partial", "paid", "overdue", "rejected", "cancelled"],
+            "default": "pending"
+          },
+          "approvalStatus": {
+            "type": "enum",
+            "values": ["pending", "approved", "rejected"],
+            "default": "pending"
+          },
+          "approvedBy": {
+            "type": "uuid",
+            "nullable": true,
+            "foreignKey": {
+              "table": "users",
+              "column": "id",
+              "onDelete": "SET NULL"
+            }
+          },
+          "approvedAt": {
+            "type": "timestamp",
+            "nullable": true
+          },
+          "createdBy": {
+            "type": "uuid",
+            "nullable": false,
+            "foreignKey": {
+              "table": "users",
+              "column": "id",
+              "onDelete": "RESTRICT"
+            }
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "updatedAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "deletedAt": {
+            "type": "timestamp",
+            "nullable": true
+          }
+        },
+        "indexes": [
+          {
+            "name": "idx_ap_supplier",
+            "columns": ["supplierId"]
+          },
+          {
+            "name": "idx_ap_invoice",
+            "columns": ["invoiceNumber"]
+          },
+          {
+            "name": "idx_ap_status",
+            "columns": ["status"]
+          },
+          {
+            "name": "idx_ap_due_date",
+            "columns": ["dueDate"]
+          },
+          {
+            "name": "idx_ap_category",
+            "columns": ["categoryId"]
+          },
+          {
+            "name": "idx_ap_project",
+            "columns": ["projectId"]
+          },
+          {
+            "name": "idx_ap_approval",
+            "columns": ["approvalStatus"]
+          }
+        ]
+      },
+      "payments": {
+        "tableName": "payments",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "accountReceivableId": {
+            "type": "uuid",
+            "nullable": true,
+            "foreignKey": {
+              "table": "accounts_receivable",
+              "column": "id",
+              "onDelete": "CASCADE"
+            }
+          },
+          "accountPayableId": {
+            "type": "uuid",
+            "nullable": true,
+            "foreignKey": {
+              "table": "accounts_payable",
+              "column": "id",
+              "onDelete": "CASCADE"
+            }
+          },
+          "amount": {
+            "type": "decimal",
+            "precision": 15,
+            "scale": 2,
+            "nullable": false
+          },
+          "paymentDate": {
+            "type": "date",
+            "nullable": false
+          },
+          "paymentMethod": {
+            "type": "enum",
+            "values": ["cash", "check", "transfer", "card", "other"],
+            "nullable": false
+          },
+          "reference": {
+            "type": "varchar",
+            "length": 100,
+            "nullable": true,
+            "comment": "Número de referencia, cheque, etc."
+          },
+          "notes": {
+            "type": "text",
+            "nullable": true
+          },
+          "createdBy": {
+            "type": "uuid",
+            "nullable": false,
+            "foreignKey": {
+              "table": "users",
+              "column": "id",
+              "onDelete": "RESTRICT"
+            }
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "updatedAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          }
+        },
+        "indexes": [
+          {
+            "name": "idx_payments_ar",
+            "columns": ["accountReceivableId"]
+          },
+          {
+            "name": "idx_payments_ap",
+            "columns": ["accountPayableId"]
+          },
+          {
+            "name": "idx_payments_date",
+            "columns": ["paymentDate"]
+          }
+        ],
+        "constraints": [
+          {
+            "type": "CHECK",
+            "expression": "(accountReceivableId IS NOT NULL AND accountPayableId IS NULL) OR (accountReceivableId IS NULL AND accountPayableId IS NOT NULL)",
+            "comment": "Un pago debe estar asociado a una cuenta por cobrar O por pagar, no ambas"
+          }
+        ]
+      },
+      "payment_schedules": {
+        "tableName": "payment_schedules",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "accountPayableId": {
+            "type": "uuid",
+            "nullable": false,
+            "foreignKey": {
+              "table": "accounts_payable",
+              "column": "id",
+              "onDelete": "CASCADE"
+            }
+          },
+          "scheduledDate": {
+            "type": "date",
+            "nullable": false
+          },
+          "amount": {
+            "type": "decimal",
+            "precision": 15,
+            "scale": 2,
+            "nullable": false
+          },
+          "status": {
+            "type": "enum",
+            "values": ["scheduled", "completed", "cancelled"],
+            "default": "scheduled"
+          },
+          "notes": {
+            "type": "text",
+            "nullable": true
+          },
+          "createdBy": {
+            "type": "uuid",
+            "nullable": false,
+            "foreignKey": {
+              "table": "users",
+              "column": "id",
+              "onDelete": "RESTRICT"
+            }
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "updatedAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          }
+        },
+        "indexes": [
+          {
+            "name": "idx_schedule_ap",
+            "columns": ["accountPayableId"]
+          },
+          {
+            "name": "idx_schedule_date",
+            "columns": ["scheduledDate"]
+          }
+        ]
+      },
+      "notifications": {
+        "tableName": "notifications",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "userId": {
+            "type": "uuid",
+            "nullable": false,
+            "foreignKey": {
+              "table": "users",
+              "column": "id",
+              "onDelete": "CASCADE"
+            }
+          },
+          "type": {
+            "type": "enum",
+            "values": ["overdue", "upcoming", "payment", "approval", "system"],
+            "nullable": false
+          },
+          "title": {
+            "type": "varchar",
+            "length": 255,
+            "nullable": false
+          },
+          "message": {
+            "type": "text",
+            "nullable": false
+          },
+          "relatedEntityType": {
+            "type": "varchar",
+            "length": 50,
+            "nullable": true,
+            "comment": "Tipo de entidad relacionada: account_receivable, account_payable, etc."
+          },
+          "relatedEntityId": {
+            "type": "uuid",
+            "nullable": true,
+            "comment": "ID de la entidad relacionada"
+          },
+          "read": {
+            "type": "boolean",
+            "default": false
+          },
+          "readAt": {
+            "type": "timestamp",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          }
+        },
+        "indexes": [
+          {
+            "name": "idx_notifications_user",
+            "columns": ["userId"]
+          },
+          {
+            "name": "idx_notifications_read",
+            "columns": ["read"]
+          },
+          {
+            "name": "idx_notifications_type",
+            "columns": ["type"]
+          }
+        ]
+      },
+      "notification_settings": {
+        "tableName": "notification_settings",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "userId": {
+            "type": "uuid",
+            "unique": true,
+            "nullable": false,
+            "foreignKey": {
+              "table": "users",
+              "column": "id",
+              "onDelete": "CASCADE"
+            }
+          },
+          "emailEnabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "overdueAlerts": {
+            "type": "boolean",
+            "default": true
+          },
+          "upcomingAlerts": {
+            "type": "boolean",
+            "default": true
+          },
+          "paymentAlerts": {
+            "type": "boolean",
+            "default": true
+          },
+          "approvalAlerts": {
+            "type": "boolean",
+            "default": true
+          },
+          "daysBeforeDue": {
+            "type": "integer",
+            "default": 7,
+            "comment": "Días antes del vencimiento para alertar"
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          },
+          "updatedAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          }
+        }
+      },
+      "upload_history": {
+        "tableName": "upload_history",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "type": {
+            "type": "enum",
+            "values": ["sales", "expenses", "projects", "advances"],
+            "nullable": false
+          },
+          "fileName": {
+            "type": "varchar",
+            "length": 255,
+            "nullable": false
+          },
+          "totalRecords": {
+            "type": "integer",
+            "nullable": false
+          },
+          "successRecords": {
+            "type": "integer",
+            "nullable": false
+          },
+          "failedRecords": {
+            "type": "integer",
+            "nullable": false
+          },
+          "errors": {
+            "type": "jsonb",
+            "nullable": true,
+            "comment": "Array de errores encontrados durante la carga"
+          },
+          "uploadedBy": {
+            "type": "uuid",
+            "nullable": false,
+            "foreignKey": {
+              "table": "users",
+              "column": "id",
+              "onDelete": "RESTRICT"
+            }
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          }
+        },
+        "indexes": [
+          {
+            "name": "idx_upload_type",
+            "columns": ["type"]
+          },
+          {
+            "name": "idx_upload_user",
+            "columns": ["uploadedBy"]
+          }
+        ]
+      },
+      "audit_logs": {
+        "tableName": "audit_logs",
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primary": true,
+            "default": "uuid_generate_v4()"
+          },
+          "userId": {
+            "type": "uuid",
+            "nullable": true,
+            "foreignKey": {
+              "table": "users",
+              "column": "id",
+              "onDelete": "SET NULL"
+            }
+          },
+          "action": {
+            "type": "varchar",
+            "length": 50,
+            "nullable": false,
+            "comment": "CREATE, UPDATE, DELETE, LOGIN, etc."
+          },
+          "entityType": {
+            "type": "varchar",
+            "length": 50,
+            "nullable": false,
+            "comment": "Tipo de entidad afectada"
+          },
+          "entityId": {
+            "type": "uuid",
+            "nullable": true,
+            "comment": "ID de la entidad afectada"
+          },
+          "changes": {
+            "type": "jsonb",
+            "nullable": true,
+            "comment": "Cambios realizados (antes/después)"
+          },
+          "ipAddress": {
+            "type": "varchar",
+            "length": 45,
+            "nullable": true
+          },
+          "userAgent": {
+            "type": "text",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "timestamp",
+            "default": "CURRENT_TIMESTAMP"
+          }
+        },
+        "indexes": [
+          {
+            "name": "idx_audit_user",
+            "columns": ["userId"]
+          },
+          {
+            "name": "idx_audit_entity",
+            "columns": ["entityType", "entityId"]
+          },
+          {
+            "name": "idx_audit_action",
+            "columns": ["action"]
+          },
+          {
+            "name": "idx_audit_date",
+            "columns": ["createdAt"]
+          }
+        ]
+      }
+    }
+  },
+  "middleware": [
+    {
+      "name": "LoggerMiddleware",
+      "description": "Registra todas las peticiones HTTP"
+    },
+    {
+      "name": "CorsMiddleware",
+      "description": "Maneja CORS"
+    },
+    {
+      "name": "HelmetMiddleware",
+      "description": "Seguridad HTTP headers"
+    },
+    {
+      "name": "CompressionMiddleware",
+      "description": "Compresión de respuestas"
+    }
+  ],
+  "guards": [
+    {
+      "name": "JwtAuthGuard",
+      "description": "Valida JWT token"
+    },
+    {
+      "name": "RolesGuard",
+      "description": "Valida roles de usuario"
+    },
+    {
+      "name": "PermissionsGuard",
+      "description": "Valida permisos específicos"
+    },
+    {
+      "name": "ThrottlerGuard",
+      "description": "Rate limiting"
+    }
+  ],
+  "interceptors": [
+    {
+      "name": "TransformInterceptor",
+      "description": "Transforma respuestas a formato estándar"
+    },
+    {
+      "name": "ErrorInterceptor",
+      "description": "Maneja errores globalmente"
+    },
+    {
+      "name": "TimeoutInterceptor",
+      "description": "Timeout para peticiones"
+    }
+  ],
+  "pipes": [
+    {
+      "name": "ValidationPipe",
+      "description": "Validación de DTOs con class-validator"
+    },
+    {
+      "name": "ParseUUIDPipe",
+      "description": "Valida y parsea UUIDs"
+    }
+  ],
+  "scheduledJobs": [
+    {
+      "name": "CheckOverdueAccountsJob",
+      "schedule": "0 0 * * *",
+      "description": "Verifica cuentas vencidas diariamente a medianoche"
+    },
+    {
+      "name": "SendUpcomingDueNotificationsJob",
+      "schedule": "0 8 * * *",
+      "description": "Envía notificaciones de vencimientos próximos a las 8 AM"
+    },
+    {
+      "name": "GenerateDailyReportsJob",
+      "schedule": "0 6 * * *",
+      "description": "Genera reportes diarios a las 6 AM"
+    },
+    {
+      "name": "CleanupOldNotificationsJob",
+      "schedule": "0 2 * * 0",
+      "description": "Limpia notificaciones antiguas cada domingo a las 2 AM"
+    }
+  ],
+  "emailTemplates": [
+    {
+      "name": "overdue-account",
+      "subject": "Cuenta Vencida - Acción Requerida",
+      "description": "Notificación de cuenta vencida"
+    },
+    {
+      "name": "upcoming-due",
+      "subject": "Recordatorio de Vencimiento Próximo",
+      "description": "Recordatorio de vencimiento próximo"
+    },
+    {
+      "name": "payment-received",
+      "subject": "Pago Recibido",
+      "description": "Confirmación de pago recibido"
+    },
+    {
+      "name": "payment-approval",
+      "subject": "Solicitud de Aprobación de Pago",
+      "description": "Solicitud de aprobación de pago"
+    },
+    {
+      "name": "password-reset",
+      "subject": "Restablecer Contraseña",
+      "description": "Email para restablecer contraseña"
+    },
+    {
+      "name": "welcome",
+      "subject": "Bienvenido a Electro Costa ERP",
+      "description": "Email de bienvenida para nuevos usuarios"
+    }
+  ],
+  "environmentVariables": {
+    "required": [
+      "NODE_ENV",
+      "PORT",
+      "DATABASE_HOST",
+      "DATABASE_PORT",
+      "DATABASE_USER",
+      "DATABASE_PASSWORD",
+      "DATABASE_NAME",
+      "JWT_SECRET",
+      "JWT_EXPIRES_IN",
+      "REFRESH_TOKEN_SECRET",
+      "REFRESH_TOKEN_EXPIRES_IN"
+    ],
+    "optional": [
+      "SMTP_HOST",
+      "SMTP_PORT",
+      "SMTP_USER",
+      "SMTP_PASSWORD",
+      "SMTP_FROM",
+      "FRONTEND_URL",
+      "AWS_S3_BUCKET",
+      "AWS_ACCESS_KEY_ID",
+      "AWS_SECRET_ACCESS_KEY",
+      "REDIS_HOST",
+      "REDIS_PORT",
+      "SENTRY_DSN"
+    ]
+  },
+  "testing": {
+    "framework": "Jest",
+    "coverage": {
+      "statements": 80,
+      "branches": 80,
+      "functions": 80,
+      "lines": 80
+    },
+    "types": ["unit", "integration", "e2e"]
+  },
+  "documentation": {
+    "swagger": true,
+    "postman": true,
+    "readme": true
+  },
+  "deployment": {
+    "docker": true,
+    "kubernetes": false,
+    "ci-cd": "GitHub Actions"
+  }
+}

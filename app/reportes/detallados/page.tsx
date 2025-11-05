@@ -1,0 +1,352 @@
+"use client"
+
+import { useState } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+} from "recharts"
+import { FileText, Download, TrendingUp, DollarSign, AlertCircle } from "lucide-react"
+
+export default function ReportesDetalladosPage() {
+  const [periodoSeleccionado, setPeriodoSeleccionado] = useState("mes-actual")
+  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState("todas")
+
+  // Datos para gráficos
+  const datosVentas = [
+    { mes: "Ene", ventas: 450000, gastos: 320000, utilidad: 130000 },
+    { mes: "Feb", ventas: 520000, gastos: 380000, utilidad: 140000 },
+    { mes: "Mar", ventas: 480000, gastos: 350000, utilidad: 130000 },
+    { mes: "Abr", ventas: 600000, gastos: 420000, utilidad: 180000 },
+    { mes: "May", ventas: 580000, gastos: 400000, utilidad: 180000 },
+    { mes: "Jun", ventas: 650000, gastos: 450000, utilidad: 200000 },
+  ]
+
+  const datosCategoria = [
+    { name: "Materiales", value: 45, color: "#3B82F6" },
+    { name: "Mano de Obra", value: 30, color: "#10B981" },
+    { name: "Equipos", value: 15, color: "#F59E0B" },
+    { name: "Servicios", value: 10, color: "#EF4444" },
+  ]
+
+  const flujoEfectivo = [
+    { dia: "1", entrada: 25000, salida: 18000, saldo: 7000 },
+    { dia: "5", entrada: 45000, salida: 32000, saldo: 20000 },
+    { dia: "10", entrada: 38000, salida: 28000, saldo: 30000 },
+    { dia: "15", entrada: 52000, salida: 35000, saldo: 47000 },
+    { dia: "20", entrada: 41000, salida: 29000, saldo: 59000 },
+    { dia: "25", entrada: 48000, salida: 33000, saldo: 74000 },
+    { dia: "30", entrada: 55000, salida: 40000, saldo: 89000 },
+  ]
+
+  const reportesDetallados = [
+    {
+      id: "RPT-001",
+      nombre: "Estado de Resultados Mensual",
+      categoria: "financiero",
+      periodo: "Junio 2024",
+      fechaGeneracion: "2024-07-01",
+      estado: "completado",
+      tamaño: "2.3 MB",
+    },
+    {
+      id: "RPT-002",
+      nombre: "Análisis de Cuentas por Cobrar",
+      categoria: "cobranza",
+      periodo: "Q2 2024",
+      fechaGeneracion: "2024-06-30",
+      estado: "procesando",
+      tamaño: "1.8 MB",
+    },
+    {
+      id: "RPT-003",
+      nombre: "Flujo de Efectivo Proyectado",
+      categoria: "tesoreria",
+      periodo: "Julio 2024",
+      fechaGeneracion: "2024-06-28",
+      estado: "completado",
+      tamaño: "1.2 MB",
+    },
+  ]
+
+  const estadoColors = {
+    completado: "bg-green-100 text-green-800",
+    procesando: "bg-yellow-100 text-yellow-800",
+    error: "bg-red-100 text-red-800",
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Reportes Detallados</h1>
+        <p className="text-gray-600">Análisis profundo y reportes personalizados del sistema financiero</p>
+      </div>
+
+      {/* Controles de Filtro */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Configuración de Reportes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4">
+            <Select value={periodoSeleccionado} onValueChange={setPeriodoSeleccionado}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Período" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="mes-actual">Mes Actual</SelectItem>
+                <SelectItem value="trimestre">Trimestre</SelectItem>
+                <SelectItem value="semestre">Semestre</SelectItem>
+                <SelectItem value="año">Año Completo</SelectItem>
+                <SelectItem value="personalizado">Personalizado</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={categoriaSeleccionada} onValueChange={setCategoriaSeleccionada}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Categoría" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas las Categorías</SelectItem>
+                <SelectItem value="financiero">Financiero</SelectItem>
+                <SelectItem value="cobranza">Cobranza</SelectItem>
+                <SelectItem value="pagos">Pagos</SelectItem>
+                <SelectItem value="tesoreria">Tesorería</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button className="bg-blue-600 hover:bg-blue-700">
+              <FileText className="h-4 w-4 mr-2" />
+              Generar Reporte
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tabs de Análisis */}
+      <Tabs defaultValue="financiero" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="financiero">Análisis Financiero</TabsTrigger>
+          <TabsTrigger value="flujo">Flujo de Efectivo</TabsTrigger>
+          <TabsTrigger value="categorias">Por Categorías</TabsTrigger>
+          <TabsTrigger value="historicos">Reportes Históricos</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="financiero" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Ingresos Totales</p>
+                    <p className="text-2xl font-bold text-green-600">$3.28M</p>
+                    <p className="text-xs text-green-600">+12.5% vs mes anterior</p>
+                  </div>
+                  <TrendingUp className="h-8 w-8 text-green-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Gastos Totales</p>
+                    <p className="text-2xl font-bold text-red-600">$2.32M</p>
+                    <p className="text-xs text-red-600">+8.3% vs mes anterior</p>
+                  </div>
+                  <DollarSign className="h-8 w-8 text-red-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Utilidad Neta</p>
+                    <p className="text-2xl font-bold text-blue-600">$960K</p>
+                    <p className="text-xs text-blue-600">+18.2% vs mes anterior</p>
+                  </div>
+                  <TrendingUp className="h-8 w-8 text-blue-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Margen de Utilidad</p>
+                    <p className="text-2xl font-bold text-purple-600">29.3%</p>
+                    <p className="text-xs text-purple-600">+2.1% vs mes anterior</p>
+                  </div>
+                  <AlertCircle className="h-8 w-8 text-purple-600" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Análisis de Ingresos vs Gastos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={datosVentas}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mes" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+                  <Bar dataKey="ventas" fill="#3B82F6" name="Ingresos" />
+                  <Bar dataKey="gastos" fill="#EF4444" name="Gastos" />
+                  <Bar dataKey="utilidad" fill="#10B981" name="Utilidad" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="flujo" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Flujo de Efectivo Detallado</CardTitle>
+              <CardDescription>Análisis diario de entradas y salidas de efectivo</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={flujoEfectivo}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="dia" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+                  <Line type="monotone" dataKey="entrada" stroke="#10B981" name="Entradas" strokeWidth={2} />
+                  <Line type="monotone" dataKey="salida" stroke="#EF4444" name="Salidas" strokeWidth={2} />
+                  <Line type="monotone" dataKey="saldo" stroke="#3B82F6" name="Saldo Acumulado" strokeWidth={3} />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="categorias" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Distribución de Gastos por Categoría</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={datosCategoria}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={80}
+                      dataKey="value"
+                      label={({ name, value }) => `${name}: ${value}%`}
+                    >
+                      {datosCategoria.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Análisis por Categoría</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {datosCategoria.map((categoria, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: categoria.color }} />
+                        <span className="font-medium">{categoria.name}</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">{categoria.value}%</p>
+                        <p className="text-sm text-gray-600">${(categoria.value * 23200).toLocaleString()}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="historicos" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Reportes Generados</CardTitle>
+              <CardDescription>Historial de reportes detallados generados</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Nombre del Reporte</TableHead>
+                    <TableHead>Categoría</TableHead>
+                    <TableHead>Período</TableHead>
+                    <TableHead>Fecha Generación</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Tamaño</TableHead>
+                    <TableHead>Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {reportesDetallados.map((reporte) => (
+                    <TableRow key={reporte.id}>
+                      <TableCell className="font-medium">{reporte.id}</TableCell>
+                      <TableCell>{reporte.nombre}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{reporte.categoria}</Badge>
+                      </TableCell>
+                      <TableCell>{reporte.periodo}</TableCell>
+                      <TableCell>{reporte.fechaGeneracion}</TableCell>
+                      <TableCell>
+                        <Badge className={estadoColors[reporte.estado as keyof typeof estadoColors]}>
+                          {reporte.estado}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{reporte.tamaño}</TableCell>
+                      <TableCell>
+                        {reporte.estado === "completado" && (
+                          <Button size="sm" variant="outline">
+                            <Download className="h-4 w-4 mr-1" />
+                            Descargar
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}

@@ -1,87 +1,193 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useToast } from "@/components/ui/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { CheckCircle, XCircle, Clock, AlertTriangle, Search } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { CheckCircle, XCircle, Clock, Search, Loader2, AlertCircle } from "lucide-react"
+import { paymentApprovalService, type PendingApproval } from "@/services/payment-approval.service"
 
 export default function AprobacionPage() {
-  const [filtroEstado, setFiltroEstado] = useState("todos")
-  const [busqueda, setBusqueda] = useState("")
-
-  const pagosAprobacion = [
-    {
-      id: "PAG-001",
-      proveedor: "Schneider Electric",
-      concepto: "Materiales eléctricos - Proyecto Centro Comercial",
-      monto: 125000,
-      fechaSolicitud: "2024-01-15",
-      solicitadoPor: "Juan Pérez",
-      estado: "pendiente",
-      nivel: 2,
-      montoLimite: 100000,
-      urgencia: "alta",
-    },
-    {
-      id: "PAG-002",
-      proveedor: "CFE Suministradores",
-      concepto: "Transformadores para proyecto residencial",
-      monto: 85000,
-      fechaSolicitud: "2024-01-14",
-      solicitadoPor: "María González",
-      estado: "aprobado",
-      nivel: 1,
-      montoLimite: 100000,
-      urgencia: "media",
-    },
-    {
-      id: "PAG-003",
-      proveedor: "Condumex",
-      concepto: "Cable de media tensión",
-      monto: 250000,
-      fechaSolicitud: "2024-01-13",
-      solicitadoPor: "Carlos Ruiz",
-      estado: "rechazado",
-      nivel: 3,
-      montoLimite: 200000,
-      urgencia: "baja",
-    },
-  ]
-
-  const estadoColors = {
-    pendiente: "bg-yellow-100 text-yellow-800",
-    aprobado: "bg-green-100 text-green-800",
-    rechazado: "bg-red-100 text-red-800",
-  }
-
-  const urgenciaColors = {
-    alta: "bg-red-100 text-red-800",
-    media: "bg-yellow-100 text-yellow-800",
-    baja: "bg-green-100 text-green-800",
-  }
-
-  const pagosFiltrados = pagosAprobacion.filter((pago) => {
-    const matchEstado = filtroEstado === "todos" || pago.estado === filtroEstado
-    const matchBusqueda =
-      pago.proveedor.toLowerCase().includes(busqueda.toLowerCase()) ||
-      pago.concepto.toLowerCase().includes(busqueda.toLowerCase())
-    return matchEstado && matchBusqueda
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
+  const [approvals, setApprovals] = useState<PendingApproval[]>([])
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedApproval, setSelectedApproval] = useState<PendingApproval | null>(null)
+  const [showApproveDialog, setShowApproveDialog] = useState(false)
+  const [showRejectDialog, setShowRejectDialog] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [approveNotes, setApproveNotes] = useState("")
+  const [rejectReason, setRejectReason] = useState("")
+  const [rejectNotes, setRejectNotes] = useState("")
+  const [summary, setSummary] = useState({
+    totalPending: 0,
+    countPending: 0,
+    totalApproved: 0,
+    countApproved: 0,
   })
 
-  const handleAprobar = (id: string) => {
-    console.log(`Aprobando pago ${id}`)
+  // Cargar datos
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const data = await paymentApprovalService.getPendingApprovals({ page: 1, limit: 100 })
+      setApprovals(data.data || [])
+      setSummary({
+        totalPending: Number(data.summary?.totalPending) || 0,
+        countPending: Number(data.summary?.countPending) || 0,
+        totalApproved: Number(data.summary?.totalApproved) || 0,
+        countApproved: Number(data.summary?.countApproved) || 0,
+      })
+    } catch (error) {
+      console.error('Error al cargar aprobaciones:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al cargar las solicitudes de aprobación"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [toast])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  // Aprobar pago
+  const handleApprove = (approval: PendingApproval) => {
+    setSelectedApproval(approval)
+    setApproveNotes("")
+    setShowApproveDialog(true)
   }
 
-  const handleRechazar = (id: string) => {
-    console.log(`Rechazando pago ${id}`)
+  const confirmApprove = async () => {
+    if (!selectedApproval) return
+
+    try {
+      setSubmitting(true)
+      await paymentApprovalService.approvePayment(selectedApproval.id, {
+        notes: approveNotes || undefined
+      })
+      toast({
+        title: "✅ Éxito",
+        description: "Pago aprobado exitosamente"
+      })
+      setShowApproveDialog(false)
+      setSelectedApproval(null)
+      setApproveNotes("")
+      await loadData()
+    } catch (error: any) {
+      console.error('Error al aprobar:', error)
+      toast({
+        variant: "destructive",
+        title: "❌ Error",
+        description: error.response?.data?.message || "Error al aprobar el pago"
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Rechazar pago
+  const handleReject = (approval: PendingApproval) => {
+    setSelectedApproval(approval)
+    setRejectReason("")
+    setRejectNotes("")
+    setShowRejectDialog(true)
+  }
+
+  const confirmReject = async () => {
+    if (!selectedApproval) return
+
+    if (!rejectReason.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Error de validación",
+        description: "Debes indicar el motivo del rechazo"
+      })
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      await paymentApprovalService.rejectPayment(selectedApproval.id, {
+        reason: rejectReason,
+        notes: rejectNotes || undefined
+      })
+      toast({
+        title: "✅ Éxito",
+        description: "Pago rechazado exitosamente"
+      })
+      setShowRejectDialog(false)
+      setSelectedApproval(null)
+      setRejectReason("")
+      setRejectNotes("")
+      await loadData()
+    } catch (error: any) {
+      console.error('Error al rechazar:', error)
+      toast({
+        variant: "destructive",
+        title: "❌ Error",
+        description: error.response?.data?.message || "Error al rechazar el pago"
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Filtrar aprobaciones
+  const filteredApprovals = approvals.filter(approval => {
+    const matchSearch = 
+      approval.accountPayable.supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      approval.accountPayable.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      approval.accountPayable.description.toLowerCase().includes(searchTerm.toLowerCase())
+    return matchSearch
+  })
+
+  // Formato de fecha
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('es-MX', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+
+  // Método de pago labels
+  const paymentMethodLabels: Record<string, string> = {
+    transfer: 'Transferencia',
+    check: 'Cheque',
+    cash: 'Efectivo',
+    card: 'Tarjeta',
+    other: 'Otro'
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Aprobación de Pagos</h1>
         <p className="text-gray-600">Gestiona las solicitudes de pago que requieren aprobación</p>
@@ -90,176 +196,347 @@ export default function AprobacionPage() {
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Pendientes</p>
-                <p className="text-2xl font-bold text-yellow-600">3</p>
-              </div>
-              <Clock className="h-8 w-8 text-yellow-600" />
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Clock className="h-4 w-4 text-yellow-600" />
+              Pendientes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">
+              ${(summary.totalPending || 0).toLocaleString()}
             </div>
+            <p className="text-xs text-muted-foreground">
+              {summary.countPending || 0} solicitudes
+            </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Aprobados Hoy</p>
-                <p className="text-2xl font-bold text-green-600">8</p>
-              </div>
-              <CheckCircle className="h-8 w-8 text-green-600" />
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              Aprobados Hoy
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              ${(summary.totalApproved || 0).toLocaleString()}
             </div>
+            <p className="text-xs text-muted-foreground">
+              {summary.countApproved || 0} pagos
+            </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Monto Pendiente</p>
-                <p className="text-2xl font-bold text-blue-600">$460K</p>
-              </div>
-              <AlertTriangle className="h-8 w-8 text-blue-600" />
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-orange-600" />
+              Requieren Atención
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">
+              {filteredApprovals.length}
             </div>
+            <p className="text-xs text-muted-foreground">
+              solicitudes visibles
+            </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Tiempo Promedio</p>
-                <p className="text-2xl font-bold text-purple-600">2.5h</p>
-              </div>
-              <Clock className="h-8 w-8 text-purple-600" />
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">
+              Total
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-gray-900">
+              ${((summary.totalPending || 0) + (summary.totalApproved || 0)).toLocaleString()}
             </div>
+            <p className="text-xs text-muted-foreground">
+              {(summary.countPending || 0) + (summary.countApproved || 0)} en total
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filtros */}
+      {/* Tabla */}
       <Card>
         <CardHeader>
-          <CardTitle>Filtros de Búsqueda</CardTitle>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <CardTitle>Solicitudes Pendientes</CardTitle>
+              <CardDescription>Lista de pagos que requieren tu aprobación</CardDescription>
+            </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+              <Input
+                type="search"
+                placeholder="Buscar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Buscar por proveedor o concepto..."
-                  value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
-                  className="pl-10"
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Proveedor / Factura</TableHead>
+                  <TableHead>Descripción</TableHead>
+                  <TableHead>Monto</TableHead>
+                  <TableHead>Fecha Programada</TableHead>
+                  <TableHead>Método</TableHead>
+                  <TableHead>Solicitado Por</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredApprovals.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                      No hay solicitudes pendientes de aprobación
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredApprovals.map((approval) => (
+                    <TableRow key={approval.id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">
+                            {approval.accountPayable.supplier.name}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {approval.accountPayable.invoiceNumber}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="max-w-xs truncate">
+                          {approval.accountPayable.description}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">
+                          ${Number(approval.amount).toLocaleString()}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          de ${Number(approval.accountPayable.amount).toLocaleString()}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {formatDate(approval.scheduledDate)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {approval.paymentMethod ? (paymentMethodLabels[approval.paymentMethod] || approval.paymentMethod) : 'N/A'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          {approval.createdBy.firstName} {approval.createdBy.lastName}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {formatDate(approval.createdAt)}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-green-600 hover:bg-green-50"
+                            onClick={() => handleApprove(approval)}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Aprobar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600 hover:bg-red-50"
+                            onClick={() => handleReject(approval)}
+                          >
+                            <XCircle className="h-4 w-4 mr-1" />
+                            Rechazar
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Dialog Aprobar */}
+      <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Aprobar Pago</DialogTitle>
+            <DialogDescription>
+              Confirma la aprobación de este pago programado
+            </DialogDescription>
+          </DialogHeader>
+          {selectedApproval && (
+            <div className="space-y-4">
+              <div className="p-4 bg-gray-50 rounded-lg space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Proveedor:</span>
+                  <span className="text-sm font-medium">{selectedApproval.accountPayable.supplier.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Factura:</span>
+                  <span className="text-sm font-medium">{selectedApproval.accountPayable.invoiceNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Monto:</span>
+                  <span className="text-sm font-medium text-green-600">
+                    ${Number(selectedApproval.amount).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Fecha Programada:</span>
+                  <span className="text-sm font-medium">{formatDate(selectedApproval.scheduledDate)}</span>
+                </div>
+              </div>
+              <div>
+                <Label>Notas (opcional)</Label>
+                <Textarea
+                  value={approveNotes}
+                  onChange={(e) => setApproveNotes(e.target.value)}
+                  placeholder="Agregar notas sobre la aprobación..."
+                  rows={3}
                 />
               </div>
             </div>
-            <Select value={filtroEstado} onValueChange={setFiltroEstado}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos los estados</SelectItem>
-                <SelectItem value="pendiente">Pendientes</SelectItem>
-                <SelectItem value="aprobado">Aprobados</SelectItem>
-                <SelectItem value="rechazado">Rechazados</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => {
+                setShowApproveDialog(false)
+                setSelectedApproval(null)
+                setApproveNotes("")
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmApprove}
+              disabled={submitting}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Aprobando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Aprobar Pago
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* Tabla de Pagos */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Solicitudes de Pago</CardTitle>
-          <CardDescription>Revisa y aprueba las solicitudes de pago según los niveles de autorización</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Proveedor</TableHead>
-                <TableHead>Concepto</TableHead>
-                <TableHead>Monto</TableHead>
-                <TableHead>Solicitado Por</TableHead>
-                <TableHead>Urgencia</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pagosFiltrados.map((pago) => (
-                <TableRow key={pago.id}>
-                  <TableCell className="font-medium">{pago.id}</TableCell>
-                  <TableCell>{pago.proveedor}</TableCell>
-                  <TableCell className="max-w-xs truncate">{pago.concepto}</TableCell>
-                  <TableCell className="font-semibold">${pago.monto.toLocaleString()}</TableCell>
-                  <TableCell>{pago.solicitadoPor}</TableCell>
-                  <TableCell>
-                    <Badge className={urgenciaColors[pago.urgencia as keyof typeof urgenciaColors]}>
-                      {pago.urgencia}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={estadoColors[pago.estado as keyof typeof estadoColors]}>{pago.estado}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {pago.estado === "pendiente" && (
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleAprobar(pago.id)}
-                          className="bg-green-600 hover:bg-green-700"
-                        >
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Aprobar
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => handleRechazar(pago.id)}>
-                          <XCircle className="h-4 w-4 mr-1" />
-                          Rechazar
-                        </Button>
-                      </div>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Workflow de Aprobación */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Niveles de Aprobación</CardTitle>
-          <CardDescription>Configuración de límites y niveles de autorización</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 border rounded-lg">
-                <h4 className="font-semibold text-green-700">Nivel 1 - Supervisor</h4>
-                <p className="text-sm text-gray-600">Hasta $100,000</p>
-                <p className="text-xs text-gray-500">Aprobación automática</p>
+      {/* Dialog Rechazar */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rechazar Pago</DialogTitle>
+            <DialogDescription>
+              Indica el motivo del rechazo de este pago
+            </DialogDescription>
+          </DialogHeader>
+          {selectedApproval && (
+            <div className="space-y-4">
+              <div className="p-4 bg-gray-50 rounded-lg space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Proveedor:</span>
+                  <span className="text-sm font-medium">{selectedApproval.accountPayable.supplier.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Factura:</span>
+                  <span className="text-sm font-medium">{selectedApproval.accountPayable.invoiceNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Monto:</span>
+                  <span className="text-sm font-medium text-red-600">
+                    ${Number(selectedApproval.amount).toLocaleString()}
+                  </span>
+                </div>
               </div>
-              <div className="p-4 border rounded-lg">
-                <h4 className="font-semibold text-yellow-700">Nivel 2 - Gerente</h4>
-                <p className="text-sm text-gray-600">$100,001 - $500,000</p>
-                <p className="text-xs text-gray-500">Requiere aprobación manual</p>
+              <div>
+                <Label>Motivo del Rechazo *</Label>
+                <Textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Indica por qué se rechaza este pago..."
+                  rows={3}
+                  required
+                />
               </div>
-              <div className="p-4 border rounded-lg">
-                <h4 className="font-semibold text-red-700">Nivel 3 - Director</h4>
-                <p className="text-sm text-gray-600">Más de $500,000</p>
-                <p className="text-xs text-gray-500">Requiere doble aprobación</p>
+              <div>
+                <Label>Notas Adicionales (opcional)</Label>
+                <Textarea
+                  value={rejectNotes}
+                  onChange={(e) => setRejectNotes(e.target.value)}
+                  placeholder="Notas adicionales..."
+                  rows={2}
+                />
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => {
+                setShowRejectDialog(false)
+                setSelectedApproval(null)
+                setRejectReason("")
+                setRejectNotes("")
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmReject}
+              disabled={submitting}
+              variant="destructive"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Rechazando...
+                </>
+              ) : (
+                <>
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Rechazar Pago
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

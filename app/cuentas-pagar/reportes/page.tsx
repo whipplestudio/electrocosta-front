@@ -1,79 +1,88 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { reportsService, type DashboardData, type DueDateReportResponse } from "@/services/reports.service"
+import { useToast } from "@/components/ui/use-toast"
+import { Loader2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Calendar, Download, AlertTriangle, Clock, TrendingDown } from "lucide-react"
+import { Calendar, Download, AlertTriangle, Clock, TrendingDown, DollarSign } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
 
-const vencimientosData = [
-  {
-    id: "CP-001",
-    proveedor: "Suministros Eléctricos SA",
-    factura: "FP-2024-001",
-    monto: 45000,
-    fechaVencimiento: "2024-01-20",
-    diasVencimiento: 5,
-    estado: "vencido",
-    categoria: "Materiales",
-  },
-  {
-    id: "CP-002",
-    proveedor: "Transportes Rápidos",
-    factura: "FP-2024-002",
-    monto: 12500,
-    fechaVencimiento: "2024-01-25",
-    diasVencimiento: 0,
-    estado: "hoy",
-    categoria: "Servicios",
-  },
-  {
-    id: "CP-003",
-    proveedor: "Oficinas Modernas",
-    factura: "FP-2024-003",
-    monto: 8750,
-    fechaVencimiento: "2024-01-27",
-    diasVencimiento: -2,
-    estado: "proximo",
-    categoria: "Oficina",
-  },
-]
-
-const chartDataVencimientos = [
-  { name: "Vencido", value: 45000, color: "#ef4444" },
-  { name: "Hoy", value: 12500, color: "#f97316" },
-  { name: "Próximo", value: 8750, color: "#eab308" },
-  { name: "Futuro", value: 125000, color: "#22c55e" },
-]
-
-const chartDataMensual = [
-  { mes: "Oct", vencidos: 85000, pagados: 120000 },
-  { mes: "Nov", vencidos: 67000, pagados: 145000 },
-  { mes: "Dic", vencidos: 92000, pagados: 135000 },
-  { mes: "Ene", vencidos: 66250, pagados: 0 },
-]
-
-const estadoBadgeVariant = {
-  vencido: "destructive",
-  hoy: "secondary",
-  proximo: "default",
-} as const
 
 export default function ReportesCuentasPagar() {
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
+  const [dueDateReport, setDueDateReport] = useState<DueDateReportResponse | null>(null)
   const [periodoFilter, setPeriodoFilter] = useState("mes_actual")
   const [categoriaFilter, setCategoriaFilter] = useState("todas")
 
-  const totalVencido = vencimientosData
-    .filter((item) => item.estado === "vencido")
-    .reduce((sum, item) => sum + item.monto, 0)
-  const totalHoy = vencimientosData.filter((item) => item.estado === "hoy").reduce((sum, item) => sum + item.monto, 0)
-  const totalProximo = vencimientosData
-    .filter((item) => item.estado === "proximo")
-    .reduce((sum, item) => sum + item.monto, 0)
+  // Cargar datos
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const [dashboard, dueDate] = await Promise.all([
+        reportsService.getDashboardData(),
+        reportsService.getDueDateReport({ daysInAdvance: 7 })
+      ])
+      setDashboardData(dashboard)
+      setDueDateReport(dueDate)
+    } catch (error) {
+      console.error('Error al cargar reportes:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al cargar los reportes"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [toast])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  if (loading || !dashboardData || !dueDateReport) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('es-MX', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+
+  // Combinar overdue y upcoming
+  const allAccounts = [
+    ...dueDateReport.overdue.map(acc => ({
+      ...acc,
+      estado: 'vencido' as const,
+      diasVencimiento: acc.daysOverdue || 0
+    })),
+    ...dueDateReport.upcoming.map(acc => ({
+      ...acc,
+      estado: acc.daysUntilDue === 0 ? 'hoy' as const : 'proximo' as const,
+      diasVencimiento: -(acc.daysUntilDue || 0)
+    }))
+  ]
+
+  const estadoBadgeVariant = {
+    vencido: "destructive",
+    hoy: "secondary",
+    proximo: "default",
+  } as const
 
   return (
     <div className="space-y-6">
@@ -96,7 +105,7 @@ export default function ReportesCuentasPagar() {
             <AlertTriangle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">${totalVencido.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-destructive">${Number(dashboardData.keyMetrics.totalOverdue).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Pago inmediato requerido</p>
           </CardContent>
         </Card>
@@ -107,7 +116,7 @@ export default function ReportesCuentasPagar() {
             <Clock className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-500">${totalHoy.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-orange-500">${Number(dueDateReport.summary.upcomingAmount).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Programar pago hoy</p>
           </CardContent>
         </Card>
@@ -118,8 +127,8 @@ export default function ReportesCuentasPagar() {
             <Calendar className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-500">${totalProximo.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Planificar pagos</p>
+            <div className="text-2xl font-bold text-yellow-500">{dashboardData.keyMetrics.upcomingThisWeek}</div>
+            <p className="text-xs text-muted-foreground">pagos a planificar</p>
           </CardContent>
         </Card>
 
@@ -130,7 +139,7 @@ export default function ReportesCuentasPagar() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-500">
-              ${(totalVencido + totalHoy + totalProximo).toLocaleString()}
+              ${Number(dashboardData.keyMetrics.totalPayable).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">Enero 2024</p>
           </CardContent>
@@ -192,27 +201,35 @@ export default function ReportesCuentasPagar() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {vencimientosData.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.proveedor}</TableCell>
-                        <TableCell>{item.factura}</TableCell>
-                        <TableCell>${item.monto.toLocaleString()}</TableCell>
-                        <TableCell>{item.fechaVencimiento}</TableCell>
-                        <TableCell>
-                          <Badge variant={estadoBadgeVariant[item.estado as keyof typeof estadoBadgeVariant]}>
-                            {item.estado === "vencido" ? "Vencido" : item.estado === "hoy" ? "Vence Hoy" : "Próximo"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{item.categoria}</TableCell>
-                        <TableCell>
-                          {item.diasVencimiento > 0
-                            ? `+${item.diasVencimiento}`
-                            : item.diasVencimiento < 0
-                              ? item.diasVencimiento
-                              : "0"}
+                    {allAccounts.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          No hay cuentas pendientes
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      allAccounts.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">{item.supplier.name}</TableCell>
+                          <TableCell>{item.invoiceNumber}</TableCell>
+                          <TableCell>${Number(item.amount).toLocaleString()}</TableCell>
+                          <TableCell>{formatDate(item.dueDate)}</TableCell>
+                          <TableCell>
+                            <Badge variant={estadoBadgeVariant[item.estado as keyof typeof estadoBadgeVariant]}>
+                              {item.estado === "vencido" ? "Vencido" : item.estado === "hoy" ? "Vence Hoy" : "Próximo"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{item.category?.name || 'N/A'}</TableCell>
+                          <TableCell>
+                            {item.estado === 'vencido'
+                              ? `+${item.diasVencimiento}`
+                              : item.diasVencimiento === 0
+                                ? "Hoy"
+                                : `${item.diasVencimiento} días`}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -231,20 +248,28 @@ export default function ReportesCuentasPagar() {
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
-                      data={chartDataVencimientos}
+                      data={dashboardData.agingDistribution.map(item => ({
+                        name: item.label,
+                        value: Number(item.value),
+                        color: item.label.includes('Vencido') ? '#ef4444' : 
+                               item.label.includes('1-30') ? '#f97316' :
+                               item.label.includes('31-60') ? '#eab308' : '#22c55e'
+                      }))}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
                     >
-                      {chartDataVencimientos.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      {dashboardData.agingDistribution.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={[
+                          '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6'
+                        ][index % 5]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, "Monto"]} />
+                    <Tooltip formatter={(value: any) => [`$${Number(value).toLocaleString()}`, "Monto"]} />
                   </PieChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -257,13 +282,16 @@ export default function ReportesCuentasPagar() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={chartDataMensual}>
+                  <BarChart data={dashboardData.categoryBreakdown.slice(0, 4).map(cat => ({
+                    mes: cat.category.substring(0, 3),
+                    monto: Number(cat.amount),
+                    count: cat.count
+                  }))}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="mes" />
                     <YAxis />
                     <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]} />
-                    <Bar dataKey="vencidos" fill="#ef4444" name="Vencidos" />
-                    <Bar dataKey="pagados" fill="#22c55e" name="Pagados" />
+                    <Bar dataKey="monto" fill="#3b82f6" name="Monto" />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -280,21 +308,13 @@ export default function ReportesCuentasPagar() {
             <CardContent>
               <div className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-3">
-                  <div className="p-4 border rounded-lg">
-                    <h3 className="font-medium mb-2">Materiales</h3>
-                    <p className="text-2xl font-bold">$45,000</p>
-                    <p className="text-sm text-muted-foreground">68% del total</p>
-                  </div>
-                  <div className="p-4 border rounded-lg">
-                    <h3 className="font-medium mb-2">Servicios</h3>
-                    <p className="text-2xl font-bold">$12,500</p>
-                    <p className="text-sm text-muted-foreground">19% del total</p>
-                  </div>
-                  <div className="p-4 border rounded-lg">
-                    <h3 className="font-medium mb-2">Oficina</h3>
-                    <p className="text-2xl font-bold">$8,750</p>
-                    <p className="text-sm text-muted-foreground">13% del total</p>
-                  </div>
+                  {dashboardData.categoryBreakdown.slice(0, 3).map((cat) => (
+                    <div key={cat.category} className="p-4 border rounded-lg">
+                      <h3 className="font-medium mb-2">{cat.category}</h3>
+                      <p className="text-2xl font-bold">${Number(cat.amount).toLocaleString()}</p>
+                      <p className="text-sm text-muted-foreground">{cat.percentage.toFixed(1)}% del total</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </CardContent>

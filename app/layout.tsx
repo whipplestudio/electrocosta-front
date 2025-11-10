@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { DM_Sans } from "next/font/google"
 import "./globals.css"
 import { ConditionalLayout } from "@/components/conditional-layout"
+import { Toaster } from "@/components/ui/toaster"
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -25,6 +26,7 @@ export default function RootLayout({
     <html lang="es" className={`${dmSans.variable} antialiased`}>
       <body className="font-sans">
         <ConditionalLayout>{children}</ConditionalLayout>
+        <Toaster />
       </body>
     </html>
   )

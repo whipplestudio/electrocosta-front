@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -17,52 +17,384 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Upload, Download, Plus, Search, FileText, Calendar } from "lucide-react"
+import { Upload, Download, Plus, Search, FileText, Calendar, Loader2, Eye, Edit } from "lucide-react"
+import { useToast } from "@/components/ui/use-toast"
+import { Label } from "@/components/ui/label"
+import { projectsUploadService, type CrearProyectoData } from "@/services/projects-upload.service"
 
 export default function ProyectosPage() {
+  const { toast } = useToast()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Estados básicos
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
+  const [loading, setLoading] = useState(false)
+  
+  // Estados para proyectos
+  const [proyectos, setProyectos] = useState<any[]>([])
+  const [loadingProyectos, setLoadingProyectos] = useState(false)
+  
+  // Estados para carga masiva
+  const [archivo, setArchivo] = useState<File | null>(null)
+  const [uploadResponse, setUploadResponse] = useState<any>(null)
+  const [validacionResultado, setValidacionResultado] = useState<any>(null)
+  const [importacionResultado, setImportacionResultado] = useState<any>(null)
+  
+  // Estados para formulario manual
+  const [openDialog, setOpenDialog] = useState(false)
+  const [nuevoProyecto, setNuevoProyecto] = useState({
+    codigoProyecto: '',
+    nombreProyecto: '',
+    clienteNombre: '',
+    clienteRuc: '',
+    fechaInicio: new Date().toISOString().split('T')[0],
+    fechaFinEstimada: '',
+    presupuestoTotal: '',
+    presupuestoMateriales: '',
+    presupuestoManoObra: '',
+    presupuestoOtros: '',
+    responsableEmail: '',
+    areaId: '',
+    estado: 'planificacion',
+    prioridad: 'media',
+    descripcion: '',
+    observaciones: ''
+  })
 
-  const proyectos = [
-    {
-      id: "PROY-2024-001",
-      nombre: "Edificio Residencial Torre Norte",
-      cliente: "Constructora ABC S.A.",
-      valorContrato: 2500000,
-      fechaInicio: "2024-01-15",
-      fechaFin: "2024-06-15",
-      estado: "En Progreso",
-      avance: 35,
-      responsable: "Ing. Carlos Méndez",
-      categoria: "Construcción",
-    },
-    {
-      id: "PROY-2024-002",
-      nombre: "Modernización Planta Industrial",
-      cliente: "Industrias XYZ Ltda.",
-      valorContrato: 1800000,
-      fechaInicio: "2024-02-01",
-      fechaFin: "2024-08-01",
-      estado: "Planificación",
-      avance: 10,
-      responsable: "Ing. Ana García",
-      categoria: "Industrial",
-    },
-    {
-      id: "PROY-2023-015",
-      nombre: "Centro Comercial Plaza Sur",
-      cliente: "Desarrollos Comerciales SA",
-      valorContrato: 3200000,
-      fechaInicio: "2023-08-01",
-      fechaFin: "2024-01-31",
-      estado: "Completado",
-      avance: 100,
-      responsable: "Ing. María Rodríguez",
-      categoria: "Comercial",
-    },
-  ]
+  // Estados para Ver y Editar
+  const [verModalOpen, setVerModalOpen] = useState(false)
+  const [editarModalOpen, setEditarModalOpen] = useState(false)
+  const [proyectoSeleccionado, setProyectoSeleccionado] = useState<any>(null)
+  const [proyectoParaEditar, setProyectoParaEditar] = useState<any>(null)
 
-  const filteredProyectos = proyectos.filter((proyecto) => {
+  // Cargar proyectos desde la BD
+  const cargarProyectos = useCallback(async () => {
+    try {
+      setLoadingProyectos(true)
+      const response = await projectsUploadService.obtenerListadoProyectos({ limit: 50 })
+      setProyectos(response.data || [])
+    } catch (error) {
+      console.error('Error al cargar proyectos:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudieron cargar los proyectos"
+      })
+    } finally {
+      setLoadingProyectos(false)
+    }
+  }, [toast])
+
+  useEffect(() => {
+    cargarProyectos()
+  }, [cargarProyectos])
+
+  // Función para crear proyecto manual
+  const crearNuevoProyecto = async () => {
+    try {
+      setLoading(true)
+      
+      // Validación básica
+      if (!nuevoProyecto.nombreProyecto || !nuevoProyecto.clienteNombre || !nuevoProyecto.presupuestoTotal) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Por favor completa todos los campos requeridos"
+        })
+        return
+      }
+
+      const data: any = {
+        codigoProyecto: nuevoProyecto.codigoProyecto,
+        nombreProyecto: nuevoProyecto.nombreProyecto,
+        clienteNombre: nuevoProyecto.clienteNombre,
+        fechaInicio: nuevoProyecto.fechaInicio,
+        presupuestoTotal: parseFloat(nuevoProyecto.presupuestoTotal),
+        responsableEmail: nuevoProyecto.responsableEmail,
+        estado: nuevoProyecto.estado,
+        prioridad: nuevoProyecto.prioridad,
+      }
+
+      // Solo agregar campos opcionales si tienen valor
+      if (nuevoProyecto.clienteRuc) data.clienteRuc = nuevoProyecto.clienteRuc
+      if (nuevoProyecto.fechaFinEstimada) data.fechaFinEstimada = nuevoProyecto.fechaFinEstimada
+      if (nuevoProyecto.presupuestoMateriales) data.presupuestoMateriales = parseFloat(nuevoProyecto.presupuestoMateriales)
+      if (nuevoProyecto.presupuestoManoObra) data.presupuestoManoObra = parseFloat(nuevoProyecto.presupuestoManoObra)
+      if (nuevoProyecto.presupuestoOtros) data.presupuestoOtros = parseFloat(nuevoProyecto.presupuestoOtros)
+      if (nuevoProyecto.areaId) data.areaId = nuevoProyecto.areaId
+      if (nuevoProyecto.descripcion) data.descripcion = nuevoProyecto.descripcion
+      if (nuevoProyecto.observaciones) data.observaciones = nuevoProyecto.observaciones
+
+      await projectsUploadService.crearProyecto(data)
+      
+      toast({
+        title: "Proyecto creado",
+        description: "El proyecto se ha creado exitosamente"
+      })
+
+      // Resetear formulario
+      setNuevoProyecto({
+        codigoProyecto: '',
+        nombreProyecto: '',
+        clienteNombre: '',
+        clienteRuc: '',
+        fechaInicio: new Date().toISOString().split('T')[0],
+        fechaFinEstimada: '',
+        presupuestoTotal: '',
+        presupuestoMateriales: '',
+        presupuestoManoObra: '',
+        presupuestoOtros: '',
+        responsableEmail: '',
+        areaId: '',
+        estado: 'planificacion',
+        prioridad: 'media',
+        descripcion: '',
+        observaciones: ''
+      })
+      setOpenDialog(false)
+      cargarProyectos()
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Error al crear proyecto"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Funciones para carga masiva
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setArchivo(e.target.files[0])
+      setUploadResponse(null)
+      setValidacionResultado(null)
+      setImportacionResultado(null)
+    }
+  }
+
+  const subirArchivo = async () => {
+    if (!archivo) return
+
+    try {
+      setLoading(true)
+      const response = await projectsUploadService.uploadFile(archivo)
+      setUploadResponse(response)
+      
+      toast({
+        title: "Archivo subido",
+        description: `${response.registrosDetectados} registros detectados`
+      })
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Error al subir archivo"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const validarDatos = async () => {
+    if (!uploadResponse) return
+
+    try {
+      setLoading(true)
+      const resultado = await projectsUploadService.validarDatos(uploadResponse.uploadId)
+      setValidacionResultado(resultado)
+      
+      toast({
+        title: "Validación completada",
+        description: `${resultado.registrosValidos} registros válidos, ${resultado.registrosInvalidos} con errores`
+      })
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Error al validar datos"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const importarDatos = async () => {
+    if (!uploadResponse) return
+
+    try {
+      setLoading(true)
+      const resultado = await projectsUploadService.importarDatos(uploadResponse.uploadId)
+      setImportacionResultado(resultado)
+      
+      toast({
+        title: "Importación exitosa",
+        description: `${resultado.registrosImportados} proyectos importados`
+      })
+
+      cargarProyectos()
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Error al importar datos"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const descargarPlantilla = async () => {
+    try {
+      const blob = await projectsUploadService.descargarPlantilla()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'plantilla_proyectos.xlsx'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+      toast({
+        title: "Plantilla descargada",
+        description: "La plantilla se ha descargado exitosamente"
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo descargar la plantilla"
+      })
+    }
+  }
+
+  // Función para ver detalle de proyecto
+  const verDetalleProyecto = async (id: string) => {
+    try {
+      setLoading(true)
+      const proyecto = await projectsUploadService.obtenerProyectoPorId(id)
+      setProyectoSeleccionado(proyecto)
+      setVerModalOpen(true)
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "No se pudo cargar el proyecto"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Función para abrir modal de edición
+  const abrirEditarProyecto = async (id: string) => {
+    try {
+      setLoading(true)
+      const proyecto = await projectsUploadService.obtenerProyectoPorId(id)
+      
+      // Mapear datos del backend al formato del formulario
+      setProyectoParaEditar({
+        id: proyecto.id,
+        codigoProyecto: proyecto.codigoProyecto || '',
+        nombreProyecto: proyecto.nombreProyecto || '',
+        clienteNombre: proyecto.cliente?.name || '',
+        clienteRuc: proyecto.cliente?.taxId || '',
+        fechaInicio: proyecto.fechaInicio ? new Date(proyecto.fechaInicio).toISOString().split('T')[0] : '',
+        fechaFinEstimada: proyecto.fechaFinEstimada ? new Date(proyecto.fechaFinEstimada).toISOString().split('T')[0] : '',
+        presupuestoTotal: proyecto.presupuestoTotal?.toString() || '',
+        presupuestoMateriales: proyecto.presupuestoMateriales?.toString() || '',
+        presupuestoManoObra: proyecto.presupuestoManoObra?.toString() || '',
+        presupuestoOtros: proyecto.presupuestoOtros?.toString() || '',
+        responsableEmail: proyecto.responsable?.email || '',
+        areaId: proyecto.areaId || '',
+        estado: proyecto.estado || 'planificacion',
+        prioridad: proyecto.prioridad || 'media',
+        descripcion: proyecto.descripcion || '',
+        observaciones: proyecto.observaciones || ''
+      })
+      
+      setEditarModalOpen(true)
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "No se pudo cargar el proyecto"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Función para guardar cambios del proyecto
+  const guardarCambiosProyecto = async () => {
+    if (!proyectoParaEditar) return
+
+    try {
+      setLoading(true)
+
+      const data: any = {
+        codigoProyecto: proyectoParaEditar.codigoProyecto,
+        nombreProyecto: proyectoParaEditar.nombreProyecto,
+        clienteNombre: proyectoParaEditar.clienteNombre,
+        fechaInicio: proyectoParaEditar.fechaInicio,
+        presupuestoTotal: parseFloat(proyectoParaEditar.presupuestoTotal),
+        responsableEmail: proyectoParaEditar.responsableEmail,
+        estado: proyectoParaEditar.estado,
+        prioridad: proyectoParaEditar.prioridad,
+      }
+
+      // Solo agregar campos opcionales si tienen valor
+      if (proyectoParaEditar.clienteRuc) data.clienteRuc = proyectoParaEditar.clienteRuc
+      if (proyectoParaEditar.fechaFinEstimada) data.fechaFinEstimada = proyectoParaEditar.fechaFinEstimada
+      if (proyectoParaEditar.presupuestoMateriales) data.presupuestoMateriales = parseFloat(proyectoParaEditar.presupuestoMateriales)
+      if (proyectoParaEditar.presupuestoManoObra) data.presupuestoManoObra = parseFloat(proyectoParaEditar.presupuestoManoObra)
+      if (proyectoParaEditar.presupuestoOtros) data.presupuestoOtros = parseFloat(proyectoParaEditar.presupuestoOtros)
+      if (proyectoParaEditar.areaId) data.areaId = proyectoParaEditar.areaId
+      if (proyectoParaEditar.descripcion) data.descripcion = proyectoParaEditar.descripcion
+      if (proyectoParaEditar.observaciones) data.observaciones = proyectoParaEditar.observaciones
+
+      await projectsUploadService.actualizarProyecto(proyectoParaEditar.id, data)
+      
+      toast({
+        title: "Proyecto actualizado",
+        description: "Los cambios se han guardado exitosamente"
+      })
+
+      setEditarModalOpen(false)
+      setProyectoParaEditar(null)
+      cargarProyectos()
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Error al actualizar proyecto"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Mapear proyectos del backend al formato de la UI
+  const proyectosFormateados = proyectos.map((p: any) => ({
+    id: p.id,
+    nombre: p.nombreProyecto,
+    cliente: p.cliente?.name || 'Cliente',
+    valorContrato: Number(p.presupuestoTotal) || 0,
+    fechaInicio: new Date(p.fechaInicio).toLocaleDateString('es-MX'),
+    fechaFin: new Date(p.fechaFinEstimada).toLocaleDateString('es-MX'),
+    estado: p.estado === 'en_progreso' ? 'En Progreso' : 
+            p.estado === 'planificacion' ? 'Planificación' : 
+            p.estado === 'completado' ? 'Completado' : 
+            p.estado === 'pausado' ? 'Pausado' : 'Otro',
+    avance: Math.random() * 100, // TODO: calcular avance real
+    responsable: p.responsable ? `${p.responsable.firstName} ${p.responsable.lastName}` : 'N/A',
+    categoria: p.area?.name || 'General',
+  }))
+
+  const filteredProyectos = proyectosFormateados.filter((proyecto) => {
     const matchesSearch =
       proyecto.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
       proyecto.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -96,51 +428,168 @@ export default function ProyectosPage() {
           <p className="text-muted-foreground">Gestión de proyectos y contratos</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline">
+          <Button variant="outline" onClick={descargarPlantilla}>
             <Download className="h-4 w-4 mr-2" />
             Plantilla Excel
           </Button>
-          <Dialog>
+          <Dialog open={openDialog} onOpenChange={setOpenDialog}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
                 Nuevo Proyecto
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Registrar Nuevo Proyecto</DialogTitle>
                 <DialogDescription>Crea un nuevo proyecto en el sistema</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
-                <Input placeholder="Nombre del proyecto" />
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cliente1">Constructora ABC S.A.</SelectItem>
-                    <SelectItem value="cliente2">Industrias XYZ Ltda.</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input type="number" placeholder="Valor del contrato" />
-                <div className="grid grid-cols-2 gap-2">
-                  <Input type="date" placeholder="Fecha inicio" />
-                  <Input type="date" placeholder="Fecha fin" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Código del Proyecto *</Label>
+                    <Input 
+                      placeholder="PROJ-2024-001" 
+                      value={nuevoProyecto.codigoProyecto}
+                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, codigoProyecto: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Label>Nombre del Proyecto *</Label>
+                    <Input 
+                      placeholder="Nombre del proyecto" 
+                      value={nuevoProyecto.nombreProyecto}
+                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, nombreProyecto: e.target.value})}
+                    />
+                  </div>
                 </div>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Responsable" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="carlos">Ing. Carlos Méndez</SelectItem>
-                    <SelectItem value="ana">Ing. Ana García</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Textarea placeholder="Descripción del proyecto..." />
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Cliente *</Label>
+                    <Input 
+                      placeholder="Nombre del cliente" 
+                      value={nuevoProyecto.clienteNombre}
+                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, clienteNombre: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Label>RUC del Cliente</Label>
+                    <Input 
+                      placeholder="20123456789" 
+                      value={nuevoProyecto.clienteRuc}
+                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, clienteRuc: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Fecha Inicio *</Label>
+                    <Input 
+                      type="date" 
+                      value={nuevoProyecto.fechaInicio}
+                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, fechaInicio: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Label>Fecha Fin Estimada *</Label>
+                    <Input 
+                      type="date" 
+                      value={nuevoProyecto.fechaFinEstimada}
+                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, fechaFinEstimada: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Presupuesto Total *</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="50000.00"
+                      value={nuevoProyecto.presupuestoTotal}
+                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, presupuestoTotal: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Label>Presupuesto Materiales *</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="20000.00"
+                      value={nuevoProyecto.presupuestoMateriales}
+                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, presupuestoMateriales: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Presupuesto Mano de Obra *</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="25000.00"
+                      value={nuevoProyecto.presupuestoManoObra}
+                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, presupuestoManoObra: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Label>Presupuesto Otros *</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="5000.00"
+                      value={nuevoProyecto.presupuestoOtros}
+                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, presupuestoOtros: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Email Responsable *</Label>
+                    <Input 
+                      type="email"
+                      placeholder="gerente@empresa.com"
+                      value={nuevoProyecto.responsableEmail}
+                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, responsableEmail: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Label>Estado *</Label>
+                    <Select value={nuevoProyecto.estado} onValueChange={(value) => setNuevoProyecto({...nuevoProyecto, estado: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="planificacion">Planificación</SelectItem>
+                        <SelectItem value="en_progreso">En Progreso</SelectItem>
+                        <SelectItem value="pausado">Pausado</SelectItem>
+                        <SelectItem value="completado">Completado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <Textarea 
+                  placeholder="Descripción del proyecto..."
+                  value={nuevoProyecto.descripcion}
+                  onChange={(e) => setNuevoProyecto({...nuevoProyecto, descripcion: e.target.value})}
+                />
               </div>
               <DialogFooter>
-                <Button>Crear Proyecto</Button>
+                <Button variant="outline" onClick={() => setOpenDialog(false)} disabled={loading}>
+                  Cancelar
+                </Button>
+                <Button onClick={crearNuevoProyecto} disabled={loading}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creando...
+                    </>
+                  ) : (
+                    "Crear Proyecto"
+                  )}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -201,19 +650,89 @@ export default function ProyectosPage() {
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
             <Upload className="mx-auto h-12 w-12 text-gray-400" />
             <div className="mt-4">
-              <Button variant="outline">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
                 <FileText className="h-4 w-4 mr-2" />
                 Seleccionar archivo Excel
               </Button>
+              {archivo && (
+                <p className="mt-2 text-sm font-medium">
+                  Archivo seleccionado: {archivo.name}
+                </p>
+              )}
               <p className="mt-2 text-sm text-muted-foreground">
                 Arrastra y suelta tu archivo aquí, o haz clic para seleccionar
               </p>
             </div>
           </div>
-          <div className="flex justify-between items-center">
-            <p className="text-sm text-muted-foreground">Formatos soportados: .xlsx, .xls</p>
-            <Button>Procesar Archivo</Button>
-          </div>
+          
+          {uploadResponse && !validacionResultado && (
+            <div className="flex justify-between items-center p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm">Archivo subido: {uploadResponse.registrosDetectados} registros detectados</p>
+              <Button onClick={validarDatos} disabled={loading}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Validar Datos"}
+              </Button>
+            </div>
+          )}
+
+          {validacionResultado && !importacionResultado && (
+            <div className="space-y-2">
+              <div className="p-4 bg-green-50 rounded-lg">
+                <p className="text-sm font-medium text-green-800">
+                  ✓ {validacionResultado.registrosValidos} registros válidos
+                </p>
+                {validacionResultado.registrosInvalidos > 0 && (
+                  <p className="text-sm text-red-600">
+                    ✗ {validacionResultado.registrosInvalidos} registros con errores
+                  </p>
+                )}
+              </div>
+              {validacionResultado.puedeImportar && (
+                <Button onClick={importarDatos} disabled={loading} className="w-full">
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Importando...
+                    </>
+                  ) : (
+                    "Confirmar e Importar"
+                  )}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {importacionResultado && (
+            <div className="p-4 bg-green-50 rounded-lg">
+              <p className="text-sm font-medium text-green-800">
+                ✓ Importación completada: {importacionResultado.registrosImportados} proyectos importados
+              </p>
+              <Button onClick={() => {
+                setArchivo(null)
+                setUploadResponse(null)
+                setValidacionResultado(null)
+                setImportacionResultado(null)
+                if (fileInputRef.current) fileInputRef.current.value = ''
+              }} className="mt-2" variant="outline">
+                Nueva Carga
+              </Button>
+            </div>
+          )}
+
+          {!uploadResponse && (
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-muted-foreground">Formatos soportados: .xlsx, .xls, .csv</p>
+              <Button onClick={subirArchivo} disabled={!archivo || loading}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Subir Archivo"}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -295,10 +814,23 @@ export default function ProyectosPage() {
                     <TableCell>{getStatusBadge(proyecto.estado)}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => verDetalleProyecto(proyecto.id)}
+                          disabled={loading}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
                           Ver
                         </Button>
-                        <Button size="sm">Editar</Button>
+                        <Button 
+                          size="sm"
+                          onClick={() => abrirEditarProyecto(proyecto.id)}
+                          disabled={loading}
+                        >
+                          <Edit className="h-4 w-4 mr-1" />
+                          Editar
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -308,6 +840,310 @@ export default function ProyectosPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Modal Ver Detalle */}
+      <Dialog open={verModalOpen} onOpenChange={setVerModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalle del Proyecto</DialogTitle>
+          </DialogHeader>
+          {proyectoSeleccionado && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Código</Label>
+                  <p className="text-sm font-medium">{proyectoSeleccionado.codigoProyecto}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Estado</Label>
+                  <p className="text-sm font-medium">{proyectoSeleccionado.estado}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium text-muted-foreground">Nombre del Proyecto</Label>
+                <p className="text-sm font-medium">{proyectoSeleccionado.nombreProyecto}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Cliente</Label>
+                  <p className="text-sm">{proyectoSeleccionado.cliente?.name || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">RUC Cliente</Label>
+                  <p className="text-sm">{proyectoSeleccionado.cliente?.taxId || 'N/A'}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Fecha Inicio</Label>
+                  <p className="text-sm">{new Date(proyectoSeleccionado.fechaInicio).toLocaleDateString('es-MX')}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Fecha Fin Estimada</Label>
+                  <p className="text-sm">{proyectoSeleccionado.fechaFinEstimada ? new Date(proyectoSeleccionado.fechaFinEstimada).toLocaleDateString('es-MX') : 'N/A'}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Presupuesto Total</Label>
+                  <p className="text-sm font-medium">${Number(proyectoSeleccionado.presupuestoTotal || 0).toLocaleString()}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Prioridad</Label>
+                  <p className="text-sm">{proyectoSeleccionado.prioridad}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Materiales</Label>
+                  <p className="text-sm">${Number(proyectoSeleccionado.presupuestoMateriales || 0).toLocaleString()}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Mano de Obra</Label>
+                  <p className="text-sm">${Number(proyectoSeleccionado.presupuestoManoObra || 0).toLocaleString()}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Otros</Label>
+                  <p className="text-sm">${Number(proyectoSeleccionado.presupuestoOtros || 0).toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium text-muted-foreground">Responsable</Label>
+                <p className="text-sm">{proyectoSeleccionado.responsable ? `${proyectoSeleccionado.responsable.firstName} ${proyectoSeleccionado.responsable.lastName} (${proyectoSeleccionado.responsable.email})` : 'N/A'}</p>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium text-muted-foreground">Área</Label>
+                <p className="text-sm">{proyectoSeleccionado.area?.name || 'N/A'}</p>
+              </div>
+
+              {proyectoSeleccionado.descripcion && (
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Descripción</Label>
+                  <p className="text-sm">{proyectoSeleccionado.descripcion}</p>
+                </div>
+              )}
+
+              {proyectoSeleccionado.observaciones && (
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Observaciones</Label>
+                  <p className="text-sm">{proyectoSeleccionado.observaciones}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground">
+                <div>
+                  <Label className="text-xs">Origen de Carga</Label>
+                  <p>{proyectoSeleccionado.origenCarga}</p>
+                </div>
+                <div>
+                  <Label className="text-xs">Creado</Label>
+                  <p>{new Date(proyectoSeleccionado.createdAt).toLocaleString('es-MX')}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVerModalOpen(false)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Editar */}
+      <Dialog open={editarModalOpen} onOpenChange={setEditarModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Proyecto</DialogTitle>
+          </DialogHeader>
+          {proyectoParaEditar && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Código del Proyecto *</Label>
+                  <Input 
+                    value={proyectoParaEditar.codigoProyecto}
+                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, codigoProyecto: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Nombre del Proyecto *</Label>
+                  <Input 
+                    value={proyectoParaEditar.nombreProyecto}
+                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, nombreProyecto: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Cliente *</Label>
+                  <Input 
+                    value={proyectoParaEditar.clienteNombre}
+                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, clienteNombre: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>RUC del Cliente</Label>
+                  <Input 
+                    value={proyectoParaEditar.clienteRuc}
+                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, clienteRuc: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Fecha Inicio *</Label>
+                  <Input 
+                    type="date"
+                    value={proyectoParaEditar.fechaInicio}
+                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, fechaInicio: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Fecha Fin Estimada</Label>
+                  <Input 
+                    type="date"
+                    value={proyectoParaEditar.fechaFinEstimada}
+                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, fechaFinEstimada: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Presupuesto Total *</Label>
+                  <Input 
+                    type="number"
+                    value={proyectoParaEditar.presupuestoTotal}
+                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, presupuestoTotal: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Presupuesto Materiales</Label>
+                  <Input 
+                    type="number"
+                    value={proyectoParaEditar.presupuestoMateriales}
+                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, presupuestoMateriales: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Presupuesto Mano de Obra</Label>
+                  <Input 
+                    type="number"
+                    value={proyectoParaEditar.presupuestoManoObra}
+                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, presupuestoManoObra: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Presupuesto Otros</Label>
+                  <Input 
+                    type="number"
+                    value={proyectoParaEditar.presupuestoOtros}
+                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, presupuestoOtros: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Email Responsable *</Label>
+                  <Input 
+                    type="email"
+                    value={proyectoParaEditar.responsableEmail}
+                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, responsableEmail: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Estado *</Label>
+                  <Select 
+                    value={proyectoParaEditar.estado} 
+                    onValueChange={(value) => setProyectoParaEditar({...proyectoParaEditar, estado: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="planificacion">Planificación</SelectItem>
+                      <SelectItem value="en_progreso">En Progreso</SelectItem>
+                      <SelectItem value="pausado">Pausado</SelectItem>
+                      <SelectItem value="completado">Completado</SelectItem>
+                      <SelectItem value="cancelado">Cancelado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Prioridad *</Label>
+                  <Select 
+                    value={proyectoParaEditar.prioridad} 
+                    onValueChange={(value) => setProyectoParaEditar({...proyectoParaEditar, prioridad: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="baja">Baja</SelectItem>
+                      <SelectItem value="media">Media</SelectItem>
+                      <SelectItem value="alta">Alta</SelectItem>
+                      <SelectItem value="critica">Crítica</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label>Descripción</Label>
+                <Textarea 
+                  value={proyectoParaEditar.descripcion}
+                  onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, descripcion: e.target.value})}
+                />
+              </div>
+
+              <div>
+                <Label>Observaciones</Label>
+                <Textarea 
+                  value={proyectoParaEditar.observaciones}
+                  onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, observaciones: e.target.value})}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setEditarModalOpen(false)}
+              disabled={loading}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={guardarCambiosProyecto}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                "Guardar Cambios"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

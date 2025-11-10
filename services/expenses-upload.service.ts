@@ -273,4 +273,21 @@ export const expensesUploadService = {
     )
     return response.data
   },
+
+  async obtenerGastoPorId(id: string): Promise<any> {
+    const response = await apiClient.get(`/carga/gastos/${id}`)
+    return response.data
+  },
+
+  async actualizarGasto(id: string, data: CrearGastoData): Promise<{
+    id: string
+    numeroComprobante: string
+    mensaje: string
+  }> {
+    const response = await apiClient.put(
+      `/carga/gastos/${id}`,
+      data
+    )
+    return response.data
+  },
 }

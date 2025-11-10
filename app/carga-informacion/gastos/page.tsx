@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Upload, Download, Plus, Search, FileText, Calendar, Loader2, CheckCircle, AlertCircle } from "lucide-react"
+import { Upload, Download, Plus, Search, FileText, Calendar, Loader2, CheckCircle, AlertCircle, Eye, Edit } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -49,6 +49,12 @@ export default function GastosPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterCategory, setFilterCategory] = useState("all")
   
+  // Estados para Ver y Editar
+  const [gastoSeleccionado, setGastoSeleccionado] = useState<any>(null)
+  const [modalVerOpen, setModalVerOpen] = useState(false)
+  const [modalEditarOpen, setModalEditarOpen] = useState(false)
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false)
+  
   // Estados de historial
   const [historial, setHistorial] = useState<HistorialCarga[]>([])
   const [loadingHistorial, setLoadingHistorial] = useState(false)
@@ -62,6 +68,7 @@ export default function GastosPage() {
     monto: '',
     proveedorRuc: '',
     proveedorNombre: '',
+    formaPago: 'contado',
     areaCentroCosto: '',
     observaciones: ''
   })
@@ -217,6 +224,83 @@ export default function GastosPage() {
     }
   }
 
+  // Funciones para Ver y Editar gastos
+  const handleVerGasto = async (id: string) => {
+    console.log('🔍 Ver gasto con ID:', id)
+    try {
+      const gasto = await expensesUploadService.obtenerGastoPorId(id)
+      console.log('✅ Gasto obtenido:', gasto)
+      setGastoSeleccionado(gasto)
+      setModalVerOpen(true)
+    } catch (error: any) {
+      console.error('❌ Error al obtener gasto:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "No se pudo obtener el gasto"
+      })
+    }
+  }
+
+  const handleEditarGasto = async (id: string) => {
+    console.log('✏️ Editar gasto con ID:', id)
+    try {
+      const gasto = await expensesUploadService.obtenerGastoPorId(id)
+      console.log('✅ Gasto obtenido para editar:', gasto)
+      setGastoSeleccionado(gasto)
+      // Preparar datos para edición
+      setNuevoGasto({
+        fechaGasto: gasto.fechaGasto.split('T')[0],
+        concepto: gasto.concepto,
+        categoria: gasto.categoriaGasto,
+        monto: gasto.total,
+        proveedorRuc: gasto.proveedor?.taxId || '',
+        proveedorNombre: gasto.proveedor?.name || '',
+        formaPago: gasto.formaPago || 'contado',
+        areaCentroCosto: gasto.area?.id || '',
+        observaciones: gasto.observaciones || ''
+      })
+      setModalEditarOpen(true)
+    } catch (error: any) {
+      console.error('❌ Error al obtener gasto para editar:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "No se pudo obtener el gasto"
+      })
+    }
+  }
+
+  const guardarEdicion = async () => {
+    if (!gastoSeleccionado) return
+
+    try {
+      setGuardandoEdicion(true)
+      await expensesUploadService.actualizarGasto(gastoSeleccionado.id, {
+        ...nuevoGasto,
+        monto: parseFloat(nuevoGasto.monto) || 0
+      })
+      
+      toast({
+        title: "Gasto actualizado",
+        description: "El gasto se ha actualizado correctamente"
+      })
+
+      setModalEditarOpen(false)
+      setGastoSeleccionado(null)
+      // Recargar lista de gastos
+      cargarHistorial()
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "No se pudo actualizar el gasto"
+      })
+    } finally {
+      setGuardandoEdicion(false)
+    }
+  }
+
   const crearNuevoGasto = async () => {
     try {
       // Validación básica
@@ -248,6 +332,7 @@ export default function GastosPage() {
         monto: '',
         proveedorRuc: '',
         proveedorNombre: '',
+        formaPago: 'contado',
         areaCentroCosto: '',
         observaciones: ''
       })
@@ -270,7 +355,7 @@ export default function GastosPage() {
   const gastosOperativos = historial.map((h: any) => {
     const gastoData = h.gastoData
     return {
-      id: h.id.substring(0, 12),
+      id: h.id, // ✅ ID COMPLETO para poder ver/editar
       descripcion: gastoData?.concepto || h.nombreArchivo,
       categoria: gastoData?.categoriaGasto || "Operativo",
       monto: gastoData?.total || 0,
@@ -721,7 +806,9 @@ export default function GastosPage() {
               <TableBody>
                 {filteredGastos.map((gasto) => (
                   <TableRow key={gasto.id}>
-                    <TableCell className="font-medium">{gasto.id}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="text-xs font-mono">{gasto.numeroComprobante || gasto.id.substring(0, 8)}</div>
+                    </TableCell>
                     <TableCell>
                       <div>
                         <div className="font-medium">{gasto.descripcion}</div>
@@ -741,10 +828,21 @@ export default function GastosPage() {
                     <TableCell>{getStatusBadge(gasto.estado)}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleVerGasto(gasto.id)}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
                           Ver
                         </Button>
-                        <Button size="sm">Editar</Button>
+                        <Button 
+                          size="sm"
+                          onClick={() => handleEditarGasto(gasto.id)}
+                        >
+                          <Edit className="h-4 w-4 mr-1" />
+                          Editar
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -754,6 +852,225 @@ export default function GastosPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Modal Ver Gasto */}
+      <Dialog open={modalVerOpen} onOpenChange={setModalVerOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Detalle del Gasto</DialogTitle>
+            <DialogDescription>
+              Información completa del gasto seleccionado
+            </DialogDescription>
+          </DialogHeader>
+          {gastoSeleccionado && (
+            <div className="grid gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Número de Comprobante</Label>
+                  <p className="text-sm font-medium mt-1">{gastoSeleccionado.numeroComprobante}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Fecha</Label>
+                  <p className="text-sm mt-1">{new Date(gastoSeleccionado.fechaGasto).toLocaleDateString()}</p>
+                </div>
+              </div>
+              
+              <div>
+                <Label className="text-sm font-medium text-muted-foreground">Concepto</Label>
+                <p className="text-sm mt-1">{gastoSeleccionado.concepto}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Categoría</Label>
+                  <Badge variant="outline" className="mt-1">{gastoSeleccionado.categoriaGasto}</Badge>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Forma de Pago</Label>
+                  <p className="text-sm mt-1 capitalize">{gastoSeleccionado.formaPago}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Subtotal</Label>
+                  <p className="text-sm font-medium mt-1">${gastoSeleccionado.subtotal?.toFixed(2)}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">IGV</Label>
+                  <p className="text-sm font-medium mt-1">${gastoSeleccionado.igv?.toFixed(2)}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Total</Label>
+                  <p className="text-lg font-bold mt-1 text-primary">${gastoSeleccionado.total?.toFixed(2)}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium text-muted-foreground">Proveedor</Label>
+                <p className="text-sm mt-1">{gastoSeleccionado.proveedor?.name}</p>
+                <p className="text-xs text-muted-foreground">RUC: {gastoSeleccionado.proveedor?.taxId}</p>
+              </div>
+
+              {gastoSeleccionado.area && (
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Área</Label>
+                  <p className="text-sm mt-1">{gastoSeleccionado.area.name}</p>
+                </div>
+              )}
+
+              {gastoSeleccionado.observaciones && (
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Observaciones</Label>
+                  <p className="text-sm mt-1">{gastoSeleccionado.observaciones}</p>
+                </div>
+              )}
+
+              <div>
+                <Label className="text-sm font-medium text-muted-foreground">Origen</Label>
+                <Badge variant="secondary" className="mt-1">
+                  {gastoSeleccionado.origenCarga === 'carga_masiva' ? 'Carga Masiva' : 'Formulario Web'}
+                </Badge>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalVerOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Editar Gasto */}
+      <Dialog open={modalEditarOpen} onOpenChange={setModalEditarOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Gasto</DialogTitle>
+            <DialogDescription>
+              Modifica los datos del gasto
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-fecha">Fecha del Gasto *</Label>
+                <Input
+                  id="edit-fecha"
+                  type="date"
+                  value={nuevoGasto.fechaGasto}
+                  onChange={(e) => setNuevoGasto({...nuevoGasto, fechaGasto: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-categoria">Categoría *</Label>
+                <Select
+                  value={nuevoGasto.categoria}
+                  onValueChange={(value) => setNuevoGasto({...nuevoGasto, categoria: value})}
+                >
+                  <SelectTrigger id="edit-categoria">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="operativo">Operativo</SelectItem>
+                    <SelectItem value="administrativo">Administrativo</SelectItem>
+                    <SelectItem value="ventas">Ventas</SelectItem>
+                    <SelectItem value="financiero">Financiero</SelectItem>
+                    <SelectItem value="otros">Otros</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-concepto">Concepto *</Label>
+              <Input
+                id="edit-concepto"
+                value={nuevoGasto.concepto}
+                onChange={(e) => setNuevoGasto({...nuevoGasto, concepto: e.target.value})}
+                placeholder="Descripción del gasto"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-monto">Monto Total *</Label>
+                <Input
+                  id="edit-monto"
+                  type="number"
+                  step="0.01"
+                  value={nuevoGasto.monto}
+                  onChange={(e) => setNuevoGasto({...nuevoGasto, monto: e.target.value})}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-formaPago">Forma de Pago *</Label>
+                <Select
+                  value={nuevoGasto.formaPago}
+                  onValueChange={(value) => setNuevoGasto({...nuevoGasto, formaPago: value})}
+                >
+                  <SelectTrigger id="edit-formaPago">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="contado">Contado</SelectItem>
+                    <SelectItem value="credito">Crédito</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-ruc">RUC del Proveedor *</Label>
+                <Input
+                  id="edit-ruc"
+                  value={nuevoGasto.proveedorRuc}
+                  onChange={(e) => setNuevoGasto({...nuevoGasto, proveedorRuc: e.target.value})}
+                  placeholder="20123456789"
+                  maxLength={11}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-nombre-prov">Nombre del Proveedor *</Label>
+                <Input
+                  id="edit-nombre-prov"
+                  value={nuevoGasto.proveedorNombre}
+                  onChange={(e) => setNuevoGasto({...nuevoGasto, proveedorNombre: e.target.value})}
+                  placeholder="Nombre o Razón Social"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-observaciones">Observaciones</Label>
+              <Textarea
+                id="edit-observaciones"
+                value={nuevoGasto.observaciones}
+                onChange={(e) => setNuevoGasto({...nuevoGasto, observaciones: e.target.value})}
+                placeholder="Notas adicionales..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalEditarOpen(false)} disabled={guardandoEdicion}>
+              Cancelar
+            </Button>
+            <Button onClick={guardarEdicion} disabled={guardandoEdicion}>
+              {guardandoEdicion ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                "Guardar Cambios"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

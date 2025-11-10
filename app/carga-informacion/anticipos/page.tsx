@@ -1,283 +1,700 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { useState, useEffect, useCallback } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Upload, Download, FileSpreadsheet, CheckCircle, XCircle, AlertCircle, Loader2, Clock } from "lucide-react"
+import { Progress } from "@/components/ui/progress"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/components/ui/use-toast"
+import { 
+  projectsUploadService, 
+  type UploadResponse, 
+  type ValidacionResultado, 
+  type ImportacionResultado,
+  type HistorialCarga 
+} from "@/services/projects-upload.service"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Upload, Download, Plus, Search, FileText } from "lucide-react"
 
-export default function AnticiposPage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filterStatus, setFilterStatus] = useState("all")
+export default function CargaProyectos() {
+  const { toast } = useToast()
+  const [archivo, setArchivo] = useState<File | null>(null)
+  const [periodo, setPeriodo] = useState<string>("")
+  const [cargando, setCargando] = useState(false)
+  const [uploadResponse, setUploadResponse] = useState<UploadResponse | null>(null)
+  const [validacionResultado, setValidacionResultado] = useState<ValidacionResultado | null>(null)
+  const [importacionResultado, setImportacionResultado] = useState<ImportacionResultado | null>(null)
+  const [historial, setHistorial] = useState<HistorialCarga[]>([])
+  const [loadingHistorial, setLoadingHistorial] = useState(false)
+  const [paso, setPaso] = useState<'upload' | 'validacion' | 'importacion' | 'completado'>('upload')
 
-  const anticipos = [
-    {
-      id: "ANT-2024-001",
-      cliente: "Constructora ABC S.A.",
-      proyecto: "Edificio Residencial Torre Norte",
-      monto: 500000,
-      fecha: "2024-01-05",
-      estado: "Activo",
-      saldoPendiente: 350000,
-      porcentajeUsado: 30,
-    },
-    {
-      id: "ANT-2024-002",
-      cliente: "Industrias XYZ Ltda.",
-      proyecto: "Modernización Planta Industrial",
-      monto: 300000,
-      fecha: "2024-01-08",
-      estado: "Parcial",
-      saldoPendiente: 150000,
-      porcentajeUsado: 50,
-    },
-    {
-      id: "ANT-2024-003",
-      cliente: "Comercial 123 S.A.",
-      proyecto: "Instalación Sistema Eléctrico",
-      monto: 150000,
-      fecha: "2024-01-10",
-      estado: "Liquidado",
-      saldoPendiente: 0,
-      porcentajeUsado: 100,
-    },
-  ]
+  const cargarHistorial = useCallback(async () => {
+    try {
+      setLoadingHistorial(true)
+      const response = await projectsUploadService.obtenerHistorial({ limit: 5 })
+      setHistorial(response.data)
+    } catch (error) {
+      console.error('Error al cargar historial:', error)
+    } finally {
+      setLoadingHistorial(false)
+    }
+  }, [])
 
-  const filteredAnticipos = anticipos.filter((anticipo) => {
-    const matchesSearch =
-      anticipo.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      anticipo.proyecto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      anticipo.id.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = filterStatus === "all" || anticipo.estado.toLowerCase() === filterStatus
-    return matchesSearch && matchesStatus
-  })
+  useEffect(() => {
+    cargarHistorial()
+  }, [cargarHistorial])
 
-  const totalAnticipos = filteredAnticipos.reduce((sum, anticipo) => sum + anticipo.monto, 0)
-  const totalPendiente = filteredAnticipos.reduce((sum, anticipo) => sum + anticipo.saldoPendiente, 0)
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]
+      
+      // Validar tipo de archivo
+      const validExtensions = ['.xlsx', '.xls', '.csv']
+      const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
+      
+      if (!validExtensions.includes(fileExtension)) {
+        toast({
+          variant: "destructive",
+          title: "Archivo inválido",
+          description: "Solo se permiten archivos Excel (.xlsx, .xls) o CSV (.csv)"
+        })
+        return
+      }
 
-  const getStatusBadge = (estado: string) => {
-    switch (estado) {
-      case "Activo":
-        return <Badge className="bg-green-50 text-green-700">Activo</Badge>
-      case "Parcial":
-        return <Badge className="bg-yellow-50 text-yellow-700">Parcial</Badge>
-      case "Liquidado":
-        return <Badge className="bg-blue-50 text-blue-700">Liquidado</Badge>
-      default:
-        return <Badge variant="outline">{estado}</Badge>
+      // Validar tamaño (máximo 10MB)
+      const maxSize = 10 * 1024 * 1024 // 10MB
+      if (file.size > maxSize) {
+        toast({
+          variant: "destructive",
+          title: "Archivo demasiado grande",
+          description: "El archivo no puede superar los 10MB"
+        })
+        return
+      }
+
+      setArchivo(file)
+      // Resetear estados al seleccionar nuevo archivo
+      setUploadResponse(null)
+      setValidacionResultado(null)
+      setImportacionResultado(null)
+      setPaso('upload')
     }
   }
 
+  const handleUpload = async () => {
+    if (!archivo) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Por favor selecciona un archivo"
+      })
+      return
+    }
+
+    try {
+      setCargando(true)
+      const response = await projectsUploadService.uploadFile(archivo, {
+        periodo: periodo || undefined
+      })
+
+      setUploadResponse(response)
+      setPaso('validacion')
+      
+      toast({
+        title: "Archivo subido",
+        description: `${response.registrosDetectados} registros detectados. Puedes proceder a validar.`
+      })
+    } catch (error: any) {
+      console.error('Error al subir archivo:', error)
+      toast({
+        variant: "destructive",
+        title: "Error al subir archivo",
+        description: error.response?.data?.message || "Ocurrió un error al procesar el archivo"
+      })
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  const handleValidar = async () => {
+    if (!uploadResponse) return
+
+    try {
+      setCargando(true)
+      const resultado = await projectsUploadService.validarDatos(uploadResponse.uploadId)
+      
+      setValidacionResultado(resultado)
+      
+      if (resultado.puedeImportar) {
+        toast({
+          title: "Validación completada",
+          description: `${resultado.registrosValidos} registros válidos. Puedes proceder a importar.`
+        })
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Errores de validación",
+          description: `Se encontraron ${resultado.registrosInvalidos} registros con errores. Por favor corrígelos antes de importar.`
+        })
+      }
+    } catch (error: any) {
+      console.error('Error al validar:', error)
+      toast({
+        variant: "destructive",
+        title: "Error en la validación",
+        description: error.response?.data?.message || "Ocurrió un error al validar los datos"
+      })
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  const handleImportar = async () => {
+    if (!uploadResponse || !validacionResultado?.puedeImportar) return
+
+    try {
+      setCargando(true)
+      const resultado = await projectsUploadService.importarDatos(uploadResponse.uploadId)
+      
+      setImportacionResultado(resultado)
+      setPaso('completado')
+      
+      toast({
+        title: "Importación completada",
+        description: `${resultado.registrosImportados} registros importados exitosamente`
+      })
+
+      // Recargar historial
+      cargarHistorial()
+    } catch (error: any) {
+      console.error('Error al importar:', error)
+      toast({
+        variant: "destructive",
+        title: "Error en la importación",
+        description: error.response?.data?.message || "Ocurrió un error al importar los datos"
+      })
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  const handleDescargarPlantilla = async () => {
+    try {
+      const blob = await projectsUploadService.descargarPlantilla()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'plantilla_proyectos.xlsx'
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      
+      toast({
+        title: "Plantilla descargada",
+        description: "La plantilla se ha descargado exitosamente"
+      })
+    } catch (error) {
+      console.error('Error al descargar plantilla:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo descargar la plantilla"
+      })
+    }
+  }
+
+  const reiniciarProceso = () => {
+    setArchivo(null)
+    setUploadResponse(null)
+    setValidacionResultado(null)
+    setImportacionResultado(null)
+    setPaso('upload')
+  }
+
+  const continuarCarga = async (carga: HistorialCarga) => {
+    // Scroll hacia arriba para ver la sección de carga
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    
+    // Establecer el uploadResponse desde el historial
+    setUploadResponse({
+      uploadId: carga.id,
+      nombreArchivo: carga.nombreArchivo,
+      registrosDetectados: carga.registrosDetectados,
+      estado: carga.estado as any,
+    })
+
+    // Dependiendo del estado, ir al paso correspondiente
+    if (carga.estado === 'subido') {
+      setPaso('validacion')
+      setValidacionResultado(null)
+      setImportacionResultado(null)
+      toast({
+        title: "Carga recuperada",
+        description: "Puedes continuar con la validación de los datos"
+      })
+    } else if (carga.estado === 'validado') {
+      // Si ya está validado, mostrar resultado simulado para permitir importar
+      setPaso('validacion')
+      setValidacionResultado({
+        uploadId: carga.id,
+        registrosValidos: carga.registrosDetectados - (carga.registrosInvalidos || 0),
+        registrosInvalidos: carga.registrosInvalidos || 0,
+        errores: [],
+        advertencias: ['Este archivo ya fue validado anteriormente. Puedes proceder a importar.'],
+        puedeImportar: true,
+      })
+      setImportacionResultado(null)
+      toast({
+        title: "Carga recuperada",
+        description: "Este archivo ya fue validado. Puedes proceder a importar."
+      })
+    } else if (carga.estado === 'error_validacion') {
+      // Si tiene errores, mostrar mensaje indicando que debe corregir
+      setPaso('validacion')
+      setValidacionResultado({
+        uploadId: carga.id,
+        registrosValidos: carga.registrosDetectados - (carga.registrosInvalidos || 0),
+        registrosInvalidos: carga.registrosInvalidos || 0,
+        errores: [{
+          fila: 0,
+          campo: 'archivo',
+          valor: '',
+          error: 'Este archivo tiene errores de validación. Descarga la plantilla, corrige los errores y vuelve a subir el archivo.'
+        }],
+        advertencias: [],
+        puedeImportar: false,
+      })
+      toast({
+        variant: "destructive",
+        title: "Carga con errores",
+        description: "Este archivo tiene errores. Debes corregirlo y volver a subirlo."
+      })
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('es-MX', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const getEstadoBadge = (estado: string) => {
+    const badges: Record<string, { variant: any; label: string; icon?: string }> = {
+      subido: { variant: "secondary", label: "Subido", icon: "⏸️" },
+      validando: { variant: "default", label: "Validando" },
+      validado: { variant: "secondary", label: "Validado", icon: "⏸️" },
+      error_validacion: { variant: "destructive", label: "Error Validación", icon: "⚠️" },
+      importando: { variant: "default", label: "Importando" },
+      importado: { variant: "default", label: "Importado" },
+      error_importacion: { variant: "destructive", label: "Error Importación" },
+    }
+
+    const badge = badges[estado] || { variant: "secondary", label: estado }
+    return (
+      <Badge variant={badge.variant}>
+        {badge.icon && <span className="mr-1">{badge.icon}</span>}
+        {badge.label}
+      </Badge>
+    )
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Carga de Anticipos</h1>
-          <p className="text-muted-foreground">Gestión de anticipos de clientes por proyecto</p>
-        </div>
-        <div className="flex gap-3">
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Plantilla Excel
-          </Button>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Nuevo Anticipo
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Registrar Nuevo Anticipo</DialogTitle>
-                <DialogDescription>Registra un anticipo recibido de cliente</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cliente1">Constructora ABC S.A.</SelectItem>
-                    <SelectItem value="cliente2">Industrias XYZ Ltda.</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input placeholder="Nombre del proyecto" />
-                <Input type="number" placeholder="Monto del anticipo" />
-                <Input type="date" placeholder="Fecha de recepción" />
-                <Textarea placeholder="Observaciones..." />
-              </div>
-              <DialogFooter>
-                <Button>Registrar Anticipo</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
+        <h1 className="text-2xl font-bold">Carga de Información - Proyectos</h1>
+        <Button variant="outline" onClick={handleDescargarPlantilla}>
+          <Download className="h-4 w-4 mr-2" />
+          Descargar Plantilla
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Total Anticipos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${totalAnticipos.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">{filteredAnticipos.length} anticipos</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Saldo Pendiente</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">${totalPendiente.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Por liquidar</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Anticipos Activos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {anticipos.filter((a) => a.estado === "Activo").length}
-            </div>
-            <p className="text-xs text-muted-foreground">En proceso</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Liquidados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {anticipos.filter((a) => a.estado === "Liquidado").length}
-            </div>
-            <p className="text-xs text-muted-foreground">Completados</p>
-          </CardContent>
-        </Card>
-      </div>
-
+      {/* Progreso del proceso */}
       <Card>
-        <CardHeader>
-          <CardTitle>Carga Masiva de Anticipos</CardTitle>
-          <CardDescription>Importa múltiples anticipos desde archivo Excel</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-            <Upload className="mx-auto h-12 w-12 text-gray-400" />
-            <div className="mt-4">
-              <Button variant="outline">
-                <FileText className="h-4 w-4 mr-2" />
-                Seleccionar archivo Excel
-              </Button>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Arrastra y suelta tu archivo aquí, o haz clic para seleccionar
-              </p>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div className={`flex items-center gap-2 ${uploadResponse ? 'text-green-600' : paso === 'upload' ? 'text-blue-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                uploadResponse ? 'bg-green-600 text-white' : paso === 'upload' ? 'bg-blue-600 text-white' : 'bg-gray-200'
+              }`}>
+                {uploadResponse ? '✓' : '1'}
+              </div>
+              <span className="font-medium">Subir Archivo</span>
             </div>
-          </div>
-          <div className="flex justify-between items-center">
-            <p className="text-sm text-muted-foreground">Formatos soportados: .xlsx, .xls</p>
-            <Button>Procesar Archivo</Button>
+            
+            <div className={`flex-1 h-0.5 ${uploadResponse ? 'bg-green-600' : 'bg-gray-200'} mx-4`} />
+            
+            <div className={`flex items-center gap-2 ${validacionResultado ? 'text-green-600' : paso === 'validacion' ? 'text-blue-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                validacionResultado ? 'bg-green-600 text-white' : paso === 'validacion' ? 'bg-blue-600 text-white' : 'bg-gray-200'
+              }`}>
+                {validacionResultado ? '✓' : '2'}
+              </div>
+              <span className="font-medium">Validar Datos</span>
+            </div>
+            
+            <div className={`flex-1 h-0.5 ${validacionResultado ? 'bg-green-600' : 'bg-gray-200'} mx-4`} />
+            
+            <div className={`flex items-center gap-2 ${importacionResultado ? 'text-green-600' : (paso === 'importacion' || paso === 'completado') ? 'text-blue-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                importacionResultado ? 'bg-green-600 text-white' : (paso === 'importacion' || paso === 'completado') ? 'bg-blue-600 text-white' : 'bg-gray-200'
+              }`}>
+                {importacionResultado ? '✓' : '3'}
+              </div>
+              <span className="font-medium">Importar</span>
+            </div>
           </div>
         </CardContent>
       </Card>
 
+      {/* Formulario de carga */}
+      {paso === 'upload' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>1. Cargar Archivo de Ventas</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="periodo">Período (Opcional)</Label>
+              <Input
+                id="periodo"
+                type="month"
+                value={periodo}
+                onChange={(e) => setPeriodo(e.target.value)}
+                placeholder="2024-01"
+              />
+              <p className="text-xs text-muted-foreground">
+                Formato: YYYY-MM (ejemplo: 2024-03 para Marzo 2024)
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="archivo">Archivo Excel/CSV</Label>
+              <Input 
+                id="archivo" 
+                type="file" 
+                accept=".xlsx,.xls,.csv" 
+                onChange={handleFileChange} 
+              />
+              {archivo && (
+                <p className="text-sm text-muted-foreground">
+                  Archivo seleccionado: {archivo.name} ({(archivo.size / 1024).toFixed(2)} KB)
+                </p>
+              )}
+            </div>
+
+            <Button 
+              onClick={handleUpload} 
+              disabled={!archivo || cargando} 
+              className="w-full"
+            >
+              {cargando ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Subir y Analizar Archivo
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Resultado de carga */}
+      {uploadResponse && paso === 'validacion' && !validacionResultado && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Archivo Cargado Exitosamente
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Nombre del archivo</p>
+                <p className="font-medium">{uploadResponse.nombreArchivo}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Registros detectados</p>
+                <p className="font-medium text-2xl">{uploadResponse.registrosDetectados}</p>
+              </div>
+            </div>
+
+            <Button 
+              onClick={handleValidar} 
+              disabled={cargando} 
+              className="w-full"
+            >
+              {cargando ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Validando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Validar Datos
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Resultado de validación */}
+      {validacionResultado && paso !== 'completado' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              {validacionResultado.puedeImportar ? (
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              ) : (
+                <AlertCircle className="h-5 w-5 text-red-600" />
+              )}
+              Resultado de Validación
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="p-4 border rounded-lg">
+                <p className="text-sm text-muted-foreground">Registros válidos</p>
+                <p className="font-medium text-2xl text-green-600">{validacionResultado.registrosValidos}</p>
+              </div>
+              <div className="p-4 border rounded-lg">
+                <p className="text-sm text-muted-foreground">Registros inválidos</p>
+                <p className="font-medium text-2xl text-red-600">{validacionResultado.registrosInvalidos}</p>
+              </div>
+              <div className="p-4 border rounded-lg">
+                <p className="text-sm text-muted-foreground">Estado</p>
+                <p className="font-medium text-lg">
+                  {validacionResultado.puedeImportar ? (
+                    <Badge variant="default">Listo para importar</Badge>
+                  ) : (
+                    <Badge variant="destructive">Requiere corrección</Badge>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {validacionResultado.advertencias && validacionResultado.advertencias.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="font-medium">Advertencias</h4>
+                {validacionResultado.advertencias.map((adv, idx) => (
+                  <Alert key={idx}>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{adv}</AlertDescription>
+                  </Alert>
+                ))}
+              </div>
+            )}
+
+            {validacionResultado.errores && validacionResultado.errores.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="font-medium text-red-600">Errores ({validacionResultado.errores.length})</h4>
+                <div className="max-h-60 overflow-y-auto space-y-2">
+                  {validacionResultado.errores.slice(0, 10).map((error, idx) => (
+                    <Alert key={idx} variant="destructive">
+                      <AlertDescription className="text-sm">
+                        <strong>Fila {error.fila}</strong> - Campo: {error.campo} - {error.error}
+                      </AlertDescription>
+                    </Alert>
+                  ))}
+                  {validacionResultado.errores.length > 10 && (
+                    <p className="text-sm text-muted-foreground text-center">
+                      ... y {validacionResultado.errores.length - 10} errores más
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {validacionResultado.puedeImportar && !importacionResultado && (
+              <Button 
+                onClick={handleImportar} 
+                disabled={cargando} 
+                className="w-full"
+              >
+                {cargando ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Importando...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Confirmar e Importar Datos
+                  </>
+                )}
+              </Button>
+            )}
+            
+            {!validacionResultado.puedeImportar && (
+              <>
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Debes corregir los errores antes de importar. Descarga el archivo, corrígelo y súbelo nuevamente.
+                  </AlertDescription>
+                </Alert>
+                <Button onClick={reiniciarProceso} variant="outline" className="w-full">
+                  Cargar Nuevo Archivo
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Resultado de importación */}
+      {importacionResultado && paso === 'completado' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Importación Completada
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="p-4 border rounded-lg bg-green-50">
+                <p className="text-sm text-muted-foreground">Registros importados</p>
+                <p className="font-medium text-2xl text-green-600">{importacionResultado.registrosImportados}</p>
+              </div>
+              <div className="p-4 border rounded-lg">
+                <p className="text-sm text-muted-foreground">Proyectos creados</p>
+                <p className="font-medium text-2xl">{importacionResultado.proyectosCreados.length}</p>
+              </div>
+              <div className="p-4 border rounded-lg">
+                <p className="text-sm text-muted-foreground">Registros totales</p>
+                <p className="font-medium text-2xl">{importacionResultado.entidadesCreadas.length}</p>
+              </div>
+            </div>
+
+            {importacionResultado.errores && importacionResultado.errores.length > 0 && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Se encontraron {importacionResultado.errores.length} errores durante la importación.
+                  {importacionResultado.errores.slice(0, 3).map((error, idx) => (
+                    <div key={idx} className="mt-1 text-sm">{error}</div>
+                  ))}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <Button onClick={reiniciarProceso} variant="outline" className="w-full">
+              Cargar Nuevo Archivo
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Instrucciones */}
       <Card>
         <CardHeader>
-          <CardTitle>Listado de Anticipos</CardTitle>
-          <CardDescription>Anticipos registrados y su estado actual</CardDescription>
+          <CardTitle>Instrucciones</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="Buscar por cliente, proyecto o ID..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <h4 className="font-medium">Formato del archivo:</h4>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• Formato: Excel (.xlsx, .xls) o CSV</li>
+                <li>• Columnas requeridas: Código, Nombre, Cliente, Presupuesto, Fechas</li>
+                <li>• Máximo 10MB de tamaño</li>
+              </ul>
             </div>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los estados</SelectItem>
-                <SelectItem value="activo">Activo</SelectItem>
-                <SelectItem value="parcial">Parcial</SelectItem>
-                <SelectItem value="liquidado">Liquidado</SelectItem>
-              </SelectContent>
-            </Select>
+
+            <div className="space-y-2">
+              <h4 className="font-medium">Validaciones:</h4>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• Fechas en formato DD/MM/YYYY</li>
+                <li>• Presupuestos sin símbolos de moneda</li>
+                <li>• Clientes deben existir en el sistema</li>
+              </ul>
+            </div>
           </div>
 
-          <div className="rounded-md border">
+          <Button variant="outline" className="w-full" onClick={handleDescargarPlantilla}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Descargar Plantilla de Ejemplo
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Historial */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Historial de Cargas Recientes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingHistorial ? (
+            <div className="flex justify-center p-8">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            </div>
+          ) : historial.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No hay cargas recientes</p>
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Proyecto</TableHead>
-                  <TableHead>Monto</TableHead>
-                  <TableHead>Saldo Pendiente</TableHead>
-                  <TableHead>% Usado</TableHead>
+                  <TableHead>Archivo</TableHead>
+                  <TableHead>Registros</TableHead>
                   <TableHead>Estado</TableHead>
-                  <TableHead>Acciones</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAnticipos.map((anticipo) => (
-                  <TableRow key={anticipo.id}>
-                    <TableCell className="font-medium">{anticipo.id}</TableCell>
-                    <TableCell>
-                      <div className="font-medium">{anticipo.cliente}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">{anticipo.proyecto}</div>
-                    </TableCell>
-                    <TableCell className="font-medium">${anticipo.monto.toLocaleString()}</TableCell>
-                    <TableCell className="font-medium text-orange-600">
-                      ${anticipo.saldoPendiente.toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-blue-600 h-2 rounded-full"
-                            style={{ width: `${anticipo.porcentajeUsado}%` }}
-                          ></div>
-                        </div>
-                        <span className="text-sm">{anticipo.porcentajeUsado}%</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{getStatusBadge(anticipo.estado)}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
-                          Ver
-                        </Button>
-                        <Button size="sm">Liquidar</Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {historial.map((carga) => {
+                  const puedeContin = ['subido', 'validado', 'error_validacion'].includes(carga.estado)
+                  
+                  return (
+                    <TableRow key={carga.id}>
+                      <TableCell className="font-medium">{carga.nombreArchivo}</TableCell>
+                      <TableCell>
+                        {carga.registrosImportados > 0 
+                          ? `${carga.registrosImportados} / ${carga.registrosDetectados}` 
+                          : carga.registrosDetectados}
+                      </TableCell>
+                      <TableCell>{getEstadoBadge(carga.estado)}</TableCell>
+                      <TableCell>{formatDate(carga.createdAt)}</TableCell>
+                      <TableCell className="text-right">
+                        {puedeContin && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => continuarCarga(carga)}
+                            disabled={cargando}
+                          >
+                            {carga.estado === 'subido' && 'Validar'}
+                            {carga.estado === 'validado' && 'Importar'}
+                            {carga.estado === 'error_validacion' && 'Ver Errores'}
+                          </Button>
+                        )}
+                        {carga.estado === 'importado' && (
+                          <span className="text-sm text-green-600">✓ Completado</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>

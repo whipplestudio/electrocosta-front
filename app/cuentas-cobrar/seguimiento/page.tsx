@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,49 +9,20 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Eye, Phone, Mail, Calendar, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react"
+import { Search, Eye, Phone, Mail, Calendar, TrendingUp, AlertTriangle, CheckCircle, Loader2, X } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { accountsReceivableService, followUpService } from "@/services/accounts-receivable.service"
+import type { AccountReceivable, FollowUp } from "@/types/accounts-receivable"
 
-const seguimientoData = [
-  {
-    id: "CC-001",
-    cliente: "Constructora ABC",
-    factura: "F-2024-001",
-    monto: 125000,
-    fechaVencimiento: "2024-01-15",
-    diasVencido: 5,
-    estado: "vencido",
-    ultimoContacto: "2024-01-10",
-    proximaAccion: "Llamada telefónica",
-    responsable: "Ana García",
-    notas: "Cliente solicita prórroga de 15 días",
-  },
-  {
-    id: "CC-002",
-    cliente: "Industrias XYZ",
-    factura: "F-2024-002",
-    monto: 85000,
-    fechaVencimiento: "2024-01-25",
-    diasVencido: 0,
-    estado: "vigente",
-    ultimoContacto: "2024-01-18",
-    proximaAccion: "Recordatorio por email",
-    responsable: "Carlos López",
-    notas: "Cliente con buen historial de pago",
-  },
-  {
-    id: "CC-003",
-    cliente: "Comercial DEF",
-    factura: "F-2024-003",
-    monto: 67500,
-    fechaVencimiento: "2024-01-22",
-    diasVencido: -2,
-    estado: "por_vencer",
-    ultimoContacto: "2024-01-15",
-    proximaAccion: "Visita presencial",
-    responsable: "María Rodríguez",
-    notas: "Requiere seguimiento especial",
-  },
-]
+type AccountStatus = 'vencido' | 'vigente' | 'por_vencer';
+
+interface AccountWithStatus extends AccountReceivable {
+  estado: AccountStatus;
+  diasVencido: number;
+  ultimoSeguimiento?: FollowUp;
+}
 
 const estadoBadgeVariant = {
   vencido: "destructive",
@@ -61,27 +33,155 @@ const estadoBadgeVariant = {
 export default function SeguimientoCuentasCobrar() {
   const [searchTerm, setSearchTerm] = useState("")
   const [estadoFilter, setEstadoFilter] = useState("todos")
-  const [responsableFilter, setResponsableFilter] = useState("todos")
+  const [accounts, setAccounts] = useState<AccountWithStatus[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedAccount, setSelectedAccount] = useState<AccountWithStatus | null>(null)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [showDetailDialog, setShowDetailDialog] = useState(false)
+  const [showCallDialog, setShowCallDialog] = useState(false)
+  const [showEmailDialog, setShowEmailDialog] = useState(false)
+  const [callNotes, setCallNotes] = useState("")
+  const [emailSubject, setEmailSubject] = useState("")
+  const [emailBody, setEmailBody] = useState("")
 
-  const filteredData = seguimientoData.filter((item) => {
+  // Calcular estado y días vencidos
+  const calculateStatus = (account: AccountReceivable): { estado: AccountStatus; diasVencido: number } => {
+    const today = new Date()
+    const dueDate = new Date(account.dueDate)
+    const diffTime = dueDate.getTime() - today.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+    if (diffDays < 0) {
+      return { estado: 'vencido', diasVencido: Math.abs(diffDays) }
+    } else if (diffDays <= 7) {
+      return { estado: 'por_vencer', diasVencido: diffDays }
+    } else {
+      return { estado: 'vigente', diasVencido: diffDays }
+    }
+  }
+
+  // Cargar cuentas y seguimientos
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const [accountsData, followUpsData] = await Promise.all([
+        accountsReceivableService.list({ page: 1, limit: 100 }),
+        followUpService.list().catch(() => []), // Si falla, retornar array vacío
+      ])
+
+      const accountsWithStatus: AccountWithStatus[] = accountsData.data.map((account) => {
+        const status = calculateStatus(account)
+        const lastFollowUp = Array.isArray(followUpsData) 
+          ? followUpsData
+              .filter((f) => f.accountReceivableId === account.id)
+              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+          : undefined
+
+        return {
+          ...account,
+          ...status,
+          ultimoSeguimiento: lastFollowUp,
+        }
+      })
+
+      setAccounts(accountsWithStatus)
+    } catch (error) {
+      console.error('Error al cargar datos:', error)
+      toast.error('Error al cargar las cuentas por cobrar')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  // Registrar llamada
+  const handleCall = async () => {
+    if (!selectedAccount || !callNotes.trim()) {
+      toast.error('Por favor ingresa notas de la llamada')
+      return
+    }
+    
+    try {
+      setActionLoading(true)
+      await followUpService.create(selectedAccount.id, {
+        type: 'call' as any,
+        description: 'Llamada telefónica al cliente',
+        result: 'contacted' as any,
+        notes: callNotes,
+      })
+      toast.success('Llamada registrada exitosamente')
+      setShowCallDialog(false)
+      setSelectedAccount(null)
+      setCallNotes('')
+      await loadData()
+    } catch (error) {
+      console.error('Error al registrar llamada:', error)
+      toast.error('Error al registrar la llamada')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // Enviar correo
+  const handleEmail = async () => {
+    if (!selectedAccount || !emailSubject.trim() || !emailBody.trim()) {
+      toast.error('Por favor completa todos los campos del correo')
+      return
+    }
+    
+    try {
+      setActionLoading(true)
+      await followUpService.create(selectedAccount.id, {
+        type: 'email' as any,
+        description: `Correo: ${emailSubject}`,
+        result: 'contacted' as any,
+        notes: emailBody,
+      })
+      toast.success('Correo registrado exitosamente')
+      setShowEmailDialog(false)
+      setSelectedAccount(null)
+      setEmailSubject('')
+      setEmailBody('')
+      await loadData()
+    } catch (error) {
+      console.error('Error al registrar correo:', error)
+      toast.error('Error al registrar el correo')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // Filtrar datos
+  const filteredData = accounts.filter((item) => {
     const matchesSearch =
-      item.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.factura.toLowerCase().includes(searchTerm.toLowerCase())
+      item.client?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesEstado = estadoFilter === "todos" || item.estado === estadoFilter
-    const matchesResponsable = responsableFilter === "todos" || item.responsable === responsableFilter
 
-    return matchesSearch && matchesEstado && matchesResponsable
+    return matchesSearch && matchesEstado
   })
 
-  const totalVencido = seguimientoData
+  // Calcular totales
+  const totalVencido = accounts
     .filter((item) => item.estado === "vencido")
-    .reduce((sum, item) => sum + item.monto, 0)
-  const totalPorVencer = seguimientoData
+    .reduce((sum, item) => sum + Number(item.balance || 0), 0)
+  const totalPorVencer = accounts
     .filter((item) => item.estado === "por_vencer")
-    .reduce((sum, item) => sum + item.monto, 0)
-  const totalVigente = seguimientoData
+    .reduce((sum, item) => sum + Number(item.balance || 0), 0)
+  const totalVigente = accounts
     .filter((item) => item.estado === "vigente")
-    .reduce((sum, item) => sum + item.monto, 0)
+    .reduce((sum, item) => sum + Number(item.balance || 0), 0)
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -100,7 +200,7 @@ export default function SeguimientoCuentasCobrar() {
             <AlertTriangle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">${totalVencido.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-destructive">${(totalVencido || 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Requiere acción inmediata</p>
           </CardContent>
         </Card>
@@ -111,7 +211,7 @@ export default function SeguimientoCuentasCobrar() {
             <Calendar className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-500">${totalPorVencer.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-orange-500">${(totalPorVencer || 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Próximos 7 días</p>
           </CardContent>
         </Card>
@@ -122,19 +222,19 @@ export default function SeguimientoCuentasCobrar() {
             <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-500">${totalVigente.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-green-500">${(totalVigente || 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">En tiempo</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Efectividad</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Cuentas</CardTitle>
             <TrendingUp className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-500">87%</div>
-            <p className="text-xs text-muted-foreground">Cobranza este mes</p>
+            <div className="text-2xl font-bold text-blue-500">{accounts.length}</div>
+            <p className="text-xs text-muted-foreground">En seguimiento</p>
           </CardContent>
         </Card>
       </div>
@@ -142,8 +242,6 @@ export default function SeguimientoCuentasCobrar() {
       <Tabs defaultValue="seguimiento" className="space-y-4">
         <TabsList>
           <TabsTrigger value="seguimiento">Seguimiento Activo</TabsTrigger>
-          <TabsTrigger value="acciones">Próximas Acciones</TabsTrigger>
-          <TabsTrigger value="historial">Historial de Contactos</TabsTrigger>
         </TabsList>
 
         <TabsContent value="seguimiento" className="space-y-4">
@@ -175,17 +273,6 @@ export default function SeguimientoCuentasCobrar() {
                     <SelectItem value="vigente">Vigente</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={responsableFilter} onValueChange={setResponsableFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Responsable" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    <SelectItem value="Ana García">Ana García</SelectItem>
-                    <SelectItem value="Carlos López">Carlos López</SelectItem>
-                    <SelectItem value="María Rodríguez">María Rodríguez</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
 
               {/* Tabla */}
@@ -195,117 +282,251 @@ export default function SeguimientoCuentasCobrar() {
                     <TableRow>
                       <TableHead>Cliente</TableHead>
                       <TableHead>Factura</TableHead>
-                      <TableHead>Monto</TableHead>
+                      <TableHead>Saldo</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead>Días</TableHead>
-                      <TableHead>Último Contacto</TableHead>
-                      <TableHead>Próxima Acción</TableHead>
-                      <TableHead>Responsable</TableHead>
+                      <TableHead>Vencimiento</TableHead>
                       <TableHead>Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredData.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.cliente}</TableCell>
-                        <TableCell>{item.factura}</TableCell>
-                        <TableCell>${item.monto.toLocaleString()}</TableCell>
-                        <TableCell>
-                          <Badge variant={estadoBadgeVariant[item.estado as keyof typeof estadoBadgeVariant]}>
-                            {item.estado === "vencido"
-                              ? "Vencido"
-                              : item.estado === "por_vencer"
-                                ? "Por Vencer"
-                                : "Vigente"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {item.diasVencido > 0
-                            ? `+${item.diasVencido}`
-                            : item.diasVencido < 0
-                              ? item.diasVencido
-                              : "0"}
-                        </TableCell>
-                        <TableCell>{item.ultimoContacto}</TableCell>
-                        <TableCell>{item.proximaAccion}</TableCell>
-                        <TableCell>{item.responsable}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="outline">
-                              <Phone className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="outline">
-                              <Mail className="h-4 w-4" />
-                            </Button>
-                          </div>
+                    {filteredData.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          No se encontraron cuentas por cobrar
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      filteredData.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">{item.client?.name || 'N/A'}</TableCell>
+                          <TableCell>{item.invoiceNumber}</TableCell>
+                          <TableCell>${Number(item.balance || 0).toLocaleString()}</TableCell>
+                          <TableCell>
+                            <Badge variant={estadoBadgeVariant[item.estado]}>
+                              {item.estado === "vencido"
+                                ? "Vencido"
+                                : item.estado === "por_vencer"
+                                  ? "Por Vencer"
+                                  : "Vigente"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {item.diasVencido > 0 && item.estado === 'vencido'
+                              ? `+${item.diasVencido}`
+                              : item.estado === 'por_vencer'
+                                ? item.diasVencido
+                                : '0'}
+                          </TableCell>
+                          <TableCell>{new Date(item.dueDate).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedAccount(item)
+                                  setShowDetailDialog(true)
+                                }}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedAccount(item)
+                                  setShowCallDialog(true)
+                                }}
+                              >
+                                <Phone className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedAccount(item)
+                                  setEmailSubject(`Seguimiento de factura ${item.invoiceNumber}`)
+                                  setShowEmailDialog(true)
+                                }}
+                              >
+                                <Mail className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
+      </Tabs>
 
-        <TabsContent value="acciones">
-          <Card>
-            <CardHeader>
-              <CardTitle>Próximas Acciones Programadas</CardTitle>
-              <CardDescription>Actividades de cobranza pendientes</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {seguimientoData.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="space-y-1">
-                      <p className="font-medium">{item.proximaAccion}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {item.cliente} - {item.factura}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Responsable: {item.responsable}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">${item.monto.toLocaleString()}</p>
-                      <Badge
-                        variant={estadoBadgeVariant[item.estado as keyof typeof estadoBadgeVariant]}
-                        className="text-xs"
-                      >
-                        {item.estado === "vencido"
-                          ? "Vencido"
-                          : item.estado === "por_vencer"
-                            ? "Por Vencer"
-                            : "Vigente"}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="historial">
-          <Card>
-            <CardHeader>
-              <CardTitle>Historial de Contactos</CardTitle>
-              <CardDescription>Registro de todas las gestiones de cobranza</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="text-center py-8 text-muted-foreground">
-                  <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Historial de contactos se mostrará aquí</p>
-                  <p className="text-sm">Registra llamadas, emails y visitas realizadas</p>
+      {/* Dialog Ver Detalle */}
+      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Detalle de Cuenta por Cobrar</DialogTitle>
+            <DialogDescription>
+              Información completa de la factura {selectedAccount?.invoiceNumber}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedAccount && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Cliente</Label>
+                  <p className="text-sm">{selectedAccount.client?.name || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Factura</Label>
+                  <p className="text-sm">{selectedAccount.invoiceNumber}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Monto Total</Label>
+                  <p className="text-sm font-bold">${Number(selectedAccount.amount).toLocaleString()}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Saldo Pendiente</Label>
+                  <p className="text-sm font-bold text-orange-600">${Number(selectedAccount.balance).toLocaleString()}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Fecha de Emisión</Label>
+                  <p className="text-sm">{new Date(selectedAccount.issueDate).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Fecha de Vencimiento</Label>
+                  <p className="text-sm">{new Date(selectedAccount.dueDate).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Estado</Label>
+                  <Badge variant={estadoBadgeVariant[selectedAccount.estado]}>
+                    {selectedAccount.estado === "vencido"
+                      ? "Vencido"
+                      : selectedAccount.estado === "por_vencer"
+                        ? "Por Vencer"
+                        : "Vigente"}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Días {selectedAccount.estado === 'vencido' ? 'Vencidos' : 'para Vencimiento'}</Label>
+                  <p className="text-sm font-bold">{selectedAccount.diasVencido}</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              {selectedAccount.description && (
+                <div>
+                  <Label className="text-sm font-medium">Descripción</Label>
+                  <p className="text-sm text-muted-foreground">{selectedAccount.description}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Registrar Llamada */}
+      <Dialog open={showCallDialog} onOpenChange={setShowCallDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Registrar Llamada</DialogTitle>
+            <DialogDescription>
+              Cliente: {selectedAccount?.client?.name} - Factura: {selectedAccount?.invoiceNumber}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="call-notes">Notas de la llamada</Label>
+              <Textarea
+                id="call-notes"
+                placeholder="¿Qué se habló en la llamada? ¿Hubo compromiso de pago?"
+                value={callNotes}
+                onChange={(e) => setCallNotes(e.target.value)}
+                rows={5}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowCallDialog(false)
+              setCallNotes('')
+              setSelectedAccount(null)
+            }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCall} disabled={actionLoading}>
+              {actionLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                'Registrar Llamada'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Registrar Email */}
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Registrar Correo Enviado</DialogTitle>
+            <DialogDescription>
+              Cliente: {selectedAccount?.client?.name} - Factura: {selectedAccount?.invoiceNumber}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="email-subject">Asunto</Label>
+              <Input
+                id="email-subject"
+                placeholder="Asunto del correo"
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="email-body">Contenido del correo</Label>
+              <Textarea
+                id="email-body"
+                placeholder="Contenido del correo enviado al cliente..."
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                rows={6}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowEmailDialog(false)
+              setEmailSubject('')
+              setEmailBody('')
+              setSelectedAccount(null)
+            }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleEmail} disabled={actionLoading}>
+              {actionLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                'Registrar Correo'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

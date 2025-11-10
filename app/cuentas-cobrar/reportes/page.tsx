@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,58 +10,173 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
-import { Download, TrendingUp, Calendar, DollarSign, Users } from "lucide-react"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts"
+import { Download, TrendingUp, Calendar, DollarSign, Users, Loader2 } from "lucide-react"
+import { accountsReceivableService } from "@/services/accounts-receivable.service"
+import { clientsService, Client } from "@/services/clients.service"
+import type { DashboardData, AgingReport } from "@/types/accounts-receivable"
+import * as XLSX from 'xlsx'
 
-const ageingData = [
-  { periodo: "0-30 días", monto: 450000, facturas: 12 },
-  { periodo: "31-60 días", monto: 280000, facturas: 8 },
-  { periodo: "61-90 días", monto: 150000, facturas: 5 },
-  { periodo: "91+ días", monto: 85000, facturas: 3 },
-]
-
-const clientAnalysis = [
-  { name: "Constructora ABC", value: 35, color: "#0088FE" },
-  { name: "Inmobiliaria XYZ", value: 25, color: "#00C49F" },
-  { name: "Desarrollos Norte", value: 20, color: "#FFBB28" },
-  { name: "Otros", value: 20, color: "#FF8042" },
-]
-
-const collectionData = [
-  {
-    cliente: "Constructora ABC",
-    totalFacturado: 850000,
-    totalCobrado: 720000,
-    pendiente: 130000,
-    efectividad: 84.7,
-    diasPromedio: 42,
-  },
-  {
-    cliente: "Inmobiliaria XYZ",
-    totalFacturado: 650000,
-    totalCobrado: 580000,
-    pendiente: 70000,
-    efectividad: 89.2,
-    diasPromedio: 35,
-  },
-  {
-    cliente: "Desarrollos Norte",
-    totalFacturado: 420000,
-    totalCobrado: 350000,
-    pendiente: 70000,
-    efectividad: 83.3,
-    diasPromedio: 48,
-  },
-]
+interface AgingBucket {
+  range: string
+  amount: number
+  count: number
+}
 
 export default function ReportesCuentasCobrar() {
+  const [loading, setLoading] = useState(true)
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [selectedClient, setSelectedClient] = useState("all")
+  const [clients, setClients] = useState<Client[]>([])
+  const [agingData, setAgingData] = useState<AgingBucket[]>([])
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null)
 
+  // Cargar clientes
+  const loadClients = useCallback(async () => {
+    try {
+      const data = await clientsService.list()
+      setClients(data)
+    } catch (error) {
+      console.error('Error al cargar clientes:', error)
+    }
+  }, [])
+
+  // Cargar dashboard
+  const loadDashboard = useCallback(async () => {
+    try {
+      const data = await accountsReceivableService.getDashboard()
+      setDashboard(data)
+    } catch (error) {
+      console.error('Error al cargar dashboard:', error)
+      toast.error('Error al cargar el dashboard')
+    }
+  }, [])
+
+  // Cargar reporte de antigüedad
+  const loadAgingReport = useCallback(async () => {
+    try {
+      const cutoffDate = dateTo || new Date().toISOString().split('T')[0]
+      const response = await accountsReceivableService.getAgingReport(
+        selectedClient !== 'all' ? selectedClient : undefined,
+        cutoffDate
+      )
+      
+      // Transformar datos para el gráfico
+      const buckets: AgingBucket[] = [
+        { range: 'Corriente', amount: response.summary.current || 0, count: 0 },
+        { range: '1-30 días', amount: response.summary.days1_30 || 0, count: 0 },
+        { range: '31-60 días', amount: response.summary.days31_60 || 0, count: 0 },
+        { range: '61-90 días', amount: response.summary.days61_90 || 0, count: 0 },
+        { range: '91+ días', amount: response.summary.over90 || 0, count: 0 },
+      ]
+      
+      setAgingData(buckets)
+    } catch (error) {
+      console.error('Error al cargar reporte de antigüedad:', error)
+      toast.error('Error al cargar el reporte de antigüedad')
+    }
+  }, [selectedClient, dateTo])
+
+  // Cargar datos iniciales
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true)
+      try {
+        await Promise.all([
+          loadClients(),
+          loadDashboard(),
+          loadAgingReport(),
+        ])
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadData()
+  }, [loadClients, loadDashboard, loadAgingReport])
+
+  // Aplicar filtros
+  const handleApplyFilters = () => {
+    loadAgingReport()
+    loadDashboard()
+  }
+
+  // Exportar reporte de antigüedad a Excel
+  const exportAgingToExcel = () => {
+    try {
+      // Preparar datos para Excel
+      const excelData = agingData.map(item => ({
+        'Período': item.range,
+        'Monto': item.amount,
+        'Porcentaje': totalAmount > 0 
+          ? `${((item.amount / totalAmount) * 100).toFixed(1)}%` 
+          : '0.0%'
+      }))
+
+      // Agregar fila de total
+      excelData.push({
+        'Período': 'TOTAL',
+        'Monto': totalAmount,
+        'Porcentaje': '100%'
+      })
+
+      // Crear worksheet
+      const worksheet = XLSX.utils.json_to_sheet(excelData)
+
+      // Ajustar anchos de columnas
+      worksheet['!cols'] = [
+        { wch: 15 }, // Período
+        { wch: 15 }, // Monto
+        { wch: 12 }, // Porcentaje
+      ]
+
+      // Crear workbook
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Antigüedad de Saldos')
+
+      // Agregar hoja de KPIs
+      const kpiData = [
+        { 'Indicador': 'Total por Cobrar', 'Valor': `$${(dashboard?.totalPending || 0).toLocaleString()}` },
+        { 'Indicador': 'Días Promedio', 'Valor': `${Math.round(dashboard?.averageCollectionDays || 0)} días` },
+        { 'Indicador': 'Efectividad', 'Valor': dashboard && dashboard.totalPending > 0 
+            ? `${((dashboard.totalCollected / (dashboard.totalCollected + dashboard.totalPending)) * 100).toFixed(1)}%`
+            : '0.0%' },
+        { 'Indicador': 'Cuentas Vencidas', 'Valor': dashboard?.overdueCount || 0 },
+        { 'Indicador': 'Monto Vencido', 'Valor': `$${(dashboard?.totalOverdue || 0).toLocaleString()}` },
+      ]
+      const kpiWorksheet = XLSX.utils.json_to_sheet(kpiData)
+      kpiWorksheet['!cols'] = [{ wch: 20 }, { wch: 20 }]
+      XLSX.utils.book_append_sheet(workbook, kpiWorksheet, 'KPIs')
+
+      // Generar archivo
+      const fileName = `Reporte_Antiguedad_${new Date().toISOString().split('T')[0]}.xlsx`
+      XLSX.writeFile(workbook, fileName)
+
+      toast.success('Reporte exportado exitosamente')
+    } catch (error) {
+      console.error('Error al exportar:', error)
+      toast.error('Error al exportar el reporte')
+    }
+  }
+
+  // Exportar todo (antigüedad + KPIs)
   const exportToExcel = (reportType: string) => {
-    // Simular exportación
-    console.log(`Exportando reporte: ${reportType}`)
+    if (reportType === 'general' || reportType === 'antiguedad') {
+      exportAgingToExcel()
+    } else {
+      toast.info(`Exportando reporte: ${reportType}`)
+    }
+  }
+
+  // Calcular totales
+  const totalAmount = agingData.reduce((sum, item) => sum + item.amount, 0)
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
   }
 
   return (
@@ -71,7 +187,7 @@ export default function ReportesCuentasCobrar() {
           <p className="text-muted-foreground">Análisis detallado de cartera y cobranza</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="gap-2 bg-transparent" onClick={() => exportToExcel("general")}>
+          <Button variant="outline" className="gap-2" onClick={() => exportToExcel("general")}>
             <Download className="h-4 w-4" />
             Exportar Todo
           </Button>
@@ -88,11 +204,21 @@ export default function ReportesCuentasCobrar() {
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor="dateFrom">Fecha Desde</Label>
-              <Input id="dateFrom" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              <Input 
+                id="dateFrom" 
+                type="date" 
+                value={dateFrom} 
+                onChange={(e) => setDateFrom(e.target.value)} 
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="dateTo">Fecha Hasta</Label>
-              <Input id="dateTo" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              <Input 
+                id="dateTo" 
+                type="date" 
+                value={dateTo} 
+                onChange={(e) => setDateTo(e.target.value)} 
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="client">Cliente</Label>
@@ -102,14 +228,18 @@ export default function ReportesCuentasCobrar() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos los clientes</SelectItem>
-                  <SelectItem value="constructora">Constructora ABC</SelectItem>
-                  <SelectItem value="inmobiliaria">Inmobiliaria XYZ</SelectItem>
-                  <SelectItem value="desarrollos">Desarrollos Norte</SelectItem>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="flex items-end">
-              <Button className="w-full">Aplicar Filtros</Button>
+              <Button className="w-full" onClick={handleApplyFilters}>
+                Aplicar Filtros
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -123,8 +253,8 @@ export default function ReportesCuentasCobrar() {
             <DollarSign className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">$965,000</div>
-            <p className="text-xs text-muted-foreground">28 facturas pendientes</p>
+            <div className="text-2xl font-bold">${(dashboard?.totalPending || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Total pendiente</p>
           </CardContent>
         </Card>
 
@@ -134,10 +264,10 @@ export default function ReportesCuentasCobrar() {
             <Calendar className="h-4 w-4 text-orange-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">42 días</div>
-            <p className="text-xs text-muted-foreground">
-              <span className="text-red-600">+5 días</span> vs mes anterior
-            </p>
+            <div className="text-2xl font-bold">
+              {Math.round(dashboard?.averageCollectionDays || 0)} días
+            </div>
+            <p className="text-xs text-muted-foreground">Promedio de cobro</p>
           </CardContent>
         </Card>
 
@@ -147,21 +277,25 @@ export default function ReportesCuentasCobrar() {
             <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">85.7%</div>
-            <p className="text-xs text-muted-foreground">
-              <span className="text-green-600">+2.3%</span> vs mes anterior
-            </p>
+            <div className="text-2xl font-bold">
+              {dashboard && dashboard.totalPending > 0 
+                ? ((dashboard.totalCollected / (dashboard.totalCollected + dashboard.totalPending)) * 100).toFixed(1)
+                : '0.0'}%
+            </div>
+            <p className="text-xs text-muted-foreground">Tasa de cobro</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Clientes Activos</CardTitle>
-            <Users className="h-4 w-4 text-purple-600" />
+            <CardTitle className="text-sm font-medium">Cuentas Vencidas</CardTitle>
+            <Users className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">15</div>
-            <p className="text-xs text-muted-foreground">Con saldo pendiente</p>
+            <div className="text-2xl font-bold text-red-600">{dashboard?.overdueCount || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              ${(dashboard?.totalOverdue || 0).toLocaleString()}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -169,8 +303,6 @@ export default function ReportesCuentasCobrar() {
       <Tabs defaultValue="ageing" className="space-y-4">
         <TabsList>
           <TabsTrigger value="ageing">Antigüedad de Saldos</TabsTrigger>
-          <TabsTrigger value="clients">Análisis por Cliente</TabsTrigger>
-          <TabsTrigger value="collection">Efectividad de Cobranza</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ageing" className="space-y-4">
@@ -188,12 +320,15 @@ export default function ReportesCuentasCobrar() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={ageingData}>
+                  <BarChart data={agingData}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="periodo" />
+                    <XAxis dataKey="range" />
                     <YAxis />
-                    <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
-                    <Bar dataKey="monto" fill="#0088FE" />
+                    <Tooltip 
+                      formatter={(value: any) => `$${Number(value).toLocaleString()}`}
+                      labelStyle={{ color: '#000' }}
+                    />
+                    <Bar dataKey="amount" fill="#0088FE" name="Monto" />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -202,7 +337,7 @@ export default function ReportesCuentasCobrar() {
             <Card>
               <CardHeader>
                 <CardTitle>Detalle por Período</CardTitle>
-                <CardDescription>Montos y cantidad de facturas</CardDescription>
+                <CardDescription>Montos por rango de antigüedad</CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -210,131 +345,35 @@ export default function ReportesCuentasCobrar() {
                     <TableRow>
                       <TableHead>Período</TableHead>
                       <TableHead>Monto</TableHead>
-                      <TableHead>Facturas</TableHead>
                       <TableHead>%</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {ageingData.map((item) => (
-                      <TableRow key={item.periodo}>
-                        <TableCell className="font-medium">{item.periodo}</TableCell>
-                        <TableCell>${item.monto.toLocaleString()}</TableCell>
-                        <TableCell>{item.facturas}</TableCell>
+                    {agingData.map((item) => (
+                      <TableRow key={item.range}>
+                        <TableCell className="font-medium">{item.range}</TableCell>
+                        <TableCell>${item.amount.toLocaleString()}</TableCell>
                         <TableCell>
-                          <Badge variant="outline">{((item.monto / 965000) * 100).toFixed(1)}%</Badge>
+                          <Badge variant="outline">
+                            {totalAmount > 0 
+                              ? ((item.amount / totalAmount) * 100).toFixed(1) 
+                              : '0.0'}%
+                          </Badge>
                         </TableCell>
                       </TableRow>
                     ))}
+                    <TableRow className="font-bold bg-muted/50">
+                      <TableCell>Total</TableCell>
+                      <TableCell>${totalAmount.toLocaleString()}</TableCell>
+                      <TableCell>
+                        <Badge>100%</Badge>
+                      </TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-
-        <TabsContent value="clients" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  Concentración por Cliente
-                  <Button size="sm" variant="outline" onClick={() => exportToExcel("clientes")}>
-                    <Download className="h-3 w-3 mr-1" />
-                    Excel
-                  </Button>
-                </CardTitle>
-                <CardDescription>Distribución porcentual de la cartera</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={clientAnalysis}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {clientAnalysis.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Top Clientes por Saldo</CardTitle>
-                <CardDescription>Principales deudores del período</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {collectionData.map((client, index) => (
-                    <div key={client.cliente} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium">{client.cliente}</p>
-                        <p className="text-sm text-muted-foreground">Pendiente: ${client.pendiente.toLocaleString()}</p>
-                      </div>
-                      <Badge variant={client.efectividad > 85 ? "default" : "secondary"}>{client.efectividad}%</Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="collection" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                Efectividad de Cobranza por Cliente
-                <Button size="sm" variant="outline" onClick={() => exportToExcel("efectividad")}>
-                  <Download className="h-3 w-3 mr-1" />
-                  Excel
-                </Button>
-              </CardTitle>
-              <CardDescription>Análisis de efectividad y tiempos de cobranza</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Total Facturado</TableHead>
-                    <TableHead>Total Cobrado</TableHead>
-                    <TableHead>Pendiente</TableHead>
-                    <TableHead>Efectividad</TableHead>
-                    <TableHead>Días Promedio</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {collectionData.map((client) => (
-                    <TableRow key={client.cliente}>
-                      <TableCell className="font-medium">{client.cliente}</TableCell>
-                      <TableCell>${client.totalFacturado.toLocaleString()}</TableCell>
-                      <TableCell>${client.totalCobrado.toLocaleString()}</TableCell>
-                      <TableCell>${client.pendiente.toLocaleString()}</TableCell>
-                      <TableCell>
-                        <Badge variant={client.efectividad > 85 ? "default" : "secondary"}>{client.efectividad}%</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={client.diasPromedio <= 40 ? "default" : "destructive"}>
-                          {client.diasPromedio} días
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
         </TabsContent>
       </Tabs>
     </div>

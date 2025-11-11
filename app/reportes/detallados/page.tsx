@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useToast } from "@/hooks/use-toast"
+import { reportsService } from "@/services/reports.service"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -24,70 +26,99 @@ import {
 import { FileText, Download, TrendingUp, DollarSign, AlertCircle } from "lucide-react"
 
 export default function ReportesDetalladosPage() {
+  const { toast } = useToast()
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState("mes-actual")
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState("todas")
+  const [loading, setLoading] = useState(false)
 
-  // Datos para gráficos
-  const datosVentas = [
-    { mes: "Ene", ventas: 450000, gastos: 320000, utilidad: 130000 },
-    { mes: "Feb", ventas: 520000, gastos: 380000, utilidad: 140000 },
-    { mes: "Mar", ventas: 480000, gastos: 350000, utilidad: 130000 },
-    { mes: "Abr", ventas: 600000, gastos: 420000, utilidad: 180000 },
-    { mes: "May", ventas: 580000, gastos: 400000, utilidad: 180000 },
-    { mes: "Jun", ventas: 650000, gastos: 450000, utilidad: 200000 },
-  ]
+  // Estados para datos del backend
+  const [metricas, setMetricas] = useState<any>(null)
+  const [datosVentas, setDatosVentas] = useState<any[]>([])
+  const [datosCategoria, setDatosCategoria] = useState<any[]>([])
+  const [flujoEfectivo, setFlujoEfectivo] = useState<any[]>([])
+  const [reportesDetallados, setReportesDetallados] = useState<any[]>([])
 
-  const datosCategoria = [
-    { name: "Materiales", value: 45, color: "#3B82F6" },
-    { name: "Mano de Obra", value: 30, color: "#10B981" },
-    { name: "Equipos", value: 15, color: "#F59E0B" },
-    { name: "Servicios", value: 10, color: "#EF4444" },
-  ]
+  // Cargar análisis financiero
+  const cargarAnalisisFinanciero = async () => {
+    try {
+      setLoading(true)
+      const data = await reportsService.getFinancialAnalysis({ periodo: periodoSeleccionado })
+      setMetricas(data.metricas)
+    } catch (error) {
+      console.error('Error al cargar análisis financiero:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo cargar el análisis financiero"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const flujoEfectivo = [
-    { dia: "1", entrada: 25000, salida: 18000, saldo: 7000 },
-    { dia: "5", entrada: 45000, salida: 32000, saldo: 20000 },
-    { dia: "10", entrada: 38000, salida: 28000, saldo: 30000 },
-    { dia: "15", entrada: 52000, salida: 35000, saldo: 47000 },
-    { dia: "20", entrada: 41000, salida: 29000, saldo: 59000 },
-    { dia: "25", entrada: 48000, salida: 33000, saldo: 74000 },
-    { dia: "30", entrada: 55000, salida: 40000, saldo: 89000 },
-  ]
+  // Cargar gráfico financiero
+  const cargarGraficoFinanciero = async () => {
+    try {
+      const data = await reportsService.getFinancialChart({ periodo: periodoSeleccionado })
+      setDatosVentas(data || [])
+    } catch (error) {
+      console.error('Error al cargar gráfico financiero:', error)
+    }
+  }
 
-  const reportesDetallados = [
-    {
-      id: "RPT-001",
-      nombre: "Estado de Resultados Mensual",
-      categoria: "financiero",
-      periodo: "Junio 2024",
-      fechaGeneracion: "2024-07-01",
-      estado: "completado",
-      tamaño: "2.3 MB",
-    },
-    {
-      id: "RPT-002",
-      nombre: "Análisis de Cuentas por Cobrar",
-      categoria: "cobranza",
-      periodo: "Q2 2024",
-      fechaGeneracion: "2024-06-30",
-      estado: "procesando",
-      tamaño: "1.8 MB",
-    },
-    {
-      id: "RPT-003",
-      nombre: "Flujo de Efectivo Proyectado",
-      categoria: "tesoreria",
-      periodo: "Julio 2024",
-      fechaGeneracion: "2024-06-28",
-      estado: "completado",
-      tamaño: "1.2 MB",
-    },
-  ]
+  // Cargar flujo de efectivo
+  const cargarFlujoEfectivo = async () => {
+    try {
+      const data = await reportsService.getCashFlowDetailed({ periodo: periodoSeleccionado })
+      setFlujoEfectivo(data || [])
+    } catch (error) {
+      console.error('Error al cargar flujo de efectivo:', error)
+    }
+  }
+
+  // Cargar análisis por categorías
+  const cargarAnalisisPorCategoria = async () => {
+    try {
+      const data = await reportsService.getAnalysisByCategory({ periodo: periodoSeleccionado })
+      setDatosCategoria(data || [])
+    } catch (error) {
+      console.error('Error al cargar análisis por categoría:', error)
+    }
+  }
+
+  // Cargar reportes históricos
+  const cargarReportesHistoricos = async () => {
+    try {
+      const data = await reportsService.getHistoricalReports({ 
+        take: 50,
+        categoria: categoriaSeleccionada !== 'todas' ? categoriaSeleccionada : undefined
+      })
+      setReportesDetallados(data.data || [])
+    } catch (error) {
+      console.error('Error al cargar reportes históricos:', error)
+    }
+  }
+
+  // Cargar todos los datos al montar o cambiar periodo
+  useEffect(() => {
+    cargarAnalisisFinanciero()
+    cargarGraficoFinanciero()
+    cargarFlujoEfectivo()
+    cargarAnalisisPorCategoria()
+  }, [periodoSeleccionado])
+
+  // Cargar reportes históricos al cambiar categoría
+  useEffect(() => {
+    cargarReportesHistoricos()
+  }, [categoriaSeleccionada])
 
   const estadoColors = {
     completado: "bg-green-100 text-green-800",
+    completed: "bg-green-100 text-green-800",
     procesando: "bg-yellow-100 text-yellow-800",
+    processing: "bg-yellow-100 text-yellow-800",
     error: "bg-red-100 text-red-800",
+    failed: "bg-red-100 text-red-800",
   }
 
   return (
@@ -154,8 +185,12 @@ export default function ReportesDetalladosPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Ingresos Totales</p>
-                    <p className="text-2xl font-bold text-green-600">$3.28M</p>
-                    <p className="text-xs text-green-600">+12.5% vs mes anterior</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      ${((metricas?.ingresosTotales || 0) / 1000000).toFixed(2)}M
+                    </p>
+                    <p className={`text-xs ${(metricas?.variacionIngresos || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {(metricas?.variacionIngresos || 0) >= 0 ? '+' : ''}{(metricas?.variacionIngresos || 0).toFixed(1)}% vs período anterior
+                    </p>
                   </div>
                   <TrendingUp className="h-8 w-8 text-green-600" />
                 </div>
@@ -167,8 +202,12 @@ export default function ReportesDetalladosPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Gastos Totales</p>
-                    <p className="text-2xl font-bold text-red-600">$2.32M</p>
-                    <p className="text-xs text-red-600">+8.3% vs mes anterior</p>
+                    <p className="text-2xl font-bold text-red-600">
+                      ${((metricas?.gastosTotales || 0) / 1000000).toFixed(2)}M
+                    </p>
+                    <p className={`text-xs ${(metricas?.variacionGastos || 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {(metricas?.variacionGastos || 0) >= 0 ? '+' : ''}{(metricas?.variacionGastos || 0).toFixed(1)}% vs período anterior
+                    </p>
                   </div>
                   <DollarSign className="h-8 w-8 text-red-600" />
                 </div>
@@ -180,8 +219,12 @@ export default function ReportesDetalladosPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Utilidad Neta</p>
-                    <p className="text-2xl font-bold text-blue-600">$960K</p>
-                    <p className="text-xs text-blue-600">+18.2% vs mes anterior</p>
+                    <p className="text-2xl font-bold text-blue-600">
+                      ${((metricas?.utilidadNeta || 0) / 1000).toFixed(0)}K
+                    </p>
+                    <p className={`text-xs ${(metricas?.variacionUtilidad || 0) >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                      {(metricas?.variacionUtilidad || 0) >= 0 ? '+' : ''}{(metricas?.variacionUtilidad || 0).toFixed(1)}% vs período anterior
+                    </p>
                   </div>
                   <TrendingUp className="h-8 w-8 text-blue-600" />
                 </div>
@@ -193,8 +236,12 @@ export default function ReportesDetalladosPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Margen de Utilidad</p>
-                    <p className="text-2xl font-bold text-purple-600">29.3%</p>
-                    <p className="text-xs text-purple-600">+2.1% vs mes anterior</p>
+                    <p className="text-2xl font-bold text-purple-600">
+                      {(metricas?.margenUtilidad || 0).toFixed(1)}%
+                    </p>
+                    <p className="text-xs text-purple-600">
+                      Del total de ingresos
+                    </p>
                   </div>
                   <AlertCircle className="h-8 w-8 text-purple-600" />
                 </div>

@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useToast } from "@/hooks/use-toast"
+import { reportsService } from "@/services/reports.service"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,138 +10,492 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Progress } from "@/components/ui/progress"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Download, Settings, Play, Pause, Trash2 } from "lucide-react"
 
 export default function ReportesDescargablesPage() {
+  const { toast } = useToast()
   const [formatoSeleccionado, setFormatoSeleccionado] = useState("excel")
+  const [periodoSeleccionado, setPeriodoSeleccionado] = useState("mes-actual")
+  const [incluirGraficos, setIncluirGraficos] = useState("si")
   const [progreso, setProgreso] = useState(0)
   const [generando, setGenerando] = useState(false)
 
-  const tiposReporte = [
-    {
-      id: "cuentas-cobrar",
-      nombre: "Cuentas por Cobrar",
-      descripcion: "Reporte detallado de todas las cuentas pendientes de cobro",
-      icono: "💰",
-      seleccionado: true,
-    },
-    {
-      id: "cuentas-pagar",
-      nombre: "Cuentas por Pagar",
-      descripcion: "Listado completo de obligaciones pendientes de pago",
-      icono: "💳",
-      seleccionado: true,
-    },
-    {
-      id: "flujo-efectivo",
-      nombre: "Flujo de Efectivo",
-      descripcion: "Análisis de entradas y salidas de efectivo por período",
-      icono: "📊",
-      seleccionado: false,
-    },
-    {
-      id: "estado-resultados",
-      nombre: "Estado de Resultados",
-      descripcion: "Reporte financiero de ingresos, gastos y utilidades",
-      icono: "📈",
-      seleccionado: false,
-    },
-    {
-      id: "antiguedad-saldos",
-      nombre: "Antigüedad de Saldos",
-      descripcion: "Análisis de vencimientos de cuentas por cobrar",
-      icono: "⏰",
-      seleccionado: false,
-    },
-  ]
+  // Estados para datos del backend
+  const [tiposReporte, setTiposReporte] = useState<any[]>([])
+  const [tiposSeleccionados, setTiposSeleccionados] = useState<string[]>(["cuentas-cobrar", "cuentas-pagar"])
+  const [reportesProgramados, setReportesProgramados] = useState<any[]>([])
+  const [reportesGenerados, setReportesGenerados] = useState<any[]>([])
+  
+  // Estados para modal de nuevo reporte programado
+  const [mostrarModalProgramado, setMostrarModalProgramado] = useState(false)
+  const [nombreProgramado, setNombreProgramado] = useState('')
+  const [tiposProgramados, setTiposProgramados] = useState<string[]>([])
+  const [frecuenciaProgramada, setFrecuenciaProgramada] = useState('mensual')
+  const [formatoProgramado, setFormatoProgramado] = useState('excel')
+  
+  // Estados para modal de editar reporte programado
+  const [mostrarModalEditar, setMostrarModalEditar] = useState(false)
+  const [reporteEditando, setReporteEditando] = useState<any>(null)
 
-  const reportesProgramados = [
-    {
-      id: "PROG-001",
-      nombre: "Reporte Mensual de Cuentas",
-      frecuencia: "Mensual",
-      proximaEjecucion: "2024-02-01",
-      formato: "Excel",
-      estado: "activo",
-      ultimaEjecucion: "2024-01-01",
-    },
-    {
-      id: "PROG-002",
-      nombre: "Flujo de Efectivo Semanal",
-      frecuencia: "Semanal",
-      proximaEjecucion: "2024-01-22",
-      formato: "PDF",
-      estado: "pausado",
-      ultimaEjecucion: "2024-01-15",
-    },
-    {
-      id: "PROG-003",
-      nombre: "Estado Financiero Trimestral",
-      frecuencia: "Trimestral",
-      proximaEjecucion: "2024-04-01",
-      formato: "Excel + PDF",
-      estado: "activo",
-      ultimaEjecucion: "2024-01-01",
-    },
-  ]
+  // Cargar tipos de reporte disponibles
+  useEffect(() => {
+    cargarTiposReporte()
+    cargarReportesProgramados()
+    cargarReportesGenerados()
+  }, [])
 
-  const reportesGenerados = [
-    {
-      id: "GEN-001",
-      nombre: "Cuentas por Cobrar - Enero 2024",
-      fechaGeneracion: "2024-01-15 14:30",
-      formato: "Excel",
-      tamaño: "2.3 MB",
-      descargas: 5,
-      estado: "disponible",
-    },
-    {
-      id: "GEN-002",
-      nombre: "Flujo de Efectivo - Semana 2",
-      fechaGeneracion: "2024-01-14 09:15",
-      formato: "PDF",
-      tamaño: "1.8 MB",
-      descargas: 12,
-      estado: "disponible",
-    },
-    {
-      id: "GEN-003",
-      nombre: "Estado de Resultados - Q4 2023",
-      fechaGeneracion: "2024-01-10 16:45",
-      formato: "Excel",
-      tamaño: "3.1 MB",
-      descargas: 8,
-      estado: "expirado",
-    },
-  ]
+  const cargarTiposReporte = async () => {
+    // Tipos de reporte disponibles (datos estáticos)
+    const tiposDisponibles = [
+      {
+        id: 'cuentas-cobrar',
+        nombre: 'Cuentas por Cobrar',
+        descripcion: 'Reporte de facturas pendientes de cobro'
+      },
+      {
+        id: 'cuentas-pagar',
+        nombre: 'Cuentas por Pagar',
+        descripcion: 'Reporte de facturas pendientes de pago'
+      },
+      {
+        id: 'flujo-efectivo',
+        nombre: 'Flujo de Efectivo',
+        descripcion: 'Análisis de ingresos y egresos'
+      },
+      {
+        id: 'estado-resultados',
+        nombre: 'Estado de Resultados',
+        descripcion: 'Resumen de ingresos, gastos y utilidad'
+      }
+    ]
+    
+    setTiposReporte(tiposDisponibles.map((tipo: any) => ({
+      ...tipo,
+      seleccionado: tiposSeleccionados.includes(tipo.id)
+    })))
+  }
+
+  const cargarReportesProgramados = async () => {
+    try {
+      const data = await reportsService.getReportesProgramados()
+      setReportesProgramados(data.data || [])
+    } catch (error) {
+      console.error('Error al cargar reportes programados:', error)
+    }
+  }
+
+  const cargarReportesGenerados = async () => {
+    try {
+      const data = await reportsService.getReportesGenerados({ take: 50 })
+      setReportesGenerados(data.data || [])
+    } catch (error) {
+      console.error('Error al cargar reportes generados:', error)
+    }
+  }
+
+  const toggleTipoReporte = (tipoId: string) => {
+    if (tiposSeleccionados.includes(tipoId)) {
+      setTiposSeleccionados(tiposSeleccionados.filter(id => id !== tipoId))
+    } else {
+      setTiposSeleccionados([...tiposSeleccionados, tipoId])
+    }
+  }
 
   const estadoColors = {
+    // Estados en español (legacy)
     activo: "bg-green-100 text-green-800",
     pausado: "bg-yellow-100 text-yellow-800",
     inactivo: "bg-gray-100 text-gray-800",
-    disponible: "bg-blue-100 text-blue-800",
-    expirado: "bg-red-100 text-red-800",
+    completado: "bg-blue-100 text-blue-800",
+    error: "bg-red-100 text-red-800",
+    procesando: "bg-purple-100 text-purple-800",
+    sugerido: "bg-orange-100 text-orange-800",
+    // Estados en inglés (backend)
+    active: "bg-green-100 text-green-800",
+    paused: "bg-yellow-100 text-yellow-800",
+    inactive: "bg-gray-100 text-gray-800",
   }
 
-  const handleGenerarReporte = () => {
-    setGenerando(true)
-    setProgreso(0)
+  const traducirEstado = (estado: string) => {
+    const traducciones: Record<string, string> = {
+      active: "Activo",
+      paused: "Pausado",
+      inactive: "Inactivo",
+      completado: "Completado",
+      error: "Error",
+      procesando: "Procesando",
+      sugerido: "Sugerido",
+    }
+    return traducciones[estado] || estado
+  }
 
-    const interval = setInterval(() => {
-      setProgreso((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval)
-          setGenerando(false)
-          return 100
-        }
-        return prev + 10
+  const handleGenerarReporte = async () => {
+    if (tiposSeleccionados.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Debes seleccionar al menos un tipo de reporte"
       })
-    }, 500)
+      return
+    }
+
+    try {
+      setGenerando(true)
+      setProgreso(0)
+
+      // Simular progreso mientras se genera
+      const interval = setInterval(() => {
+        setProgreso((prev) => {
+          if (prev >= 90) {
+            clearInterval(interval)
+            return 90
+          }
+          return prev + 15
+        })
+      }, 200)
+
+      // Generar el reporte
+      const resultado = await reportsService.generarReporte({
+        tipos: tiposSeleccionados,
+        formato: formatoSeleccionado,
+        periodo: periodoSeleccionado,
+        incluirGraficos: incluirGraficos === 'si'
+      })
+
+      clearInterval(interval)
+      setProgreso(100)
+
+      // Descargar reportes desde el backend con autenticación
+      const token = localStorage.getItem('accessToken')
+      
+      if (!token) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "No se encontró el token de autenticación. Por favor, inicia sesión nuevamente."
+        })
+        setGenerando(false)
+        return
+      }
+      
+      for (const tipo of tiposSeleccionados) {
+        let endpoint = ''
+        let fileName = ''
+        
+        switch (tipo) {
+          case 'cuentas-cobrar':
+            endpoint = 'cuentas-cobrar'
+            fileName = 'cuentas_por_cobrar'
+            break
+          case 'cuentas-pagar':
+            endpoint = 'cuentas-pagar'
+            fileName = 'cuentas_por_pagar'
+            break
+          case 'flujo-efectivo':
+            endpoint = 'flujo-efectivo'
+            fileName = 'flujo_efectivo'
+            break
+          case 'estado-resultados':
+            endpoint = 'estado-resultados'
+            fileName = 'estado_resultados'
+            break
+          default:
+            continue
+        }
+
+        // Agregar parámetros de período
+        const params = new URLSearchParams()
+        if (periodoSeleccionado === 'mes-actual') {
+          const hoy = new Date()
+          const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+          params.append('fechaInicio', primerDia.toISOString().split('T')[0])
+          params.append('fechaFin', hoy.toISOString().split('T')[0])
+        }
+
+        const url = `${process.env.NEXT_PUBLIC_API_URL}/reports/downloadable/export/${endpoint}${params.toString() ? `?${params.toString()}` : ''}`
+        
+        // Descargar con autenticación
+        try {
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          })
+
+          if (!response.ok) {
+            throw new Error('Error al descargar el reporte')
+          }
+
+          const blob = await response.blob()
+          const downloadUrl = window.URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = downloadUrl
+          link.download = `${fileName}_${new Date().getTime()}.xlsx`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          window.URL.revokeObjectURL(downloadUrl)
+        } catch (error) {
+          console.error(`Error descargando ${tipo}:`, error)
+        }
+      }
+
+      setTimeout(() => {
+        setGenerando(false)
+        toast({
+          title: "Reportes descargados",
+          description: `Se han descargado ${tiposSeleccionados.length} reporte(s) exitosamente`
+        })
+        cargarReportesGenerados()
+      }, 500)
+
+    } catch (error) {
+      setGenerando(false)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo generar el reporte"
+      })
+    }
   }
 
-  const handleToggleReporte = (id: string) => {
-    // Lógica para activar/pausar reporte programado
-    console.log(`Toggling reporte ${id}`)
+  const handleCrearReporteProgramado = async () => {
+    // Validación con mensajes específicos
+    if (!nombreProgramado.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Debes ingresar un nombre para el reporte"
+      })
+      return
+    }
+
+    if (tiposProgramados.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Debes seleccionar al menos un tipo de reporte"
+      })
+      return
+    }
+
+    // Debug: ver qué se está enviando
+    console.log('Datos a enviar:', {
+      nombre: nombreProgramado,
+      tipos: tiposProgramados,
+      frecuencia: frecuenciaProgramada,
+      formato: formatoProgramado
+    })
+
+    try {
+      await reportsService.crearReporteProgramado({
+        nombre: nombreProgramado,
+        tipos: tiposProgramados,
+        frecuencia: frecuenciaProgramada,
+        formato: formatoProgramado
+      })
+
+      toast({
+        title: "Reporte programado creado",
+        description: `El reporte "${nombreProgramado}" se ha creado exitosamente`
+      })
+
+      // Limpiar formulario y cerrar modal
+      setNombreProgramado('')
+      setTiposProgramados([])
+      setFrecuenciaProgramada('mensual')
+      setFormatoProgramado('excel')
+      setMostrarModalProgramado(false)
+
+      // Recargar lista
+      cargarReportesProgramados()
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo crear el reporte programado"
+      })
+    }
+  }
+
+  const handleToggleReporte = async (id: string) => {
+    try {
+      await reportsService.toggleReporteProgramado(id)
+      toast({
+        title: "Estado actualizado",
+        description: "El estado del reporte programado se ha actualizado"
+      })
+      cargarReportesProgramados()
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo actualizar el estado"
+      })
+    }
+  }
+
+  const handleEditarReporte = (reporte: any) => {
+    setReporteEditando(reporte)
+    setNombreProgramado(reporte.nombre)
+    setTiposProgramados(reporte.tipos || [])
+    setFrecuenciaProgramada(reporte.frecuencia)
+    setFormatoProgramado(reporte.formato)
+    setMostrarModalEditar(true)
+  }
+
+  const handleGuardarEdicion = async () => {
+    if (!nombreProgramado || tiposProgramados.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Debes completar todos los campos"
+      })
+      return
+    }
+
+    try {
+      await reportsService.actualizarReporteProgramado(reporteEditando.id, {
+        nombre: nombreProgramado,
+        tipos: tiposProgramados,
+        frecuencia: frecuenciaProgramada,
+        formato: formatoProgramado
+      })
+
+      toast({
+        title: "Reporte actualizado",
+        description: `El reporte "${nombreProgramado}" se ha actualizado exitosamente`
+      })
+
+      // Limpiar y cerrar
+      setMostrarModalEditar(false)
+      setReporteEditando(null)
+      setNombreProgramado('')
+      setTiposProgramados([])
+      setFrecuenciaProgramada('mensual')
+      setFormatoProgramado('excel')
+
+      // Recargar lista
+      cargarReportesProgramados()
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo actualizar el reporte programado"
+      })
+    }
+  }
+
+  const handleEliminarReporteProgramado = async (id: string) => {
+    if (!confirm('¿Estás seguro de eliminar este reporte programado?')) {
+      return
+    }
+
+    try {
+      await reportsService.eliminarReporteProgramado(id)
+      toast({
+        title: "Reporte eliminado",
+        description: "El reporte programado se ha eliminado exitosamente"
+      })
+      cargarReportesProgramados()
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo eliminar el reporte programado"
+      })
+    }
+  }
+
+  const handleDescargarReporte = async (reporteId: string) => {
+    try {
+      // Encontrar el reporte en la lista
+      const reporte = reportesGenerados.find(r => r.id === reporteId)
+      if (!reporte) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Reporte no encontrado"
+        })
+        return
+      }
+
+      // TODO: Registrar la descarga cuando el endpoint esté implementado
+      // await reportsService.registrarDescarga(reporteId)
+
+      // Determinar el endpoint según el tipo de reporte
+      let endpoint = ''
+      let fileName = ''
+      
+      if (reporte.tipos.includes('cuentas-cobrar')) {
+        endpoint = 'cuentas-cobrar'
+        fileName = 'cuentas_por_cobrar'
+      } else if (reporte.tipos.includes('cuentas-pagar')) {
+        endpoint = 'cuentas-pagar'
+        fileName = 'cuentas_por_pagar'
+      } else if (reporte.tipos.includes('flujo-efectivo')) {
+        endpoint = 'flujo-efectivo'
+        fileName = 'flujo_efectivo'
+      } else if (reporte.tipos.includes('estado-resultados')) {
+        endpoint = 'estado-resultados'
+        fileName = 'estado_resultados'
+      }
+
+      if (endpoint) {
+        const token = localStorage.getItem('accessToken')
+        
+        if (!token) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "No se encontró el token de autenticación. Por favor, inicia sesión nuevamente."
+          })
+          return
+        }
+        
+        const url = `${process.env.NEXT_PUBLIC_API_URL}/reports/downloadable/export/${endpoint}`
+
+        // Descargar con autenticación
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error('Error al descargar el reporte')
+        }
+
+        const blob = await response.blob()
+        const downloadUrl = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = downloadUrl
+        link.download = `${fileName}_${new Date().getTime()}.xlsx`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(downloadUrl)
+
+        toast({
+          title: "Descarga completada",
+          description: `Se ha descargado ${reporte.nombre}`
+        })
+
+        // Recargar la lista para actualizar contador de descargas
+        setTimeout(() => cargarReportesGenerados(), 1000)
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo descargar el reporte"
+      })
+    }
   }
 
   return (
@@ -162,7 +518,11 @@ export default function ReportesDescargablesPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {tiposReporte.map((tipo) => (
                 <div key={tipo.id} className="flex items-center space-x-3 p-3 border rounded-lg">
-                  <Checkbox id={tipo.id} checked={tipo.seleccionado} onCheckedChange={() => {}} />
+                  <Checkbox 
+                    id={tipo.id} 
+                    checked={tiposSeleccionados.includes(tipo.id)} 
+                    onCheckedChange={() => toggleTipoReporte(tipo.id)} 
+                  />
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">{tipo.icono}</span>
@@ -196,7 +556,7 @@ export default function ReportesDescargablesPage() {
 
             <div>
               <label className="block text-sm font-medium mb-2">Período</label>
-              <Select defaultValue="mes-actual">
+              <Select value={periodoSeleccionado} onValueChange={setPeriodoSeleccionado}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -212,7 +572,7 @@ export default function ReportesDescargablesPage() {
 
             <div>
               <label className="block text-sm font-medium mb-2">Incluir Gráficos</label>
-              <Select defaultValue="si">
+              <Select value={incluirGraficos} onValueChange={setIncluirGraficos}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -253,7 +613,7 @@ export default function ReportesDescargablesPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <Button variant="outline" className="mb-4 bg-transparent">
+            <Button variant="outline" className="mb-4 bg-transparent" onClick={() => setMostrarModalProgramado(true)}>
               <Settings className="h-4 w-4 mr-2" />
               Nuevo Reporte Programado
             </Button>
@@ -278,18 +638,33 @@ export default function ReportesDescargablesPage() {
                     <TableCell>{reporte.formato}</TableCell>
                     <TableCell>
                       <Badge className={estadoColors[reporte.estado as keyof typeof estadoColors]}>
-                        {reporte.estado}
+                        {traducirEstado(reporte.estado)}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => handleToggleReporte(reporte.id)}>
-                          {reporte.estado === "activo" ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => handleToggleReporte(reporte.id)}
+                          title={reporte.estado === "active" ? "Pausar reporte" : "Activar reporte"}
+                        >
+                          {reporte.estado === "active" ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                         </Button>
-                        <Button size="sm" variant="outline">
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => handleEditarReporte(reporte)}
+                          title="Configurar reporte"
+                        >
                           <Settings className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="destructive">
+                        <Button 
+                          size="sm" 
+                          variant="destructive" 
+                          onClick={() => handleEliminarReporteProgramado(reporte.id)}
+                          title="Eliminar reporte"
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -338,7 +713,11 @@ export default function ReportesDescargablesPage() {
                   </TableCell>
                   <TableCell>
                     {reporte.estado === "disponible" ? (
-                      <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                      <Button 
+                        size="sm" 
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={() => handleDescargarReporte(reporte.id)}
+                      >
                         <Download className="h-4 w-4 mr-1" />
                         Descargar
                       </Button>
@@ -354,6 +733,221 @@ export default function ReportesDescargablesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Modal para Crear Reporte Programado */}
+      <Dialog open={mostrarModalProgramado} onOpenChange={setMostrarModalProgramado}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Nuevo Reporte Programado</DialogTitle>
+            <DialogDescription>
+              Configura un reporte que se genere automáticamente de forma periódica
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            {/* Nombre del Reporte */}
+            <div className="grid gap-2">
+              <Label htmlFor="nombre">Nombre del Reporte</Label>
+              <Input
+                id="nombre"
+                placeholder="Ej: Reporte Mensual de Cuentas por Cobrar"
+                value={nombreProgramado}
+                onChange={(e) => setNombreProgramado(e.target.value)}
+              />
+            </div>
+
+            {/* Tipos de Reporte */}
+            <div className="grid gap-2">
+              <Label>Tipos de Reporte a Incluir</Label>
+              <div className="space-y-2">
+                {tiposReporte.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Cargando tipos de reporte...</p>
+                ) : (
+                  tiposReporte.map((tipo) => (
+                    <div key={tipo.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`programado-${tipo.id}`}
+                        checked={tiposProgramados.includes(tipo.id)}
+                        onCheckedChange={(checked) => {
+                          console.log(`Checkbox ${tipo.id} changed to:`, checked)
+                          if (checked) {
+                            setTiposProgramados([...tiposProgramados, tipo.id])
+                          } else {
+                            setTiposProgramados(tiposProgramados.filter(t => t !== tipo.id))
+                          }
+                        }}
+                      />
+                      <label
+                        htmlFor={`programado-${tipo.id}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        {tipo.nombre}
+                      </label>
+                    </div>
+                  ))
+                )}
+              </div>
+              {tiposProgramados.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Seleccionados: {tiposProgramados.join(', ')}
+                </p>
+              )}
+            </div>
+
+            {/* Frecuencia */}
+            <div className="grid gap-2">
+              <Label htmlFor="frecuencia">Frecuencia</Label>
+              <Select value={frecuenciaProgramada} onValueChange={setFrecuenciaProgramada}>
+                <SelectTrigger id="frecuencia">
+                  <SelectValue placeholder="Selecciona la frecuencia" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="diaria">Diaria</SelectItem>
+                  <SelectItem value="semanal">Semanal</SelectItem>
+                  <SelectItem value="mensual">Mensual</SelectItem>
+                  <SelectItem value="trimestral">Trimestral</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Formato */}
+            <div className="grid gap-2">
+              <Label htmlFor="formato">Formato de Exportación</Label>
+              <Select value={formatoProgramado} onValueChange={setFormatoProgramado}>
+                <SelectTrigger id="formato">
+                  <SelectValue placeholder="Selecciona el formato" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="excel">Excel (.xlsx)</SelectItem>
+                  <SelectItem value="pdf">PDF (.pdf)</SelectItem>
+                  <SelectItem value="csv">CSV (.csv)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMostrarModalProgramado(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCrearReporteProgramado}>
+              Crear Reporte Programado
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para Editar Reporte Programado */}
+      <Dialog open={mostrarModalEditar} onOpenChange={(open) => {
+        setMostrarModalEditar(open)
+        if (!open) {
+          // Limpiar al cerrar
+          setReporteEditando(null)
+          setNombreProgramado('')
+          setTiposProgramados([])
+          setFrecuenciaProgramada('mensual')
+          setFormatoProgramado('excel')
+        }
+      }}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Editar Reporte Programado</DialogTitle>
+            <DialogDescription>
+              Modifica la configuración de tu reporte automático
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            {/* Nombre del Reporte */}
+            <div className="grid gap-2">
+              <Label htmlFor="nombre-editar">Nombre del Reporte</Label>
+              <Input
+                id="nombre-editar"
+                placeholder="Ej: Reporte Mensual de Cuentas por Cobrar"
+                value={nombreProgramado}
+                onChange={(e) => setNombreProgramado(e.target.value)}
+              />
+            </div>
+
+            {/* Tipos de Reporte */}
+            <div className="grid gap-2">
+              <Label>Tipos de Reporte a Incluir</Label>
+              <div className="space-y-2">
+                {tiposReporte.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Cargando tipos de reporte...</p>
+                ) : (
+                  tiposReporte.map((tipo) => (
+                    <div key={tipo.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`editar-${tipo.id}`}
+                        checked={tiposProgramados.includes(tipo.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setTiposProgramados([...tiposProgramados, tipo.id])
+                          } else {
+                            setTiposProgramados(tiposProgramados.filter(t => t !== tipo.id))
+                          }
+                        }}
+                      />
+                      <label
+                        htmlFor={`editar-${tipo.id}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        {tipo.nombre}
+                      </label>
+                    </div>
+                  ))
+                )}
+              </div>
+              {tiposProgramados.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Seleccionados: {tiposProgramados.join(', ')}
+                </p>
+              )}
+            </div>
+
+            {/* Frecuencia */}
+            <div className="grid gap-2">
+              <Label htmlFor="frecuencia-editar">Frecuencia</Label>
+              <Select value={frecuenciaProgramada} onValueChange={setFrecuenciaProgramada}>
+                <SelectTrigger id="frecuencia-editar">
+                  <SelectValue placeholder="Selecciona la frecuencia" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="diaria">Diaria</SelectItem>
+                  <SelectItem value="semanal">Semanal</SelectItem>
+                  <SelectItem value="mensual">Mensual</SelectItem>
+                  <SelectItem value="trimestral">Trimestral</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Formato */}
+            <div className="grid gap-2">
+              <Label htmlFor="formato-editar">Formato de Exportación</Label>
+              <Select value={formatoProgramado} onValueChange={setFormatoProgramado}>
+                <SelectTrigger id="formato-editar">
+                  <SelectValue placeholder="Selecciona el formato" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="excel">Excel (.xlsx)</SelectItem>
+                  <SelectItem value="pdf">PDF (.pdf)</SelectItem>
+                  <SelectItem value="csv">CSV (.csv)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMostrarModalEditar(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleGuardarEdicion}>
+              Guardar Cambios
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

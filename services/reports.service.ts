@@ -198,5 +198,124 @@ export const reportsService = {
       '/accounts-payable/reports/summary'
     )
     return response.data
+  },
+
+  // ==================== REPORTES DETALLADOS ====================
+
+  async getFinancialAnalysis(params?: {
+    periodo?: string
+    fechaInicio?: string
+    fechaFin?: string
+  }): Promise<any> {
+    const response = await apiClient.get('/reports/detailed/financial-analysis', { params })
+    return response.data
+  },
+
+  async getFinancialChart(params?: {
+    periodo?: string
+    fechaInicio?: string
+    fechaFin?: string
+  }): Promise<any> {
+    const response = await apiClient.get('/reports/detailed/financial-chart', { params })
+    return response.data
+  },
+
+  async getCashFlowDetailed(params?: {
+    periodo?: string
+    fechaInicio?: string
+    fechaFin?: string
+  }): Promise<any> {
+    const response = await apiClient.get('/reports/detailed/cash-flow', { params })
+    return response.data
+  },
+
+  async getAnalysisByCategory(params?: {
+    periodo?: string
+    fechaInicio?: string
+    fechaFin?: string
+  }): Promise<any> {
+    const response = await apiClient.get('/reports/detailed/by-category', { params })
+    return response.data
+  },
+
+  async getHistoricalReports(params?: {
+    skip?: number
+    take?: number
+    categoria?: string
+  }): Promise<any> {
+    const response = await apiClient.get('/reports/detailed/historical', { params })
+    return response.data
+  },
+
+  // ==================== REPORTES DESCARGABLES ====================
+
+  async getTiposReporte(): Promise<any> {
+    const response = await apiClient.get('/reports/downloadable/types')
+    return response.data
+  },
+
+  async generarReporte(data: {
+    tipos: string[]
+    formato: string
+    periodo: string
+    incluirGraficos: boolean
+  }): Promise<any> {
+    const response = await apiClient.post('/reports/downloadable/generate', data)
+    return response.data
+  },
+
+  async getProgresoReporte(reportId: string): Promise<any> {
+    const response = await apiClient.get(`/reports/downloadable/progress/${reportId}`)
+    return response.data
+  },
+
+  async getReportesProgramados(): Promise<any> {
+    const response = await apiClient.get('/reports/downloadable/scheduled')
+    return response.data
+  },
+
+  async crearReporteProgramado(data: {
+    nombre: string
+    tipos: string[]
+    frecuencia: string
+    formato: string
+  }): Promise<any> {
+    const response = await apiClient.post('/reports/downloadable/scheduled', data)
+    return response.data
+  },
+
+  async actualizarReporteProgramado(id: string, data: any): Promise<any> {
+    const response = await apiClient.put(`/reports/downloadable/scheduled/${id}`, data)
+    return response.data
+  },
+
+  async eliminarReporteProgramado(id: string): Promise<any> {
+    const response = await apiClient.delete(`/reports/downloadable/scheduled/${id}`)
+    return response.data
+  },
+
+  async toggleReporteProgramado(id: string): Promise<any> {
+    const response = await apiClient.post(`/reports/downloadable/scheduled/${id}/toggle`)
+    return response.data
+  },
+
+  async getReportesGenerados(params?: {
+    skip?: number
+    take?: number
+    tipo?: string
+    formato?: string
+  }): Promise<any> {
+    const response = await apiClient.get('/reports/downloadable/generated', { params })
+    return response.data
+  },
+
+  async registrarDescarga(reportId: string): Promise<any> {
+    const response = await apiClient.post(`/reports/downloadable/generated/${reportId}/download`)
+    return response.data
+  },
+
+  async eliminarReporteGenerado(reportId: string): Promise<any> {
+    const response = await apiClient.delete(`/reports/downloadable/generated/${reportId}`)
+    return response.data
   }
 }

@@ -11,9 +11,7 @@ import {
   ChevronRight,
   Shield,
   Upload,
-  PieChart,
   Download,
-  Bell,
   LogOut,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -24,16 +22,6 @@ interface SidebarProps {
 }
 
 const menuItems = [
-  {
-    title: "Dashboard",
-    icon: PieChart,
-    href: "/",
-    submenu: [
-      { title: "General", href: "/" },
-      { title: "Financiero", href: "/dashboard/financiero" },
-      { title: "Por Área", href: "/dashboard/area" },
-    ],
-  },
   {
     title: "Usuarios y Roles",
     icon: Shield,
@@ -85,12 +73,6 @@ const menuItems = [
       { title: "Descargables", href: "/reportes/descargables" },
       { title: "Personalizados", href: "/reportes/personalizados" },
     ],
-  },
-  {
-    title: "Notificaciones",
-    icon: Bell,
-    href: "/notificaciones",
-    submenu: [{ title: "Alertas Email", href: "/notificaciones/email" }],
   },
 ]
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -18,86 +18,11 @@ import {
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
-import { Plus, Edit, Trash2, Shield, Users, Key } from "lucide-react"
-
-interface User {
-  id: string
-  name: string
-  email: string
-  role: string
-  status: "active" | "inactive"
-  lastLogin: string
-  permissions: string[]
-}
-
-interface Role {
-  id: string
-  name: string
-  description: string
-  permissions: string[]
-  userCount: number
-}
-
-const mockUsers: User[] = [
-  {
-    id: "1",
-    name: "Juan Pérez",
-    email: "juan.perez@electrocosta.com",
-    role: "Administrador",
-    status: "active",
-    lastLogin: "2024-01-15 10:30",
-    permissions: ["all"],
-  },
-  {
-    id: "2",
-    name: "María González",
-    email: "maria.gonzalez@electrocosta.com",
-    role: "Contador",
-    status: "active",
-    lastLogin: "2024-01-15 09:15",
-    permissions: ["cuentas_cobrar", "cuentas_pagar", "reportes"],
-  },
-  {
-    id: "3",
-    name: "Carlos Rodríguez",
-    email: "carlos.rodriguez@electrocosta.com",
-    role: "Vendedor",
-    status: "inactive",
-    lastLogin: "2024-01-10 16:45",
-    permissions: ["cuentas_cobrar", "clientes"],
-  },
-]
-
-const mockRoles: Role[] = [
-  {
-    id: "1",
-    name: "Administrador",
-    description: "Acceso completo al sistema",
-    permissions: ["all"],
-    userCount: 1,
-  },
-  {
-    id: "2",
-    name: "Contador",
-    description: "Gestión de cuentas y reportes financieros",
-    permissions: ["cuentas_cobrar", "cuentas_pagar", "reportes", "facturas"],
-    userCount: 3,
-  },
-  {
-    id: "3",
-    name: "Vendedor",
-    description: "Gestión de clientes y cuentas por cobrar",
-    permissions: ["cuentas_cobrar", "clientes", "facturas"],
-    userCount: 5,
-  },
-  {
-    id: "4",
-    name: "Tesorero",
-    description: "Gestión de pagos y tesorería",
-    permissions: ["cuentas_pagar", "tesoreria", "reportes"],
-    userCount: 2,
-  },
-]
+import { Plus, Edit, Trash2, Shield, Users, Key, Loader2 } from "lucide-react"
+import { usersService } from "@/services/users.service"
+import { rolesService } from "@/services/roles.service"
+import { useToast } from "@/hooks/use-toast"
+import type { User, Role, UserStatus, CreateUserDto, UpdateUserDto } from "@/types/users"
 
 const availablePermissions = [
   { id: "dashboard", name: "Dashboard Ejecutivo" },
@@ -114,31 +39,204 @@ const availablePermissions = [
 ]
 
 export default function UsuariosPage() {
-  const [users, setUsers] = useState<User[]>(mockUsers)
-  const [roles, setRoles] = useState<Role[]>(mockRoles)
+  const { toast } = useToast()
+  const [users, setUsers] = useState<User[]>([])
+  const [roles, setRoles] = useState<Role[]>([])
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false)
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [selectedRole, setSelectedRole] = useState<Role | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [filterRole, setFilterRole] = useState<string>("")
+  const [filterStatus, setFilterStatus] = useState<UserStatus | "all">("all")
+  const [formData, setFormData] = useState<Partial<CreateUserDto>>({})
+  const [roleFormData, setRoleFormData] = useState<{name?: string; description?: string; level?: number; permissions?: string[]}>({ permissions: [] })
+
+  // Cargar datos iniciales
+  useEffect(() => {
+    loadUsers()
+    loadRoles()
+  }, [])
+
+  const loadUsers = async () => {
+    try {
+      setLoading(true)
+      const response = await usersService.getAll({
+        search: searchQuery || undefined,
+        role: filterRole || undefined,
+        status: filterStatus !== "all" ? filterStatus : undefined,
+      })
+      setUsers(response.data)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Error al cargar usuarios",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadRoles = async () => {
+    try {
+      const data = await rolesService.getAll()
+      setRoles(data)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Error al cargar roles",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Recargar usuarios cuando cambien los filtros
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadUsers()
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [searchQuery, filterRole, filterStatus])
 
   const handleCreateUser = () => {
     setSelectedUser(null)
+    setFormData({})
     setIsUserDialogOpen(true)
   }
 
   const handleEditUser = (user: User) => {
     setSelectedUser(user)
+    setFormData({
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      empresa: user.empresa,
+      phone: user.phone || "",
+      cargo: user.cargo || "",
+      roleId: user.roleId,
+      departmentId: user.departmentId,
+      status: user.status,
+    })
     setIsUserDialogOpen(true)
+  }
+
+  const handleSaveUser = async () => {
+    try {
+      if (selectedUser) {
+        // Editar
+        await usersService.update(selectedUser.id, formData as UpdateUserDto)
+        toast({
+          title: "Usuario actualizado",
+          description: "El usuario ha sido actualizado exitosamente",
+        })
+      } else {
+        // Crear
+        if (!formData.password) {
+          toast({
+            title: "Error",
+            description: "La contraseña es requerida",
+            variant: "destructive",
+          })
+          return
+        }
+        await usersService.create(formData as CreateUserDto)
+        toast({
+          title: "Usuario creado",
+          description: "El usuario ha sido creado exitosamente",
+        })
+      }
+      setIsUserDialogOpen(false)
+      loadUsers()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Error al guardar usuario",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm("¿Estás seguro de eliminar este usuario?")) return
+    
+    try {
+      await usersService.delete(userId)
+      toast({
+        title: "Usuario eliminado",
+        description: "El usuario ha sido eliminado exitosamente",
+      })
+      loadUsers()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Error al eliminar usuario",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleCreateRole = () => {
     setSelectedRole(null)
+    setRoleFormData({ permissions: [], level: 1 })
     setIsRoleDialogOpen(true)
   }
 
   const handleEditRole = (role: Role) => {
     setSelectedRole(role)
+    setRoleFormData({
+      name: role.name,
+      description: role.description,
+      level: role.level,
+      permissions: [],
+    })
     setIsRoleDialogOpen(true)
+  }
+
+  const handleSaveRole = async () => {
+    try {
+      if (selectedRole) {
+        await rolesService.update(selectedRole.id, roleFormData)
+        toast({
+          title: "Rol actualizado",
+          description: "El rol ha sido actualizado exitosamente",
+        })
+      } else {
+        await rolesService.create(roleFormData as any)
+        toast({
+          title: "Rol creado",
+          description: "El rol ha sido creado exitosamente",
+        })
+      }
+      setIsRoleDialogOpen(false)
+      loadRoles()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Error al guardar rol",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleDeleteRole = async (roleId: string) => {
+    if (!confirm("¿Estás seguro de eliminar este rol?")) return
+    
+    try {
+      await rolesService.delete(roleId)
+      toast({
+        title: "Rol eliminado",
+        description: "El rol ha sido eliminado exitosamente",
+      })
+      loadRoles()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Error al eliminar rol",
+        variant: "destructive",
+      })
+    }
   }
 
   const getRoleColor = (role: string) => {
@@ -184,16 +282,16 @@ export default function UsuariosPage() {
         <TabsContent value="users" className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Input placeholder="Buscar usuarios..." className="w-80" />
-              <Select>
+              <Input placeholder="Buscar usuarios..." className="w-80" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as UserStatus | "all")}>
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Filtrar por rol" />
+                  <SelectValue placeholder="Estado" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos los roles</SelectItem>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                  <SelectItem value="contador">Contador</SelectItem>
-                  <SelectItem value="vendedor">Vendedor</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="activo">Activo</SelectItem>
+                  <SelectItem value="inactivo">Inactivo</SelectItem>
+                  <SelectItem value="pendiente">Pendiente</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -221,31 +319,45 @@ export default function UsuariosPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-medium">{user.name}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>
-                        <Badge className={getRoleColor(user.role)}>{user.role}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={user.status === "active" ? "default" : "secondary"}>
-                          {user.status === "active" ? "Activo" : "Inactivo"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{user.lastLogin}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => handleEditUser(user)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : users.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        No se encontraron usuarios
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    users.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell className="font-medium">{user.firstName} {user.lastName}</TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>
+                          <Badge className={getRoleColor(user.role.name)}>{user.role.name}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={user.status === "activo" ? "default" : "secondary"}>
+                            {user.status === "activo" ? "Activo" : user.status === "inactivo" ? "Inactivo" : "Pendiente"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{user.lastLogin ? new Date(user.lastLogin).toLocaleString("es-MX") : "Nunca"}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => handleEditUser(user)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleDeleteUser(user.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -269,32 +381,22 @@ export default function UsuariosPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">{role.name}</CardTitle>
-                    <Badge variant="outline">{role.userCount} usuarios</Badge>
+                    <Badge variant="outline">{role._count?.users || 0} usuarios</Badge>
                   </div>
                   <CardDescription>{role.description}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
                     <div>
-                      <Label className="text-sm font-medium">Permisos:</Label>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {role.permissions.includes("all") ? (
-                          <Badge variant="secondary">Todos los permisos</Badge>
-                        ) : (
-                          role.permissions.map((permission) => (
-                            <Badge key={permission} variant="outline" className="text-xs">
-                              {availablePermissions.find((p) => p.id === permission)?.name || permission}
-                            </Badge>
-                          ))
-                        )}
-                      </div>
+                      <Label className="text-sm font-medium">Nivel:</Label>
+                      <p className="text-sm text-muted-foreground mt-1">Nivel {role.level}</p>
                     </div>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" onClick={() => handleEditRole(role)}>
                         <Edit className="h-4 w-4 mr-1" />
                         Editar
                       </Button>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => handleDeleteRole(role.id)}>
                         <Trash2 className="h-4 w-4 mr-1" />
                         Eliminar
                       </Button>
@@ -332,8 +434,8 @@ export default function UsuariosPage() {
                         {roles.map((role) => (
                           <td key={role.id} className="text-center p-2">
                             <Switch
-                              checked={role.permissions.includes("all") || role.permissions.includes(permission.id)}
-                              disabled={role.permissions.includes("all")}
+                              checked={false}
+                              disabled={true}
                             />
                           </td>
                         ))}
@@ -357,17 +459,33 @@ export default function UsuariosPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nombre completo</Label>
-              <Input id="name" placeholder="Ingresa el nombre completo" />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="firstName">Nombre</Label>
+                <Input id="firstName" placeholder="Nombre" value={formData.firstName || ""} onChange={(e) => setFormData({...formData, firstName: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Apellido</Label>
+                <Input id="lastName" placeholder="Apellido" value={formData.lastName || ""} onChange={(e) => setFormData({...formData, lastName: e.target.value})} />
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="usuario@electrocosta.com" />
+              <Input id="email" type="email" placeholder="usuario@electrocosta.com" value={formData.email || ""} onChange={(e) => setFormData({...formData, email: e.target.value})} />
+            </div>
+            {!selectedUser && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Contraseña</Label>
+                <Input id="password" type="password" placeholder="********" value={formData.password || ""} onChange={(e) => setFormData({...formData, password: e.target.value})} />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="empresa">Empresa</Label>
+              <Input id="empresa" placeholder="Nombre de la empresa" value={formData.empresa || ""} onChange={(e) => setFormData({...formData, empresa: e.target.value})} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="role">Rol</Label>
-              <Select>
+              <Select value={formData.roleId} onValueChange={(value) => setFormData({...formData, roleId: value})}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona un rol" />
                 </SelectTrigger>
@@ -381,7 +499,7 @@ export default function UsuariosPage() {
               </Select>
             </div>
             <div className="flex items-center space-x-2">
-              <Switch id="active" />
+              <Switch id="active" checked={formData.status === "activo"} onCheckedChange={(checked) => setFormData({...formData, status: checked ? "activo" : "inactivo"})} />
               <Label htmlFor="active">Usuario activo</Label>
             </div>
           </div>
@@ -389,7 +507,7 @@ export default function UsuariosPage() {
             <Button variant="outline" onClick={() => setIsUserDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={() => setIsUserDialogOpen(false)}>
+            <Button onClick={handleSaveUser}>
               {selectedUser ? "Guardar Cambios" : "Crear Usuario"}
             </Button>
           </DialogFooter>
@@ -408,31 +526,22 @@ export default function UsuariosPage() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="roleName">Nombre del rol</Label>
-              <Input id="roleName" placeholder="Ej: Supervisor de Ventas" />
+              <Input id="roleName" placeholder="Ej: Supervisor de Ventas" value={roleFormData.name || ""} onChange={(e) => setRoleFormData({...roleFormData, name: e.target.value})} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="roleDescription">Descripción</Label>
-              <Input id="roleDescription" placeholder="Describe las responsabilidades del rol" />
+              <Input id="roleDescription" placeholder="Describe las responsabilidades del rol" value={roleFormData.description || ""} onChange={(e) => setRoleFormData({...roleFormData, description: e.target.value})} />
             </div>
             <div className="space-y-2">
-              <Label>Permisos</Label>
-              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                {availablePermissions.map((permission) => (
-                  <div key={permission.id} className="flex items-center space-x-2">
-                    <Switch id={permission.id} />
-                    <Label htmlFor={permission.id} className="text-sm">
-                      {permission.name}
-                    </Label>
-                  </div>
-                ))}
-              </div>
+              <Label htmlFor="roleLevel">Nivel</Label>
+              <Input id="roleLevel" type="number" placeholder="1-10" value={roleFormData.level || 1} onChange={(e) => setRoleFormData({...roleFormData, level: parseInt(e.target.value) || 1})} />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsRoleDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={() => setIsRoleDialogOpen(false)}>{selectedRole ? "Guardar Cambios" : "Crear Rol"}</Button>
+            <Button onClick={handleSaveRole}>{selectedRole ? "Guardar Cambios" : "Crear Rol"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

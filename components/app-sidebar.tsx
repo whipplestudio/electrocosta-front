@@ -28,7 +28,7 @@ const menuItems = [
     href: "/usuarios",
     submenu: [
       { title: "Gestión de Usuarios", href: "/usuarios" },
-      { title: "Roles y Permisos", href: "/usuarios/roles" },
+      // { title: "Roles y Permisos", href: "/usuarios/roles" }, // Comentado temporalmente - se usará en el futuro
     ],
   },
   {

@@ -60,6 +60,15 @@ export const usersService = {
     }
   },
 
+  async restore(id: string): Promise<{ message: string }> {
+    try {
+      const response = await apiClient.patch<{ message: string }>(`/users/${id}/restore`);
+      return response.data;
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
+
   // ============================================================================
   // GESTIÓN DE CONTRASEÑAS
   // ============================================================================

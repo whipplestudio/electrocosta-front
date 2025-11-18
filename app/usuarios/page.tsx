@@ -47,6 +47,8 @@ export default function UsuariosPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [selectedRole, setSelectedRole] = useState<Role | null>(null)
   const [loading, setLoading] = useState(true)
+  const [savingUser, setSavingUser] = useState(false)
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterRole, setFilterRole] = useState<string>("")
   const [filterStatus, setFilterStatus] = useState<UserStatus | "all">("all")
@@ -92,6 +94,48 @@ export default function UsuariosPage() {
     }
   }
 
+  const handleRestoreUser = async (userId: string) => {
+    try {
+      setUpdatingUserId(userId)
+      await usersService.restore(userId)
+      toast({
+        title: "Usuario habilitado",
+        description: "El usuario ha sido habilitado exitosamente",
+      })
+      loadUsers()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Error al habilitar usuario",
+        variant: "destructive",
+      })
+    } finally {
+      setUpdatingUserId(null)
+    }
+  }
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm("¿Estás seguro de eliminar este usuario?")) return
+    
+    try {
+      setUpdatingUserId(userId)
+      await usersService.delete(userId)
+      toast({
+        title: "Usuario eliminado",
+        description: "El usuario ha sido eliminado exitosamente",
+      })
+      loadUsers()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Error al eliminar usuario",
+        variant: "destructive",
+      })
+    } finally {
+      setUpdatingUserId(null)
+    }
+  }
+
   // Recargar usuarios cuando cambien los filtros
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -124,9 +168,11 @@ export default function UsuariosPage() {
 
   const handleSaveUser = async () => {
     try {
+      setSavingUser(true)
       if (selectedUser) {
         // Editar
-        await usersService.update(selectedUser.id, formData as UpdateUserDto)
+        const { email: _email, cargo: _cargo, ...updatePayload } = formData
+        await usersService.update(selectedUser.id, updatePayload as UpdateUserDto)
         toast({
           title: "Usuario actualizado",
           description: "El usuario ha sido actualizado exitosamente",
@@ -156,24 +202,8 @@ export default function UsuariosPage() {
         variant: "destructive",
       })
     }
-  }
-
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm("¿Estás seguro de eliminar este usuario?")) return
-    
-    try {
-      await usersService.delete(userId)
-      toast({
-        title: "Usuario eliminado",
-        description: "El usuario ha sido eliminado exitosamente",
-      })
-      loadUsers()
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Error al eliminar usuario",
-        variant: "destructive",
-      })
+    finally {
+      setSavingUser(false)
     }
   }
 
@@ -347,12 +377,41 @@ export default function UsuariosPage() {
                         <TableCell>{user.lastLogin ? new Date(user.lastLogin).toLocaleString("es-MX") : "Nunca"}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => handleEditUser(user)}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditUser(user)}
+                              disabled={!!updatingUserId}
+                            >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteUser(user.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {user.deletedAt ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRestoreUser(user.id)}
+                                disabled={updatingUserId === user.id}
+                              >
+                                {updatingUserId === user.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Shield className="h-4 w-4" />
+                                )}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteUser(user.id)}
+                                disabled={updatingUserId === user.id}
+                              >
+                                {updatingUserId === user.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -507,8 +566,9 @@ export default function UsuariosPage() {
             <Button variant="outline" onClick={() => setIsUserDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveUser}>
-              {selectedUser ? "Guardar Cambios" : "Crear Usuario"}
+            <Button onClick={handleSaveUser} disabled={savingUser}>
+              {savingUser && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {selectedUser ? (savingUser ? "Guardando..." : "Guardar Cambios") : (savingUser ? "Creando..." : "Crear Usuario")}
             </Button>
           </DialogFooter>
         </DialogContent>

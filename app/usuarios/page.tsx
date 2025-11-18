@@ -227,13 +227,15 @@ export default function UsuariosPage() {
   const handleSaveRole = async () => {
     try {
       if (selectedRole) {
-        await rolesService.update(selectedRole.id, roleFormData)
+        const { permissions: _permissions, ...rolePayload } = roleFormData
+        await rolesService.update(selectedRole.id, rolePayload as any)
         toast({
           title: "Rol actualizado",
           description: "El rol ha sido actualizado exitosamente",
         })
       } else {
-        await rolesService.create(roleFormData as any)
+        const { permissions: _permissions, ...rolePayload } = roleFormData
+        await rolesService.create(rolePayload as any)
         toast({
           title: "Rol creado",
           description: "El rol ha sido creado exitosamente",

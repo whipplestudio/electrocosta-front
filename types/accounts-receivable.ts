@@ -108,6 +108,13 @@ export interface Payment {
   createdById: string;
   createdAt: string;
   updatedAt: string;
+  // Relations
+  createdBy?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
 }
 
 export interface FollowUp {

@@ -138,6 +138,9 @@ export interface RegisterPaymentDto {
   paymentMethod: PaymentMethod;
   reference?: string;
   notes?: string;
+  gastoId?: string;
+  generarGasto?: boolean;
+  categoriaGasto?: string;
 }
 
 export interface CreatePaymentScheduleDto {

@@ -17,7 +17,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Upload, Download, Plus, Search, FileText, Calendar, Loader2, CheckCircle, AlertCircle, Eye, Edit } from "lucide-react"
+import { Upload, Download, Plus, Search, FileText, Calendar, Loader2, CheckCircle, AlertCircle, Eye, Edit, DollarSign } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/components/ui/use-toast"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -61,6 +62,10 @@ export default function GastosPage() {
   
   // Estados para formulario de nuevo gasto
   const [openDialog, setOpenDialog] = useState(false)
+  const [generarCuentaPorPagar, setGenerarCuentaPorPagar] = useState(false)
+  const [modoCuentaPorPagar, setModoCuentaPorPagar] = useState<'crear' | 'vincular'>('crear')
+  const [cuentasPorPagar, setCuentasPorPagar] = useState<any[]>([])
+  const [cuentaPorPagarSeleccionada, setCuentaPorPagarSeleccionada] = useState('')
   const [nuevoGasto, setNuevoGasto] = useState({
     fechaGasto: new Date().toISOString().split('T')[0],
     concepto: '',
@@ -70,7 +75,11 @@ export default function GastosPage() {
     proveedorNombre: '',
     formaPago: 'contado',
     areaCentroCosto: '',
-    observaciones: ''
+    observaciones: '',
+    // Campos para cuenta por pagar
+    montoPorPagar: '',
+    fechaVencimiento: '',
+    numeroFactura: ''
   })
 
   // Cargar TODOS los gastos (manuales y masivos) desde la tabla gasto
@@ -106,6 +115,34 @@ export default function GastosPage() {
   useEffect(() => {
     cargarHistorial()
   }, [cargarHistorial])
+
+  // Cargar cuentas por pagar disponibles
+  const cargarCuentasPorPagar = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/v1/accounts-payable', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        // Filtrar solo las pendientes con saldo
+        const pendientes = (data.data || []).filter((cp: any) => 
+          cp.status === 'pending' && parseFloat(cp.balance) > 0
+        )
+        setCuentasPorPagar(pendientes)
+      }
+    } catch (error) {
+      console.error('Error al cargar cuentas por pagar:', error)
+    }
+  }
+
+  // Cargar cuentas por pagar al abrir el dialog
+  useEffect(() => {
+    if (openDialog) {
+      cargarCuentasPorPagar()
+    }
+  }, [openDialog])
 
   // Funciones de carga
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -258,7 +295,10 @@ export default function GastosPage() {
         proveedorNombre: gasto.proveedor?.name || '',
         formaPago: gasto.formaPago || 'contado',
         areaCentroCosto: gasto.area?.id || '',
-        observaciones: gasto.observaciones || ''
+        observaciones: gasto.observaciones || '',
+        montoPorPagar: '',
+        fechaVencimiento: '',
+        numeroFactura: ''
       })
       setModalEditarOpen(true)
     } catch (error: any) {
@@ -313,11 +353,76 @@ export default function GastosPage() {
         return
       }
 
+      // Validaciones de cuenta por pagar
+      if (generarCuentaPorPagar) {
+        if (modoCuentaPorPagar === 'crear') {
+          // Validaciones para crear nueva
+          if (!nuevoGasto.montoPorPagar || parseFloat(nuevoGasto.montoPorPagar) <= 0) {
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: "El monto por pagar debe ser mayor a 0"
+            })
+            return
+          }
+          if (parseFloat(nuevoGasto.montoPorPagar) > parseFloat(nuevoGasto.monto)) {
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: "El monto por pagar no puede ser mayor al gasto total"
+            })
+            return
+          }
+          if (!nuevoGasto.fechaVencimiento) {
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: "Debes especificar la fecha de vencimiento de la cuenta por pagar"
+            })
+            return
+          }
+        } else {
+          // Validaciones para vincular existente
+          if (!cuentaPorPagarSeleccionada) {
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: "Debes seleccionar una cuenta por pagar existente"
+            })
+            return
+          }
+        }
+      }
+
       setCargando(true)
-      const resultado = await expensesUploadService.crearGasto({
-        ...nuevoGasto,
-        monto: parseFloat(nuevoGasto.monto)
-      })
+      
+      const dataToSend: any = {
+        fechaGasto: nuevoGasto.fechaGasto,
+        concepto: nuevoGasto.concepto,
+        categoria: nuevoGasto.categoria,
+        monto: parseFloat(nuevoGasto.monto),
+        proveedorRuc: nuevoGasto.proveedorRuc,
+        proveedorNombre: nuevoGasto.proveedorNombre,
+        formaPago: nuevoGasto.formaPago,
+        areaCentroCosto: nuevoGasto.areaCentroCosto,
+        observaciones: nuevoGasto.observaciones
+      }
+
+      // Agregar datos de cuenta por pagar según el modo
+      if (generarCuentaPorPagar) {
+        if (modoCuentaPorPagar === 'crear') {
+          // Crear nueva cuenta por pagar
+          dataToSend.generarCuentaPorPagar = true
+          dataToSend.montoPorPagar = parseFloat(nuevoGasto.montoPorPagar)
+          dataToSend.fechaVencimiento = nuevoGasto.fechaVencimiento
+          dataToSend.numeroFactura = nuevoGasto.numeroFactura
+        } else {
+          // Vincular a cuenta existente
+          dataToSend.accountPayableId = cuentaPorPagarSeleccionada
+        }
+      }
+
+      const resultado = await expensesUploadService.crearGasto(dataToSend)
       
       toast({
         title: "Gasto creado",
@@ -325,6 +430,9 @@ export default function GastosPage() {
       })
       
       // Resetear formulario y cerrar dialog
+      setGenerarCuentaPorPagar(false)
+      setModoCuentaPorPagar('crear')
+      setCuentaPorPagarSeleccionada('')
       setNuevoGasto({
         fechaGasto: new Date().toISOString().split('T')[0],
         concepto: '',
@@ -334,7 +442,10 @@ export default function GastosPage() {
         proveedorNombre: '',
         formaPago: 'contado',
         areaCentroCosto: '',
-        observaciones: ''
+        observaciones: '',
+        montoPorPagar: '',
+        fechaVencimiento: '',
+        numeroFactura: ''
       })
       setOpenDialog(false)
       
@@ -432,12 +543,12 @@ export default function GastosPage() {
                 Nuevo Gasto
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Registrar Nuevo Gasto</DialogTitle>
                 <DialogDescription>Registra un gasto operativo en el sistema</DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label>Fecha del Gasto *</Label>
                   <Input 
@@ -502,13 +613,158 @@ export default function GastosPage() {
                   />
                 </div>
                 
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label>Observaciones</Label>
                   <Textarea 
                     placeholder="Observaciones adicionales (opcional)"
                     value={nuevoGasto.observaciones}
                     onChange={(e) => setNuevoGasto({...nuevoGasto, observaciones: e.target.value})}
+                    rows={2}
                   />
+                </div>
+
+                {/* Sección de Cuenta por Pagar */}
+                <div className="border-t pt-4 space-y-4 md:col-span-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="generarCuentaPorPagar"
+                      checked={generarCuentaPorPagar}
+                      onCheckedChange={(checked) => {
+                        setGenerarCuentaPorPagar(checked as boolean)
+                        if (checked && nuevoGasto.monto) {
+                          setNuevoGasto({...nuevoGasto, montoPorPagar: nuevoGasto.monto})
+                        }
+                      }}
+                    />
+                    <div className="grid gap-1.5 leading-none">
+                      <label
+                        htmlFor="generarCuentaPorPagar"
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        Generar Cuenta por Pagar
+                      </label>
+                      <p className="text-sm text-muted-foreground">
+                        Crear automáticamente una cuenta por pagar al proveedor
+                      </p>
+                    </div>
+                  </div>
+
+                  {generarCuentaPorPagar && (
+                    <div className="space-y-4 bg-blue-50 p-5 rounded-lg border border-blue-200">
+                      <div className="flex items-center gap-2 mb-3">
+                        <DollarSign className="h-5 w-5 text-blue-600" />
+                        <span className="text-sm font-semibold text-blue-900">Gestión de Cuenta por Pagar</span>
+                      </div>
+
+                      {/* Toggle entre crear nueva y vincular existente */}
+                      <div className="flex gap-2 bg-white p-1 rounded-md border border-blue-300">
+                        <button
+                          type="button"
+                          onClick={() => setModoCuentaPorPagar('crear')}
+                          className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
+                            modoCuentaPorPagar === 'crear'
+                              ? 'bg-blue-600 text-white shadow-sm'
+                              : 'text-gray-600 hover:bg-blue-100'
+                          }`}
+                        >
+                          Crear Nueva
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModoCuentaPorPagar('vincular')}
+                          className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
+                            modoCuentaPorPagar === 'vincular'
+                              ? 'bg-blue-600 text-white shadow-sm'
+                              : 'text-gray-600 hover:bg-blue-100'
+                          }`}
+                        >
+                          Vincular Existente
+                        </button>
+                      </div>
+
+                      {modoCuentaPorPagar === 'crear' ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Monto por Pagar *</Label>
+                            <Input 
+                              type="number" 
+                              step="0.01"
+                              placeholder="Monto pendiente de pago"
+                              value={nuevoGasto.montoPorPagar}
+                              onChange={(e) => setNuevoGasto({...nuevoGasto, montoPorPagar: e.target.value})}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Monto total del gasto: ${nuevoGasto.monto || '0.00'}
+                            </p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Número de Factura/Comprobante</Label>
+                            <Input 
+                              placeholder="F001-00001234"
+                              value={nuevoGasto.numeroFactura}
+                              onChange={(e) => setNuevoGasto({...nuevoGasto, numeroFactura: e.target.value})}
+                            />
+                          </div>
+
+                          <div className="space-y-2 md:col-span-2">
+                            <Label>Fecha de Vencimiento *</Label>
+                            <Input 
+                              type="date" 
+                              value={nuevoGasto.fechaVencimiento}
+                              onChange={(e) => setNuevoGasto({...nuevoGasto, fechaVencimiento: e.target.value})}
+                              min={nuevoGasto.fechaGasto}
+                            />
+                          </div>
+
+                          {parseFloat(nuevoGasto.montoPorPagar) < parseFloat(nuevoGasto.monto) && nuevoGasto.montoPorPagar && nuevoGasto.monto && (
+                            <div className="bg-yellow-50 border border-yellow-200 rounded p-3 md:col-span-2">
+                              <p className="text-sm text-yellow-800">
+                                <strong>Pago parcial:</strong> Se registró anticipo de ${(parseFloat(nuevoGasto.monto) - parseFloat(nuevoGasto.montoPorPagar)).toFixed(2)}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <Label>Seleccionar Cuenta por Pagar Existente *</Label>
+                          <Select value={cuentaPorPagarSeleccionada} onValueChange={setCuentaPorPagarSeleccionada}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona una cuenta por pagar..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {cuentasPorPagar.length === 0 ? (
+                                <SelectItem value="sin-cuentas" disabled>
+                                  No hay cuentas por pagar pendientes
+                                </SelectItem>
+                              ) : (
+                                cuentasPorPagar.map((cp) => (
+                                  <SelectItem key={cp.id} value={cp.id}>
+                                    {cp.invoiceNumber} - {cp.supplier?.name} - ${parseFloat(cp.balance).toLocaleString()} - Vence: {new Date(cp.dueDate).toLocaleDateString('es-MX')}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                          {cuentaPorPagarSeleccionada && cuentasPorPagar.length > 0 && (
+                            <div className="bg-green-50 border border-green-200 rounded p-3">
+                              {(() => {
+                                const cp = cuentasPorPagar.find(c => c.id === cuentaPorPagarSeleccionada)
+                                return cp && (
+                                  <div className="text-sm">
+                                    <p className="font-medium text-green-900">Cuenta seleccionada:</p>
+                                    <p className="text-green-800">Proveedor: {cp.supplier?.name}</p>
+                                    <p className="text-green-800">Saldo: ${parseFloat(cp.balance).toLocaleString()}</p>
+                                    <p className="text-green-800">Vencimiento: {new Date(cp.dueDate).toLocaleDateString('es-MX')}</p>
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               <DialogFooter>

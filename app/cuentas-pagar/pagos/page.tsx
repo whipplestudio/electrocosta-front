@@ -23,6 +23,7 @@ import { accountsPayableService } from "@/services/accounts-payable.service"
 import type { AccountPayable, RegisterPaymentDto, Payment } from "@/types/accounts-payable"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import { Checkbox } from "@/components/ui/checkbox"
 
 const paymentMethodLabels: Record<string, string> = {
   transfer: 'Transferencia',
@@ -43,6 +44,8 @@ export default function AplicacionPagosCuentasPagar() {
   const [submitting, setSubmitting] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [paymentsToday, setPaymentsToday] = useState(0)
+  const [generarGasto, setGenerarGasto] = useState(false)
+  const [categoriaGasto, setCategoriaGasto] = useState('operativo')
 
   // Form state
   const [formData, setFormData] = useState({
@@ -58,22 +61,25 @@ export default function AplicacionPagosCuentasPagar() {
     try {
       setLoading(true)
       
-      // Cargar cuentas y pagos de hoy en paralelo
-      const [accountsData, todayPaymentsData] = await Promise.all([
-        accountsPayableService.getAll({ 
-          page: 1, 
-          limit: 100,
-          approvalStatus: 'approved', // Solo cuentas aprobadas
-        }),
-        accountsPayableService.getPaymentsToday()
-      ])
+      // Cargar cuentas (prioritario)
+      const accountsData = await accountsPayableService.getAll({ 
+        page: 1, 
+        limit: 100,
+        approvalStatus: 'approved', // Solo cuentas aprobadas
+      })
       
       // Filtrar solo cuentas con saldo pendiente
       const pendingAccounts = accountsData.data.filter(a => Number(a.balance) > 0)
       setAccounts(pendingAccounts)
       
-      // Establecer pagos de hoy
-      setPaymentsToday(todayPaymentsData.count)
+      // Cargar pagos de hoy (opcional, no bloquea la carga)
+      try {
+        const todayPaymentsData = await accountsPayableService.getPaymentsToday()
+        setPaymentsToday(todayPaymentsData.count)
+      } catch (error) {
+        console.warn('No se pudieron cargar los pagos de hoy:', error)
+        setPaymentsToday(0)
+      }
     } catch (error) {
       console.error('Error al cargar datos:', error)
       toast.error('Error al cargar las cuentas por pagar')
@@ -88,7 +94,14 @@ export default function AplicacionPagosCuentasPagar() {
 
   // Registrar pago
   const handleRegisterPayment = async () => {
-    if (!selectedAccount) return
+    console.log('handleRegisterPayment iniciado')
+    
+    if (!selectedAccount) {
+      console.log('No hay cuenta seleccionada')
+      return
+    }
+
+    console.log('Validando formData:', formData)
 
     if (!formData.amount || formData.amount <= 0) {
       toast.error('El monto debe ser mayor a cero')
@@ -107,7 +120,11 @@ export default function AplicacionPagosCuentasPagar() {
 
     try {
       setSubmitting(true)
-      const paymentData: RegisterPaymentDto = {
+      console.log('Iniciando proceso de registro...')
+      
+      // Registrar el pago (el backend creará el gasto si generarGasto es true)
+      console.log('Registrando pago...')
+      const paymentData: any = {
         amount: formData.amount,
         paymentMethod: formData.paymentMethod,
         paymentDate: formData.paymentDate,
@@ -115,15 +132,24 @@ export default function AplicacionPagosCuentasPagar() {
         notes: formData.notes || undefined,
       }
 
+      // Si se debe generar gasto, agregar los datos adicionales
+      if (generarGasto) {
+        paymentData.generarGasto = true
+        paymentData.categoriaGasto = categoriaGasto
+        console.log('Se generará gasto con categoría:', categoriaGasto)
+      }
+
+      console.log('Payment data:', paymentData)
       await accountsPayableService.registerPayment(selectedAccount.id, paymentData)
       
+      console.log('Pago registrado exitosamente')
       toast.success('Pago registrado exitosamente')
       setShowRegisterDialog(false)
       resetForm()
       loadData()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al registrar pago:', error)
-      toast.error('Error al registrar el pago')
+      toast.error(error?.response?.data?.message || error.message || 'Error al registrar el pago')
     } finally {
       setSubmitting(false)
     }
@@ -156,6 +182,8 @@ export default function AplicacionPagosCuentasPagar() {
       notes: '',
     })
     setSelectedAccount(null)
+    setGenerarGasto(false)
+    setCategoriaGasto('operativo')
   }
 
   const openRegisterDialog = (account: AccountPayable) => {
@@ -164,8 +192,8 @@ export default function AplicacionPagosCuentasPagar() {
       amount: Number(account.balance),
       paymentMethod: 'transfer',
       paymentDate: new Date().toISOString().split('T')[0],
-      reference: '',
-      notes: '',
+      reference: account.invoiceNumber,
+      notes: account.description || '',
     })
     setShowRegisterDialog(true)
   }
@@ -326,7 +354,7 @@ export default function AplicacionPagosCuentasPagar() {
 
       {/* Dialog: Registrar Pago */}
       <Dialog open={showRegisterDialog} onOpenChange={setShowRegisterDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Registrar Pago</DialogTitle>
             <DialogDescription>
@@ -417,6 +445,56 @@ export default function AplicacionPagosCuentasPagar() {
                     rows={3}
                   />
                 </div>
+              </div>
+
+              {/* Checkbox para generar gasto */}
+              <div className="space-y-4 pt-4 border-t">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="generar-gasto"
+                    checked={generarGasto}
+                    onCheckedChange={(checked) => setGenerarGasto(checked as boolean)}
+                  />
+                  <Label
+                    htmlFor="generar-gasto"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    📄 Generar comprobante de gasto automáticamente
+                  </Label>
+                </div>
+
+                {/* Campos adicionales para el gasto */}
+                {generarGasto && (
+                  <div className="bg-blue-50 p-4 rounded-lg space-y-4">
+                    <p className="text-sm text-blue-700">
+                      ℹ️ Se creará un gasto con los datos del pago. Solo especifica la categoría:
+                    </p>
+                    
+                    <div className="space-y-2">
+                      <Label>Categoría del Gasto</Label>
+                      <Select value={categoriaGasto} onValueChange={setCategoriaGasto}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="operativo">Operativo</SelectItem>
+                          <SelectItem value="administrativo">Administrativo</SelectItem>
+                          <SelectItem value="ventas">Ventas</SelectItem>
+                          <SelectItem value="financiero">Financiero</SelectItem>
+                          <SelectItem value="otros">Otros</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="text-xs text-blue-600 space-y-1">
+                      <p>• Fecha: Se usará la fecha del pago ({formData.paymentDate})</p>
+                      <p>• Concepto: Se usará la referencia del pago</p>
+                      <p>• Monto: Se usará el monto del pago (${formData.amount})</p>
+                      <p>• Método de pago: Se usará el método del pago ({paymentMethodLabels[formData.paymentMethod]})</p>
+                      <p>• Proveedor: {selectedAccount?.supplier.name}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

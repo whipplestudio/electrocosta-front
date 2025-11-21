@@ -20,6 +20,7 @@ export default function ReportesDescargablesPage() {
   const [formatoSeleccionado, setFormatoSeleccionado] = useState("excel")
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState("mes-actual")
   const [incluirGraficos, setIncluirGraficos] = useState("si")
+  const [proyectoSeleccionado, setProyectoSeleccionado] = useState("todos")
   const [progreso, setProgreso] = useState(0)
   const [generando, setGenerando] = useState(false)
 
@@ -28,6 +29,7 @@ export default function ReportesDescargablesPage() {
   const [tiposSeleccionados, setTiposSeleccionados] = useState<string[]>(["cuentas-cobrar", "cuentas-pagar"])
   const [reportesProgramados, setReportesProgramados] = useState<any[]>([])
   const [reportesGenerados, setReportesGenerados] = useState<any[]>([])
+  const [proyectos, setProyectos] = useState<any[]>([])
   
   // Estados para modal de nuevo reporte programado
   const [mostrarModalProgramado, setMostrarModalProgramado] = useState(false)
@@ -48,6 +50,7 @@ export default function ReportesDescargablesPage() {
     cargarTiposReporte()
     cargarReportesProgramados()
     cargarReportesGenerados()
+    cargarProyectos()
   }, [])
 
   const cargarTiposReporte = async () => {
@@ -96,6 +99,22 @@ export default function ReportesDescargablesPage() {
       setReportesGenerados(data.data || [])
     } catch (error) {
       console.error('Error al cargar reportes generados:', error)
+    }
+  }
+
+  const cargarProyectos = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/v1/projects', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setProyectos(data.data || [])
+      }
+    } catch (error) {
+      console.error('Error al cargar proyectos:', error)
     }
   }
 
@@ -570,7 +589,7 @@ export default function ReportesDescargablesPage() {
           </div>
 
           {/* Configuración */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2">Formato</label>
               <Select value={formatoSeleccionado} onValueChange={setFormatoSeleccionado}>
@@ -612,6 +631,23 @@ export default function ReportesDescargablesPage() {
                   <SelectItem value="si">Sí, incluir gráficos</SelectItem>
                   <SelectItem value="no">Solo datos</SelectItem>
                   <SelectItem value="separado">Archivo separado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Proyecto</label>
+              <Select value={proyectoSeleccionado} onValueChange={setProyectoSeleccionado}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los Proyectos</SelectItem>
+                  {proyectos.map((proyecto) => (
+                    <SelectItem key={proyecto.id} value={proyecto.id}>
+                      {proyecto.nombreProyecto || proyecto.nombre}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

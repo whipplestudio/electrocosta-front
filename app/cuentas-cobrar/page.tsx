@@ -32,6 +32,7 @@ import {
   Loader2,
   ChevronDown,
   Trash2,
+  Users,
 } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -82,13 +83,20 @@ function CuentasCobrarPageContent() {
     pagination,
   } = useAccountsReceivable()
   
-  const [filtroEstado, setFiltroEstado] = useState<string>("todos")
-  const [filtroCategoria, setFiltroCategoria] = useState<string>("todos")
-  const [busqueda, setBusqueda] = useState("")
+  // Estados para diálogos
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isDetalleDialogOpen, setIsDetalleDialogOpen] = useState(false)
   const [selectedCuenta, setSelectedCuenta] = useState<AccountReceivable | null>(null)
-  const [fechaDesde, setFechaDesde] = useState<Date>()
-  const [fechaHasta, setFechaHasta] = useState<Date>()
+  const [cuentaDetalle, setCuentaDetalle] = useState<AccountReceivable | null>(null)
+  
+  // Estados para filtros
+  const [filters, setFilters] = useState({
+    clientId: "all",
+    status: "all" as AccountReceivableStatus | "all",
+    dateFrom: undefined as Date | undefined,
+    dateTo: undefined as Date | undefined,
+  })
+  const [isFilterExpanded, setIsFilterExpanded] = useState(true)
   
   // Estados para clientes y categorías
   const [clients, setClients] = useState<Client[]>([])
@@ -127,26 +135,46 @@ function CuentasCobrarPageContent() {
 
   // Cargar datos al montar el componente
   useEffect(() => {
-    fetchAccounts()
+    handleApplyFilters()
     fetchDashboard()
     loadClientsAndCategories()
-  }, [fetchAccounts, fetchDashboard])
+  }, [])
 
-  // Filtrar cuentas
-  const cuentasFiltradas = accounts.filter((cuenta) => {
-    const estadoMapeado = mapEstado(cuenta.status)
-    const matchEstado = filtroEstado === "todos" || estadoMapeado === filtroEstado
-    const matchCategoria = filtroCategoria === "todos" || cuenta.categoryId === filtroCategoria
-    const matchBusqueda =
-      (cuenta.client?.name || '').toLowerCase().includes(busqueda.toLowerCase()) ||
-      cuenta.invoiceNumber.toLowerCase().includes(busqueda.toLowerCase())
-    return matchEstado && matchCategoria && matchBusqueda
-  })
+  // Aplicar filtros y recargar datos del backend
+  const handleApplyFilters = async () => {
+    const filterDto: any = {}
+    
+    if (filters.clientId && filters.clientId !== "all") filterDto.clientId = filters.clientId
+    if (filters.status && filters.status !== "all") filterDto.status = filters.status
+    if (filters.dateFrom) filterDto.dateFrom = filters.dateFrom.toISOString()
+    if (filters.dateTo) filterDto.dateTo = filters.dateTo.toISOString()
+    
+    await fetchAccounts(filterDto)
+  }
 
-  // Cálculos
-  const totalPorCobrar = cuentasFiltradas.reduce((sum, cuenta) => sum + Number(cuenta.balance), 0)
-  const cuentasVencidas = cuentasFiltradas.filter((c) => mapEstado(c.status) === "vencido").length
-  const proximasVencer = cuentasFiltradas.filter((c) => mapEstado(c.status) === "proximo_vencer").length
+  // Limpiar filtros
+  const handleClearFilters = async () => {
+    setFilters({
+      clientId: "all",
+      status: "all",
+      dateFrom: undefined,
+      dateTo: undefined,
+    })
+    await fetchAccounts()
+  }
+
+  // Cálculos basados en los datos del backend
+  const totalPorCobrar = accounts.reduce((sum, cuenta) => sum + Number(cuenta.balance), 0)
+  const cuentasVencidas = accounts.filter((c) => c.status === AccountReceivableStatus.OVERDUE).length
+  const proximasVencer = accounts.filter((c) => {
+    if (c.status === AccountReceivableStatus.PENDING || c.status === AccountReceivableStatus.PARTIAL) {
+      const dueDate = new Date(c.dueDate)
+      const today = new Date()
+      const diffDays = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      return diffDays > 0 && diffDays <= 7
+    }
+    return false
+  }).length
 
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
@@ -176,6 +204,11 @@ function CuentasCobrarPageContent() {
       description: '',
     })
     setIsDialogOpen(true)
+  }
+
+  const handleVerDetalle = (cuenta: AccountReceivable) => {
+    setCuentaDetalle(cuenta)
+    setIsDetalleDialogOpen(true)
   }
 
   const handleEditarCuenta = (cuenta: AccountReceivable) => {
@@ -230,7 +263,7 @@ function CuentasCobrarPageContent() {
       setIsDialogOpen(false)
       setSelectedCuenta(null)
       // Recargar datos
-      await fetchAccounts()
+      await handleApplyFilters()
       await fetchDashboard()
     } catch (error) {
       console.error('Error al guardar cuenta:', error)
@@ -247,7 +280,7 @@ function CuentasCobrarPageContent() {
       await deleteAccount(cuentaId)
       toast.success('Cuenta eliminada exitosamente')
       // Recargar datos
-      await fetchAccounts()
+      await handleApplyFilters()
       await fetchDashboard()
     } catch (error) {
       console.error('Error al eliminar cuenta:', error)
@@ -337,84 +370,159 @@ function CuentasCobrarPageContent() {
         </Card>
       </div>
 
-      {/* Filtros */}
+      {/* Filtros Mejorados */}
       <Card>
-        <CardHeader>
-          <CardTitle>Filtros</CardTitle>
+        <CardHeader className="cursor-pointer" onClick={() => setIsFilterExpanded(!isFilterExpanded)}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              <CardTitle>Filtros de Búsqueda</CardTitle>
+              {(filters.clientId !== "all" || filters.status !== "all" || filters.dateFrom || filters.dateTo) && (
+                <Badge variant="secondary" className="ml-2">
+                  {[filters.clientId !== "all" ? filters.clientId : null, filters.status !== "all" ? filters.status : null, filters.dateFrom, filters.dateTo].filter(Boolean).length} activos
+                </Badge>
+              )}
+            </div>
+            <ChevronDown className={`h-5 w-5 transition-transform ${isFilterExpanded ? 'rotate-180' : ''}`} />
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="search">Buscar</Label>
-              <Input
-                id="search"
-                placeholder="Cliente o factura..."
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="estado">Estado</Label>
-              <Select value={filtroEstado} onValueChange={setFiltroEstado}>
-                <SelectTrigger id="estado">
-                  <SelectValue placeholder="Seleccionar estado" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="vigente">Vigente</SelectItem>
-                  <SelectItem value="proximo_vencer">Próximo a Vencer</SelectItem>
-                  <SelectItem value="vencido">Vencido</SelectItem>
-                  <SelectItem value="pagado">Pagado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="categoria">Categoría</Label>
-              <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
-                <SelectTrigger id="categoria">
-                  <SelectValue placeholder="Seleccionar categoría" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todas</SelectItem>
-                  <SelectItem value="ventas">Ventas</SelectItem>
-                  <SelectItem value="proyectos">Proyectos</SelectItem>
-                  <SelectItem value="anticipos">Anticipos</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Fecha</Label>
-              <div className="flex gap-2">
+        {isFilterExpanded && (
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Filtro por Cliente */}
+              <div className="space-y-2">
+                <Label htmlFor="clientFilter">Cliente</Label>
+                <Select 
+                  value={filters.clientId} 
+                  onValueChange={(value) => setFilters({ ...filters, clientId: value })}
+                >
+                  <SelectTrigger id="clientFilter">
+                    <SelectValue placeholder="Todos los clientes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los clientes</SelectItem>
+                    {clients.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Filtro por Estado */}
+              <div className="space-y-2">
+                <Label htmlFor="statusFilter">Estado</Label>
+                <Select 
+                  value={filters.status} 
+                  onValueChange={(value) => setFilters({ ...filters, status: value as AccountReceivableStatus | "all" })}
+                >
+                  <SelectTrigger id="statusFilter">
+                    <SelectValue placeholder="Todos los estados" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los estados</SelectItem>
+                    <SelectItem value={AccountReceivableStatus.PENDING}>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-yellow-500" />
+                        Pendiente
+                      </div>
+                    </SelectItem>
+                    <SelectItem value={AccountReceivableStatus.PARTIAL}>
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4 text-blue-500" />
+                        Parcial
+                      </div>
+                    </SelectItem>
+                    <SelectItem value={AccountReceivableStatus.PAID}>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                        Pagado
+                      </div>
+                    </SelectItem>
+                    <SelectItem value={AccountReceivableStatus.OVERDUE}>
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-red-500" />
+                        Vencido
+                      </div>
+                    </SelectItem>
+                    <SelectItem value={AccountReceivableStatus.CANCELLED}>
+                      <div className="flex items-center gap-2">
+                        <Trash2 className="h-4 w-4 text-gray-500" />
+                        Cancelado
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Filtro por Fecha Desde */}
+              <div className="space-y-2">
+                <Label>Fecha Desde</Label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="flex-1">
+                    <Button 
+                      variant="outline" 
+                      className={`w-full justify-start text-left font-normal ${!filters.dateFrom ? 'text-muted-foreground' : ''}`}
+                    >
                       <CalendarIcon className="h-4 w-4 mr-2" />
-                      {fechaDesde ? format(fechaDesde, "dd/MM/yyyy") : "Desde"}
+                      {filters.dateFrom ? format(filters.dateFrom, "dd/MM/yyyy", { locale: es }) : "Seleccionar fecha"}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar mode="single" selected={fechaDesde} onSelect={setFechaDesde} />
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar 
+                      mode="single" 
+                      selected={filters.dateFrom} 
+                      onSelect={(date) => setFilters({ ...filters, dateFrom: date })}
+                      initialFocus
+                    />
                   </PopoverContent>
                 </Popover>
-                
+              </div>
+              
+              {/* Filtro por Fecha Hasta */}
+              <div className="space-y-2">
+                <Label>Fecha Hasta</Label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="flex-1">
+                    <Button 
+                      variant="outline" 
+                      className={`w-full justify-start text-left font-normal ${!filters.dateTo ? 'text-muted-foreground' : ''}`}
+                    >
                       <CalendarIcon className="h-4 w-4 mr-2" />
-                      {fechaHasta ? format(fechaHasta, "dd/MM/yyyy") : "Hasta"}
+                      {filters.dateTo ? format(filters.dateTo, "dd/MM/yyyy", { locale: es }) : "Seleccionar fecha"}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar mode="single" selected={fechaHasta} onSelect={setFechaHasta} />
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar 
+                      mode="single" 
+                      selected={filters.dateTo} 
+                      onSelect={(date) => setFilters({ ...filters, dateTo: date })}
+                      initialFocus
+                      disabled={(date) => filters.dateFrom ? date < filters.dateFrom : false}
+                    />
                   </PopoverContent>
                 </Popover>
               </div>
             </div>
-          </div>
-        </CardContent>
+            
+            {/* Botones de Acción */}
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <Button 
+                variant="outline" 
+                onClick={handleClearFilters}
+                disabled={filters.clientId === "all" && filters.status === "all" && !filters.dateFrom && !filters.dateTo}
+              >
+                Limpiar Filtros
+              </Button>
+              <Button onClick={handleApplyFilters} disabled={isLoading}>
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Filter className="mr-2 h-4 w-4" />
+                Aplicar Filtros
+              </Button>
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       {/* Tabla de Cuentas */}
@@ -422,7 +530,8 @@ function CuentasCobrarPageContent() {
         <CardHeader>
           <CardTitle>Listado de Cuentas por Cobrar</CardTitle>
           <CardDescription>
-            Mostrando {cuentasFiltradas.length} de {accounts.length} cuentas
+            Mostrando {accounts.length} cuentas
+            {(filters.clientId !== "all" || filters.status !== "all" || filters.dateFrom || filters.dateTo) && " (filtrado)"}
             {isLoading && <Loader2 className="inline ml-2 h-4 w-4 animate-spin" />}
           </CardDescription>
         </CardHeader>
@@ -447,14 +556,14 @@ function CuentasCobrarPageContent() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {cuentasFiltradas.length === 0 ? (
+              {accounts.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    No se encontraron cuentas por cobrar
+                    {isLoading ? "Cargando..." : "No se encontraron cuentas por cobrar"}
                   </TableCell>
                 </TableRow>
               ) : (
-                cuentasFiltradas.map((cuenta) => (
+                accounts.map((cuenta) => (
                   <TableRow key={cuenta.id}>
                     <TableCell className="font-medium">{cuenta.client?.name || 'N/A'}</TableCell>
                     <TableCell>{cuenta.invoiceNumber}</TableCell>
@@ -468,7 +577,7 @@ function CuentasCobrarPageContent() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" onClick={() => handleVerDetalle(cuenta)}>
                           <Eye className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => handleEditarCuenta(cuenta)}>
@@ -667,6 +776,195 @@ function CuentasCobrarPageContent() {
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {selectedCuenta ? "Guardar Cambios" : "Crear Cuenta"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para ver detalle de cuenta */}
+      <Dialog open={isDetalleDialogOpen} onOpenChange={setIsDetalleDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalle de Cuenta por Cobrar</DialogTitle>
+            <DialogDescription>
+              Información completa de la cuenta
+            </DialogDescription>
+          </DialogHeader>
+          {cuentaDetalle && (
+            <div className="space-y-6">
+              {/* Información del Cliente */}
+              <div className="border rounded-lg p-4 space-y-3">
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Información del Cliente
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-muted-foreground">Cliente</Label>
+                    <p className="font-medium">{cuentaDetalle.client?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">RFC/Tax ID</Label>
+                    <p className="font-medium">{cuentaDetalle.client?.taxId || 'N/A'}</p>
+                  </div>
+                  {cuentaDetalle.client?.email && (
+                    <div>
+                      <Label className="text-muted-foreground">Email</Label>
+                      <p className="font-medium">{cuentaDetalle.client.email}</p>
+                    </div>
+                  )}
+                  {cuentaDetalle.client?.phone && (
+                    <div>
+                      <Label className="text-muted-foreground">Teléfono</Label>
+                      <p className="font-medium">{cuentaDetalle.client.phone}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Información de la Factura */}
+              <div className="border rounded-lg p-4 space-y-3">
+                <h3 className="font-semibold text-lg">Información de la Factura</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-muted-foreground">Número de Factura</Label>
+                    <p className="font-medium">{cuentaDetalle.invoiceNumber}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Estado</Label>
+                    <div className="mt-1">
+                      {getEstadoBadge(mapEstado(cuentaDetalle.status))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Fecha de Emisión</Label>
+                    <p className="font-medium">{format(new Date(cuentaDetalle.issueDate), "dd/MM/yyyy", { locale: es })}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Fecha de Vencimiento</Label>
+                    <p className="font-medium">{format(new Date(cuentaDetalle.dueDate), "dd/MM/yyyy", { locale: es })}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Categoría</Label>
+                    <p className="font-medium">{cuentaDetalle.category?.name || 'Sin categoría'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Proyecto</Label>
+                    <p className="font-medium">{cuentaDetalle.project?.name || 'Sin proyecto'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Información Financiera */}
+              <div className="border rounded-lg p-4 space-y-3 bg-primary/5">
+                <h3 className="font-semibold text-lg">Información Financiera</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-muted-foreground">Monto Total</Label>
+                    <p className="text-xl font-bold text-primary">
+                      ${Number(cuentaDetalle.amount).toLocaleString()} {cuentaDetalle.currency}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Monto Pagado</Label>
+                    <p className="text-xl font-bold text-green-600">
+                      ${Number(cuentaDetalle.paidAmount).toLocaleString()} {cuentaDetalle.currency}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-muted-foreground">Saldo Pendiente</Label>
+                    <p className="text-2xl font-bold text-orange-600">
+                      ${Number(cuentaDetalle.balance).toLocaleString()} {cuentaDetalle.currency}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Descripción y Notas */}
+              {(cuentaDetalle.description || cuentaDetalle.notes) && (
+                <div className="border rounded-lg p-4 space-y-3">
+                  <h3 className="font-semibold text-lg">Descripción y Notas</h3>
+                  {cuentaDetalle.description && (
+                    <div>
+                      <Label className="text-muted-foreground">Descripción</Label>
+                      <p className="text-sm mt-1">{cuentaDetalle.description}</p>
+                    </div>
+                  )}
+                  {cuentaDetalle.notes && (
+                    <div>
+                      <Label className="text-muted-foreground">Notas</Label>
+                      <p className="text-sm mt-1">{cuentaDetalle.notes}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Historial de Pagos */}
+              {cuentaDetalle.payments && cuentaDetalle.payments.length > 0 && (
+                <div className="border rounded-lg p-4 space-y-3">
+                  <h3 className="font-semibold text-lg">Historial de Pagos</h3>
+                  <div className="space-y-2">
+                    {cuentaDetalle.payments.map((payment) => (
+                      <div key={payment.id} className="flex justify-between items-center p-2 bg-muted rounded">
+                        <div>
+                          <p className="font-medium">${Number(payment.amount).toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {format(new Date(payment.paymentDate), "dd/MM/yyyy", { locale: es })} - {payment.paymentMethod}
+                          </p>
+                        </div>
+                        {payment.reference && (
+                          <Badge variant="outline">{payment.reference}</Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Seguimientos */}
+              {cuentaDetalle.followUps && cuentaDetalle.followUps.length > 0 && (
+                <div className="border rounded-lg p-4 space-y-3">
+                  <h3 className="font-semibold text-lg">Seguimientos</h3>
+                  <div className="space-y-2">
+                    {cuentaDetalle.followUps.map((followUp) => (
+                      <div key={followUp.id} className="p-2 bg-muted rounded">
+                        <div className="flex justify-between items-start mb-1">
+                          <Badge variant="outline">{followUp.type}</Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(followUp.createdAt), "dd/MM/yyyy", { locale: es })}
+                          </span>
+                        </div>
+                        <p className="text-sm">{followUp.description}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Resultado: {followUp.result}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Metadatos */}
+              <div className="border-t pt-3 text-xs text-muted-foreground grid grid-cols-2 gap-2">
+                <div>
+                  <span className="font-medium">Creado:</span> {format(new Date(cuentaDetalle.createdAt), "dd/MM/yyyy HH:mm", { locale: es })}
+                </div>
+                <div>
+                  <span className="font-medium">Última actualización:</span> {format(new Date(cuentaDetalle.updatedAt), "dd/MM/yyyy HH:mm", { locale: es })}
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDetalleDialogOpen(false)}>
+              Cerrar
+            </Button>
+            {cuentaDetalle && (
+              <Button onClick={() => {
+                setIsDetalleDialogOpen(false)
+                handleEditarCuenta(cuentaDetalle)
+              }}>
+                <Edit className="h-4 w-4 mr-2" />
+                Editar Cuenta
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -9,12 +9,13 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Eye, Phone, Mail, Calendar, TrendingUp, AlertTriangle, CheckCircle, Loader2, X } from "lucide-react"
+import { Search, Eye, Phone, Mail, Calendar, TrendingUp, AlertTriangle, CheckCircle, Loader2, X, MessageSquare, History } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { accountsReceivableService, followUpService } from "@/services/accounts-receivable.service"
 import type { AccountReceivable, FollowUp } from "@/types/accounts-receivable"
+import { RouteProtection } from "@/components/route-protection"
 
 type AccountStatus = 'vencido' | 'vigente' | 'por_vencer';
 
@@ -31,6 +32,14 @@ const estadoBadgeVariant = {
 } as const
 
 export default function SeguimientoCuentasCobrar() {
+  return (
+    <RouteProtection requiredPermissions={["cuentas_cobrar.seguimiento.ver"]}>
+      <SeguimientoCuentasCobrarContent />
+    </RouteProtection>
+  )
+}
+
+function SeguimientoCuentasCobrarContent() {
   const [searchTerm, setSearchTerm] = useState("")
   const [estadoFilter, setEstadoFilter] = useState("todos")
   const [accounts, setAccounts] = useState<AccountWithStatus[]>([])
@@ -40,9 +49,12 @@ export default function SeguimientoCuentasCobrar() {
   const [showDetailDialog, setShowDetailDialog] = useState(false)
   const [showCallDialog, setShowCallDialog] = useState(false)
   const [showEmailDialog, setShowEmailDialog] = useState(false)
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false)
   const [callNotes, setCallNotes] = useState("")
   const [emailSubject, setEmailSubject] = useState("")
   const [emailBody, setEmailBody] = useState("")
+  const [followUps, setFollowUps] = useState<FollowUp[]>([])
+  const [loadingFollowUps, setLoadingFollowUps] = useState(false)
 
   // Calcular estado y días vencidos
   const calculateStatus = (account: AccountReceivable): { estado: AccountStatus; diasVencido: number } => {
@@ -64,18 +76,18 @@ export default function SeguimientoCuentasCobrar() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [accountsData, followUpsData] = await Promise.all([
+      const [accountsData, followUpsResponse] = await Promise.all([
         accountsReceivableService.list({ page: 1, limit: 100 }),
-        followUpService.list().catch(() => []), // Si falla, retornar array vacío
+        followUpService.list().catch(() => ({ data: [], total: 0, page: 1, pages: 1, limit: 20 })), // Si falla, retornar estructura vacía
       ])
+
+      const followUpsData = followUpsResponse.data || []
 
       const accountsWithStatus: AccountWithStatus[] = accountsData.data.map((account) => {
         const status = calculateStatus(account)
-        const lastFollowUp = Array.isArray(followUpsData) 
-          ? followUpsData
-              .filter((f) => f.accountReceivableId === account.id)
-              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
-          : undefined
+        const lastFollowUp = followUpsData
+          .filter((f) => f.accountReceivableId === account.id)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
 
         return {
           ...account,
@@ -122,6 +134,24 @@ export default function SeguimientoCuentasCobrar() {
       toast.error('Error al registrar la llamada')
     } finally {
       setActionLoading(false)
+    }
+  }
+
+  // Cargar historial de seguimientos
+  const loadFollowUps = async (accountId: string) => {
+    try {
+      setLoadingFollowUps(true)
+      const response = await followUpService.list()
+      const followUpsData = response.data || []
+      const accountFollowUps = followUpsData
+        .filter((f) => f.accountReceivableId === accountId)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      setFollowUps(accountFollowUps)
+    } catch (error) {
+      console.error('Error al cargar seguimientos:', error)
+      toast.error('Error al cargar el historial de seguimientos')
+    } finally {
+      setLoadingFollowUps(false)
     }
   }
 
@@ -240,9 +270,7 @@ export default function SeguimientoCuentasCobrar() {
       </div>
 
       <Tabs defaultValue="seguimiento" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="seguimiento">Seguimiento Activo</TabsTrigger>
-        </TabsList>
+      
 
         <TabsContent value="seguimiento" className="space-y-4">
           <Card>
@@ -328,6 +356,7 @@ export default function SeguimientoCuentasCobrar() {
                                   setSelectedAccount(item)
                                   setShowDetailDialog(true)
                                 }}
+                                title="Ver detalle"
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
@@ -336,8 +365,21 @@ export default function SeguimientoCuentasCobrar() {
                                 variant="outline"
                                 onClick={() => {
                                   setSelectedAccount(item)
+                                  loadFollowUps(item.id)
+                                  setShowHistoryDialog(true)
+                                }}
+                                title="Ver historial de seguimientos"
+                              >
+                                <History className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedAccount(item)
                                   setShowCallDialog(true)
                                 }}
+                                title="Registrar llamada"
                               >
                                 <Phone className="h-4 w-4" />
                               </Button>
@@ -349,6 +391,7 @@ export default function SeguimientoCuentasCobrar() {
                                   setEmailSubject(`Seguimiento de factura ${item.invoiceNumber}`)
                                   setShowEmailDialog(true)
                                 }}
+                                title="Registrar correo"
                               >
                                 <Mail className="h-4 w-4" />
                               </Button>
@@ -523,6 +566,216 @@ export default function SeguimientoCuentasCobrar() {
               ) : (
                 'Registrar Correo'
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Historial de Seguimientos */}
+      <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Historial de Seguimientos
+            </DialogTitle>
+            <DialogDescription>
+              Cliente: {selectedAccount?.client?.name} - Factura: {selectedAccount?.invoiceNumber}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Resumen de la cuenta */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Información de la Cuenta</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <Label className="text-muted-foreground">Saldo Pendiente</Label>
+                    <p className="font-bold text-lg text-orange-600">
+                      ${Number(selectedAccount?.balance || 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Estado</Label>
+                    <div className="mt-1">
+                      {selectedAccount && (
+                        <Badge variant={estadoBadgeVariant[selectedAccount.estado]}>
+                          {selectedAccount.estado === "vencido"
+                            ? "Vencido"
+                            : selectedAccount.estado === "por_vencer"
+                              ? "Por Vencer"
+                              : "Vigente"}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Vencimiento</Label>
+                    <p className="font-medium">
+                      {selectedAccount && new Date(selectedAccount.dueDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Total Seguimientos</Label>
+                    <p className="font-bold text-lg text-blue-600">{followUps.length}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Lista de seguimientos */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Registro de Contactos</h3>
+                {loadingFollowUps && (
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                )}
+              </div>
+
+              {loadingFollowUps ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : followUps.length === 0 ? (
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+                    <MessageSquare className="h-12 w-12 text-muted-foreground mb-3" />
+                    <p className="text-muted-foreground">
+                      No hay seguimientos registrados para esta cuenta
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Usa los botones de llamada o correo para registrar un seguimiento
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {followUps.map((followUp, index) => (
+                    <Card key={followUp.id} className="border-l-4" style={{
+                      borderLeftColor: followUp.type === 'call' ? '#3b82f6' : followUp.type === 'email' ? '#10b981' : '#6b7280'
+                    }}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {followUp.type === 'call' ? (
+                              <Phone className="h-4 w-4 text-blue-500" />
+                            ) : followUp.type === 'email' ? (
+                              <Mail className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <MessageSquare className="h-4 w-4 text-gray-500" />
+                            )}
+                            <Badge variant="outline" className="font-normal">
+                              {followUp.type === 'call' ? 'Llamada' : 
+                               followUp.type === 'email' ? 'Correo' : 
+                               followUp.type === 'whatsapp' ? 'WhatsApp' : 
+                               followUp.type === 'visit' ? 'Visita' : 'Otro'}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(followUp.createdAt).toLocaleDateString('es-MX', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                          </div>
+                          <Badge variant={
+                            followUp.result === 'contacted' ? 'default' :
+                            followUp.result === 'payment_promise' ? 'secondary' :
+                            followUp.result === 'dispute' ? 'destructive' :
+                            'outline'
+                          }>
+                            {followUp.result === 'contacted' ? 'Contactado' :
+                             followUp.result === 'not_contacted' ? 'No contactado' :
+                             followUp.result === 'payment_promise' ? 'Promesa de pago' :
+                             followUp.result === 'dispute' ? 'Disputa' :
+                             followUp.result === 'no_answer' ? 'Sin respuesta' : 
+                             followUp.result}
+                          </Badge>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Descripción</Label>
+                            <p className="text-sm">{followUp.description}</p>
+                          </div>
+                          
+                          {followUp.notes && (
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Notas</Label>
+                              <p className="text-sm bg-muted p-2 rounded-md whitespace-pre-wrap">
+                                {followUp.notes}
+                              </p>
+                            </div>
+                          )}
+                          
+                          {followUp.nextFollowUpDate && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
+                              <Calendar className="h-3 w-3" />
+                              Próximo seguimiento: {new Date(followUp.nextFollowUpDate).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Acciones rápidas */}
+            {followUps.length > 0 && (
+              <Card className="bg-muted/50">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Registrar nuevo seguimiento</p>
+                      <p className="text-xs text-muted-foreground">
+                        Agrega una llamada o correo a esta cuenta
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setShowHistoryDialog(false)
+                          setShowCallDialog(true)
+                        }}
+                      >
+                        <Phone className="h-4 w-4 mr-1" />
+                        Llamada
+                      </Button>
+                      <Button 
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setShowHistoryDialog(false)
+                          setEmailSubject(`Seguimiento de factura ${selectedAccount?.invoiceNumber}`)
+                          setShowEmailDialog(true)
+                        }}
+                      >
+                        <Mail className="h-4 w-4 mr-1" />
+                        Correo
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowHistoryDialog(false)
+              setFollowUps([])
+              setSelectedAccount(null)
+            }}>
+              Cerrar
             </Button>
           </DialogFooter>
         </DialogContent>

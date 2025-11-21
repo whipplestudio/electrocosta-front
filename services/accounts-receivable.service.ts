@@ -233,9 +233,9 @@ export const followUpService = {
   /**
    * Listar todos los seguimientos
    */
-  async list(filters?: FollowUpFilterDto): Promise<FollowUp[]> {
+  async list(filters?: FollowUpFilterDto): Promise<PaginatedResponse<FollowUp>> {
     try {
-      const response = await apiClient.get<FollowUp[]>('/follow-ups', {
+      const response = await apiClient.get<PaginatedResponse<FollowUp>>('/follow-ups', {
         params: filters,
       });
       return response.data;

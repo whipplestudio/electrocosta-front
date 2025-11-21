@@ -2,7 +2,7 @@
 // ENUMS
 // ============================================
 
-export type AccountPayableStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'cancelled';
+export type AccountPayableStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'cancelled' | 'scheduled';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 export type PaymentMethod = 'cash' | 'check' | 'transfer' | 'card' | 'other';
 
@@ -184,35 +184,28 @@ export interface PaginatedAccountsPayableResponse {
 // ============================================
 
 export interface DashboardData {
-  totalPending: number;
-  totalOverdue: number;
-  totalPaid: number;
-  pendingCount: number;
-  overdueCount: number;
-  pendingApprovalCount: number;
-  byStatus: {
-    pending: number;
-    partial: number;
-    paid: number;
-    overdue: number;
-    cancelled: number;
+  keyMetrics: {
+    totalPayable: number;
+    totalOverdue: number;
+    criticalOverdue: number;
+    upcomingThisWeek: number;
+    avgOverdueDays: number;
   };
-  byApprovalStatus: {
-    pending: number;
-    approved: number;
-    rejected: number;
-  };
-  upcomingPayments: {
-    next7Days: number;
-    next15Days: number;
-    next30Days: number;
-  };
-  topSuppliers: Array<{
-    supplierId: string;
-    supplierName: string;
-    totalAmount: number;
-    accountsCount: number;
+  agingDistribution: Array<{
+    label: string;
+    value: number;
+    percentage: number;
+    count: number;
   }>;
+  categoryBreakdown: Array<{
+    category: string;
+    amount: number;
+    percentage: number;
+    count: number;
+  }>;
+  upcomingPayments: Array<AccountPayable>;
+  overdueAccounts: Array<AccountPayable>;
+  generatedAt: string;
 }
 
 export interface PaymentSummary {

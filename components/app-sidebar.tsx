@@ -54,6 +54,7 @@ const menuItems = [
       { title: "Registro", href: "/cuentas-pagar" },
       { title: "Programación", href: "/cuentas-pagar/programacion" },
       { title: "Aprobación", href: "/cuentas-pagar/aprobacion" },
+      { title: "Pagos", href: "/cuentas-pagar/pagos" },
       { title: "Reportes de Vencimientos", href: "/cuentas-pagar/reportes" },
     ],
   },

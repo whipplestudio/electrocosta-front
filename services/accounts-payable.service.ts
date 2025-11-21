@@ -157,4 +157,13 @@ export const accountsPayableService = {
       throw new Error(handleApiError(error));
     }
   },
+
+  async getPaymentsToday(): Promise<{ count: number; totalAmount: number; payments: any[] }> {
+    try {
+      const response = await apiClient.get('/accounts-payable/payments/today');
+      return response.data;
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
 };

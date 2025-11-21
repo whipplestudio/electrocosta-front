@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Plus, Edit, Trash2, CalendarIcon, TrendingDown, AlertCircle, Clock, CheckCircle, XCircle } from "lucide-react"
+import { Plus, Edit, Trash2, CalendarIcon, TrendingDown, AlertCircle, Clock, CheckCircle, XCircle, Loader2 } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { toast } from "sonner"
@@ -26,9 +26,12 @@ export default function CuentasPagarPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingSelects, setLoadingSelects] = useState(false)
-  const [filtroEstado, setFiltroEstado] = useState<string>("todos")
-  const [filtroAprobacion, setFiltroAprobacion] = useState<string>("todos")
-  const [busqueda, setBusqueda] = useState("")
+  const [applyingFilters, setApplyingFilters] = useState(false)
+  const [filters, setFilters] = useState({
+    status: "all" as string,
+    approvalStatus: "all" as string,
+    search: ""
+  })
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<AccountPayable | null>(null)
   const [formData, setFormData] = useState({
@@ -50,10 +53,22 @@ export default function CuentasPagarPage() {
     pendientesAprobacion: 0,
   })
 
-  const fetchAccounts = useCallback(async () => {
+  const fetchAccounts = useCallback(async (filterParams?: any) => {
     try {
       setLoading(true)
-      const response = await accountsPayableService.getAll({ page: 1, limit: 100 })
+      const params: any = { page: 1, limit: 100 }
+      
+      if (filterParams?.status && filterParams.status !== "all") {
+        params.status = filterParams.status
+      }
+      if (filterParams?.approvalStatus && filterParams.approvalStatus !== "all") {
+        params.approvalStatus = filterParams.approvalStatus
+      }
+      if (filterParams?.search) {
+        params.search = filterParams.search
+      }
+      
+      const response = await accountsPayableService.getAll(params)
       setAccounts(response.data)
     } catch (error) {
       console.error("Error al cargar cuentas por pagar:", error)
@@ -67,11 +82,11 @@ export default function CuentasPagarPage() {
     try {
       const data = await accountsPayableService.getDashboard()
       setDashboardData({
-        totalPendiente: data.totalPending || 0,
-        totalVencido: data.totalOverdue || 0,
-        cuentasVencidas: data.overdueCount || 0,
-        proximasVencer: data.upcomingPayments?.next7Days || 0,
-        pendientesAprobacion: data.pendingApprovalCount || 0,
+        totalPendiente: data.keyMetrics?.totalPayable || 0,
+        totalVencido: data.keyMetrics?.totalOverdue || 0,
+        cuentasVencidas: data.overdueAccounts?.length || 0,
+        proximasVencer: data.keyMetrics?.upcomingThisWeek || 0,
+        pendientesAprobacion: 0, // Se calculará desde las cuentas después
       })
     } catch (error) {
       console.error("Error al cargar dashboard:", error)
@@ -103,6 +118,12 @@ export default function CuentasPagarPage() {
     fetchDashboard()
     loadSuppliersAndCategories()
   }, [fetchAccounts, fetchDashboard])
+
+  // Calcular pendientes de aprobación cuando las cuentas cambien
+  useEffect(() => {
+    const pendientes = accounts.filter(a => a.approvalStatus === 'pending').length
+    setDashboardData(prev => ({ ...prev, pendientesAprobacion: pendientes }))
+  }, [accounts])
 
   const handleNuevaCuenta = () => {
     setSelectedAccount(null)
@@ -163,7 +184,7 @@ export default function CuentasPagarPage() {
         toast.success("Cuenta creada exitosamente")
       }
       setIsDialogOpen(false)
-      fetchAccounts()
+      fetchAccounts(filters)
       fetchDashboard()
     } catch (error) {
       console.error("Error al guardar cuenta:", error)
@@ -176,7 +197,7 @@ export default function CuentasPagarPage() {
     try {
       await accountsPayableService.delete(id)
       toast.success("Cuenta eliminada")
-      fetchAccounts()
+      fetchAccounts(filters)
       fetchDashboard()
     } catch (error) {
       toast.error("Error al eliminar")
@@ -186,11 +207,11 @@ export default function CuentasPagarPage() {
   const handleAprobar = async (id: string) => {
     try {
       await accountsPayableService.approve(id)
-      toast.success("Cuenta aprobada exitosamente")
-      fetchAccounts()
+      toast.success("Cuenta aprobada")
+      fetchAccounts(filters)
       fetchDashboard()
     } catch (error) {
-      toast.error("Error al aprobar la cuenta")
+      toast.error("Error al aprobar")
     }
   }
 
@@ -200,21 +221,43 @@ export default function CuentasPagarPage() {
     try {
       await accountsPayableService.reject(id, { reason })
       toast.success("Cuenta rechazada")
-      fetchAccounts()
+      fetchAccounts(filters)
       fetchDashboard()
     } catch (error) {
       toast.error("Error al rechazar")
     }
   }
 
-  const cuentasFiltradas = accounts.filter((cuenta) => {
-    const matchEstado = filtroEstado === "todos" || cuenta.status === filtroEstado
-    const matchAprobacion = filtroAprobacion === "todos" || cuenta.approvalStatus === filtroAprobacion
-    const matchBusqueda =
-      cuenta.supplier.name.toLowerCase().includes(busqueda.toLowerCase()) ||
-      cuenta.invoiceNumber.toLowerCase().includes(busqueda.toLowerCase())
-    return matchEstado && matchAprobacion && matchBusqueda
-  })
+  const handleApplyFilters = async () => {
+    setApplyingFilters(true)
+    try {
+      await fetchAccounts(filters)
+      toast.success('Filtros aplicados correctamente')
+    } catch (error) {
+      toast.error('Error al aplicar filtros')
+    } finally {
+      setApplyingFilters(false)
+    }
+  }
+
+  const handleClearFilters = async () => {
+    setFilters({ status: "all", approvalStatus: "all", search: "" })
+    setApplyingFilters(true)
+    try {
+      await fetchAccounts()
+      toast.success('Filtros limpiados')
+    } catch (error) {
+      toast.error('Error al limpiar filtros')
+    } finally {
+      setApplyingFilters(false)
+    }
+  }
+
+  const activeFiltersCount = [
+    filters.status !== "all",
+    filters.approvalStatus !== "all",
+    filters.search !== ""
+  ].filter(Boolean).length
 
   const getEstadoBadge = (status: AccountPayableStatus) => {
     const styles = {
@@ -223,6 +266,7 @@ export default function CuentasPagarPage() {
       paid: "bg-green-100 text-green-800",
       overdue: "bg-red-100 text-red-800",
       cancelled: "bg-gray-100 text-gray-800",
+      scheduled: "bg-purple-100 text-purple-800",
     }
     const labels = {
       pending: "Pendiente",
@@ -230,6 +274,7 @@ export default function CuentasPagarPage() {
       paid: "Pagado",
       overdue: "Vencido",
       cancelled: "Cancelado",
+      scheduled: "Programado",
     }
     return <Badge className={styles[status]}>{labels[status]}</Badge>
   }
@@ -296,47 +341,79 @@ export default function CuentasPagarPage() {
 
       {/* Filtros */}
       <Card>
-        <CardHeader>
-          <CardTitle>Filtros</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Filtros</CardTitle>
+            {activeFiltersCount > 0 && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {activeFiltersCount} filtro{activeFiltersCount > 1 ? 's' : ''} activo{activeFiltersCount > 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <div>
               <Label>Buscar</Label>
               <Input
                 placeholder="Proveedor o factura..."
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
+                value={filters.search}
+                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
               />
             </div>
             <div>
               <Label>Estado</Label>
-              <Select value={filtroEstado} onValueChange={setFiltroEstado}>
+              <Select 
+                value={filters.status} 
+                onValueChange={(value) => setFilters({ ...filters, status: value })}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="pending">Pendiente</SelectItem>
                   <SelectItem value="partial">Parcial</SelectItem>
                   <SelectItem value="paid">Pagado</SelectItem>
                   <SelectItem value="overdue">Vencido</SelectItem>
+                  <SelectItem value="scheduled">Programado</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
               <Label>Aprobación</Label>
-              <Select value={filtroAprobacion} onValueChange={setFiltroAprobacion}>
+              <Select 
+                value={filters.approvalStatus} 
+                onValueChange={(value) => setFilters({ ...filters, approvalStatus: value })}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="pending">Pendiente</SelectItem>
                   <SelectItem value="approved">Aprobado</SelectItem>
                   <SelectItem value="rejected">Rechazado</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex items-end gap-2">
+              <Button 
+                className="flex-1" 
+                onClick={handleApplyFilters}
+                disabled={applyingFilters || loading}
+              >
+                {applyingFilters && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Aplicar Filtros
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={handleClearFilters}
+                disabled={applyingFilters || loading || activeFiltersCount === 0}
+              >
+                Limpiar
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -362,12 +439,12 @@ export default function CuentasPagarPage() {
                 <TableRow>
                   <TableCell colSpan={7} className="text-center">Cargando...</TableCell>
                 </TableRow>
-              ) : cuentasFiltradas.length === 0 ? (
+              ) : accounts.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center">No hay cuentas por pagar</TableCell>
                 </TableRow>
               ) : (
-                cuentasFiltradas.map((cuenta) => (
+                accounts.map((cuenta) => (
                   <TableRow key={cuenta.id}>
                     <TableCell>{cuenta.supplier.name}</TableCell>
                     <TableCell>{cuenta.invoiceNumber}</TableCell>

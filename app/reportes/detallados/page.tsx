@@ -6,6 +6,7 @@ import { reportsService } from "@/services/reports.service"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -23,13 +24,15 @@ import {
   LineChart,
   Line,
 } from "recharts"
-import { FileText, Download, TrendingUp, DollarSign, AlertCircle } from "lucide-react"
+import { FileText, Download, TrendingUp, DollarSign, AlertCircle, Loader2 } from "lucide-react"
+import * as XLSX from 'xlsx'
 
 export default function ReportesDetalladosPage() {
   const { toast } = useToast()
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState("mes-actual")
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState("todas")
   const [loading, setLoading] = useState(false)
+  const [generandoReporte, setGenerandoReporte] = useState(false)
 
   // Estados para datos del backend
   const [metricas, setMetricas] = useState<any>(null)
@@ -112,6 +115,104 @@ export default function ReportesDetalladosPage() {
     cargarReportesHistoricos()
   }, [categoriaSeleccionada])
 
+  // Generar reporte en Excel
+  const generarReporteExcel = async () => {
+    try {
+      setGenerandoReporte(true)
+      
+      // Crear un nuevo libro de Excel
+      const wb = XLSX.utils.book_new()
+
+      // Hoja 1: Resumen Ejecutivo
+      const resumenData = [
+        ['REPORTE FINANCIERO DETALLADO'],
+        ['Período:', periodoSeleccionado],
+        ['Categoría:', categoriaSeleccionada],
+        ['Fecha de Generación:', new Date().toLocaleDateString('es-MX')],
+        [],
+        ['MÉTRICAS PRINCIPALES'],
+        ['Métrica', 'Valor', 'Variación'],
+        ['Ingresos Totales', `$${((metricas?.ingresosTotales || 0) / 1000000).toFixed(2)}M`, `${(metricas?.variacionIngresos || 0).toFixed(1)}%`],
+        ['Gastos Totales', `$${((metricas?.gastosTotales || 0) / 1000000).toFixed(2)}M`, `${(metricas?.variacionGastos || 0).toFixed(1)}%`],
+        ['Utilidad Neta', `$${((metricas?.utilidadNeta || 0) / 1000).toFixed(0)}K`, `${(metricas?.variacionUtilidad || 0).toFixed(1)}%`],
+        ['Margen de Utilidad', `${(metricas?.margenUtilidad || 0).toFixed(1)}%`, '-'],
+      ]
+      const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
+      XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen Ejecutivo')
+
+      // Hoja 2: Análisis Mensual
+      if (datosVentas.length > 0) {
+        const analisisData = [
+          ['ANÁLISIS DE INGRESOS VS GASTOS'],
+          [],
+          ['Mes', 'Ingresos', 'Gastos', 'Utilidad'],
+          ...datosVentas.map(row => [
+            row.mes,
+            `$${Number(row.ventas || 0).toLocaleString()}`,
+            `$${Number(row.gastos || 0).toLocaleString()}`,
+            `$${Number(row.utilidad || 0).toLocaleString()}`
+          ])
+        ]
+        const wsAnalisis = XLSX.utils.aoa_to_sheet(analisisData)
+        XLSX.utils.book_append_sheet(wb, wsAnalisis, 'Análisis Mensual')
+      }
+
+      // Hoja 3: Flujo de Efectivo
+      if (flujoEfectivo.length > 0) {
+        const flujoData = [
+          ['FLUJO DE EFECTIVO DETALLADO'],
+          [],
+          ['Día', 'Entradas', 'Salidas', 'Saldo Acumulado'],
+          ...flujoEfectivo.map(row => [
+            row.dia,
+            `$${Number(row.entrada || 0).toLocaleString()}`,
+            `$${Number(row.salida || 0).toLocaleString()}`,
+            `$${Number(row.saldo || 0).toLocaleString()}`
+          ])
+        ]
+        const wsFlujo = XLSX.utils.aoa_to_sheet(flujoData)
+        XLSX.utils.book_append_sheet(wb, wsFlujo, 'Flujo de Efectivo')
+      }
+
+      // Hoja 4: Análisis por Categoría
+      if (datosCategoria.length > 0) {
+        const categoriaData = [
+          ['ANÁLISIS POR CATEGORÍA'],
+          [],
+          ['Categoría', 'Porcentaje', 'Monto Estimado'],
+          ...datosCategoria.map(row => [
+            row.name,
+            `${row.value}%`,
+            `$${(row.value * 23200).toLocaleString()}`
+          ])
+        ]
+        const wsCategoria = XLSX.utils.aoa_to_sheet(categoriaData)
+        XLSX.utils.book_append_sheet(wb, wsCategoria, 'Por Categoría')
+      }
+
+      // Generar nombre de archivo
+      const fecha = new Date().toISOString().split('T')[0]
+      const nombreArchivo = `reporte_financiero_${periodoSeleccionado}_${fecha}.xlsx`
+
+      // Descargar archivo
+      XLSX.writeFile(wb, nombreArchivo)
+
+      toast({
+        title: "Reporte generado",
+        description: "El reporte se ha descargado exitosamente"
+      })
+    } catch (error) {
+      console.error('Error al generar reporte:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo generar el reporte"
+      })
+    } finally {
+      setGenerandoReporte(false)
+    }
+  }
+
   const estadoColors = {
     completado: "bg-green-100 text-green-800",
     completed: "bg-green-100 text-green-800",
@@ -161,9 +262,22 @@ export default function ReportesDetalladosPage() {
               </SelectContent>
             </Select>
 
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              <FileText className="h-4 w-4 mr-2" />
-              Generar Reporte
+            <Button 
+              className="bg-blue-600 hover:bg-blue-700" 
+              onClick={generarReporteExcel}
+              disabled={generandoReporte || loading}
+            >
+              {generandoReporte ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Generando...
+                </>
+              ) : (
+                <>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Generar Reporte
+                </>
+              )}
             </Button>
           </div>
         </CardContent>
@@ -179,167 +293,235 @@ export default function ReportesDetalladosPage() {
         </TabsList>
 
         <TabsContent value="financiero" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Ingresos Totales</p>
-                    <p className="text-2xl font-bold text-green-600">
-                      ${((metricas?.ingresosTotales || 0) / 1000000).toFixed(2)}M
-                    </p>
-                    <p className={`text-xs ${(metricas?.variacionIngresos || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {(metricas?.variacionIngresos || 0) >= 0 ? '+' : ''}{(metricas?.variacionIngresos || 0).toFixed(1)}% vs período anterior
-                    </p>
-                  </div>
-                  <TrendingUp className="h-8 w-8 text-green-600" />
-                </div>
-              </CardContent>
-            </Card>
+          {loading ? (
+            <>
+              {/* Skeleton para cards de métricas */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4">
+                      <div className="space-y-3">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-8 w-24" />
+                        <Skeleton className="h-3 w-40" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Gastos Totales</p>
-                    <p className="text-2xl font-bold text-red-600">
-                      ${((metricas?.gastosTotales || 0) / 1000000).toFixed(2)}M
-                    </p>
-                    <p className={`text-xs ${(metricas?.variacionGastos || 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {(metricas?.variacionGastos || 0) >= 0 ? '+' : ''}{(metricas?.variacionGastos || 0).toFixed(1)}% vs período anterior
-                    </p>
-                  </div>
-                  <DollarSign className="h-8 w-8 text-red-600" />
-                </div>
-              </CardContent>
-            </Card>
+              {/* Skeleton para gráfico */}
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-6 w-64" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-[300px] w-full" />
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Ingresos Totales</p>
+                        <p className="text-2xl font-bold text-green-600">
+                          ${((metricas?.ingresosTotales || 0) / 1000000).toFixed(2)}M
+                        </p>
+                        <p className={`text-xs ${(metricas?.variacionIngresos || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {(metricas?.variacionIngresos || 0) >= 0 ? '+' : ''}{(metricas?.variacionIngresos || 0).toFixed(1)}% vs período anterior
+                        </p>
+                      </div>
+                      <TrendingUp className="h-8 w-8 text-green-600" />
+                    </div>
+                  </CardContent>
+                </Card>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Utilidad Neta</p>
-                    <p className="text-2xl font-bold text-blue-600">
-                      ${((metricas?.utilidadNeta || 0) / 1000).toFixed(0)}K
-                    </p>
-                    <p className={`text-xs ${(metricas?.variacionUtilidad || 0) >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                      {(metricas?.variacionUtilidad || 0) >= 0 ? '+' : ''}{(metricas?.variacionUtilidad || 0).toFixed(1)}% vs período anterior
-                    </p>
-                  </div>
-                  <TrendingUp className="h-8 w-8 text-blue-600" />
-                </div>
-              </CardContent>
-            </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Gastos Totales</p>
+                        <p className="text-2xl font-bold text-red-600">
+                          ${((metricas?.gastosTotales || 0) / 1000000).toFixed(2)}M
+                        </p>
+                        <p className={`text-xs ${(metricas?.variacionGastos || 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {(metricas?.variacionGastos || 0) >= 0 ? '+' : ''}{(metricas?.variacionGastos || 0).toFixed(1)}% vs período anterior
+                        </p>
+                      </div>
+                      <DollarSign className="h-8 w-8 text-red-600" />
+                    </div>
+                  </CardContent>
+                </Card>
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Margen de Utilidad</p>
-                    <p className="text-2xl font-bold text-purple-600">
-                      {(metricas?.margenUtilidad || 0).toFixed(1)}%
-                    </p>
-                    <p className="text-xs text-purple-600">
-                      Del total de ingresos
-                    </p>
-                  </div>
-                  <AlertCircle className="h-8 w-8 text-purple-600" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Utilidad Neta</p>
+                        <p className="text-2xl font-bold text-blue-600">
+                          ${((metricas?.utilidadNeta || 0) / 1000).toFixed(0)}K
+                        </p>
+                        <p className={`text-xs ${(metricas?.variacionUtilidad || 0) >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                          {(metricas?.variacionUtilidad || 0) >= 0 ? '+' : ''}{(metricas?.variacionUtilidad || 0).toFixed(1)}% vs período anterior
+                        </p>
+                      </div>
+                      <TrendingUp className="h-8 w-8 text-blue-600" />
+                    </div>
+                  </CardContent>
+                </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Análisis de Ingresos vs Gastos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={datosVentas}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="mes" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
-                  <Bar dataKey="ventas" fill="#3B82F6" name="Ingresos" />
-                  <Bar dataKey="gastos" fill="#EF4444" name="Gastos" />
-                  <Bar dataKey="utilidad" fill="#10B981" name="Utilidad" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Margen de Utilidad</p>
+                        <p className="text-2xl font-bold text-purple-600">
+                          {(metricas?.margenUtilidad || 0).toFixed(1)}%
+                        </p>
+                        <p className="text-xs text-purple-600">
+                          Del total de ingresos
+                        </p>
+                      </div>
+                      <AlertCircle className="h-8 w-8 text-purple-600" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Análisis de Ingresos vs Gastos</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={datosVentas}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="mes" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+                      <Bar dataKey="ventas" fill="#3B82F6" name="Ingresos" />
+                      <Bar dataKey="gastos" fill="#EF4444" name="Gastos" />
+                      <Bar dataKey="utilidad" fill="#10B981" name="Utilidad" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="flujo" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Flujo de Efectivo Detallado</CardTitle>
-              <CardDescription>Análisis diario de entradas y salidas de efectivo</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={flujoEfectivo}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="dia" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
-                  <Line type="monotone" dataKey="entrada" stroke="#10B981" name="Entradas" strokeWidth={2} />
-                  <Line type="monotone" dataKey="salida" stroke="#EF4444" name="Salidas" strokeWidth={2} />
-                  <Line type="monotone" dataKey="saldo" stroke="#3B82F6" name="Saldo Acumulado" strokeWidth={3} />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="categorias" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {loading ? (
             <Card>
               <CardHeader>
-                <CardTitle>Distribución de Gastos por Categoría</CardTitle>
+                <Skeleton className="h-6 w-64" />
+                <Skeleton className="h-4 w-96 mt-2" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-[300px] w-full" />
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Flujo de Efectivo Detallado</CardTitle>
+                <CardDescription>Análisis diario de entradas y salidas de efectivo</CardDescription>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={datosCategoria}
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      dataKey="value"
-                      label={({ name, value }) => `${name}: ${value}%`}
-                    >
-                      {datosCategoria.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
+                  <LineChart data={flujoEfectivo}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="dia" />
+                    <YAxis />
+                    <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+                    <Line type="monotone" dataKey="entrada" stroke="#10B981" name="Entradas" strokeWidth={2} />
+                    <Line type="monotone" dataKey="salida" stroke="#EF4444" name="Salidas" strokeWidth={2} />
+                    <Line type="monotone" dataKey="saldo" stroke="#3B82F6" name="Saldo Acumulado" strokeWidth={3} />
+                  </LineChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+          )}
+        </TabsContent>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Análisis por Categoría</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {datosCategoria.map((categoria, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: categoria.color }} />
-                        <span className="font-medium">{categoria.name}</span>
+        <TabsContent value="categorias" className="space-y-4">
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-6 w-64" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-[300px] w-full" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-6 w-48" />
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {[1, 2, 3, 4].map((i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Distribución de Gastos por Categoría</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={datosCategoria}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        dataKey="value"
+                        label={({ name, value }) => `${name}: ${value}%`}
+                      >
+                        {datosCategoria.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Análisis por Categoría</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {datosCategoria.map((categoria, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: categoria.color }} />
+                          <span className="font-medium">{categoria.name}</span>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">{categoria.value}%</p>
+                          <p className="text-sm text-gray-600">${(categoria.value * 23200).toLocaleString()}</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold">{categoria.value}%</p>
-                        <p className="text-sm text-gray-600">${(categoria.value * 23200).toLocaleString()}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="historicos" className="space-y-4">

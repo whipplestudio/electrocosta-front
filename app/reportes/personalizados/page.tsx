@@ -11,8 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, Download, Play, Save, Edit, Trash2, ChevronDown, Settings, FileText } from "lucide-react"
+import { Plus, Download, Play, Save, Edit, Trash2, ChevronDown, Settings, FileText, Loader2 } from "lucide-react"
+import * as XLSX from 'xlsx'
 
 const reportesGuardados = [
   {
@@ -63,7 +63,6 @@ export default function ReportesPersonalizadosPage() {
   const [nombreReporte, setNombreReporte] = useState("")
   const [descripcionReporte, setDescripcionReporte] = useState("")
   const [reportesGuardadosData, setReportesGuardadosData] = useState<any[]>([])
-  const [plantillasData, setPlantillasData] = useState<any[]>([])
   const [filtroFechaDesde, setFiltroFechaDesde] = useState("")
   const [filtroFechaHasta, setFiltroFechaHasta] = useState("")
   const [filtroEstado, setFiltroEstado] = useState("todos")
@@ -72,6 +71,7 @@ export default function ReportesPersonalizadosPage() {
   const [cargando, setCargando] = useState(false)
   const [ejecutando, setEjecutando] = useState(false)
   const [reporteEjecutandoId, setReporteEjecutandoId] = useState<string | null>(null)
+  const [descargando, setDescargando] = useState(false)
 
   const toggleCampo = (campoId: string) => {
     setCamposSeleccionados((prev) =>
@@ -81,7 +81,6 @@ export default function ReportesPersonalizadosPage() {
 
   useEffect(() => {
     cargarReportesGuardados()
-    cargarPlantillas()
   }, [])
 
   const cargarReportesGuardados = async () => {
@@ -117,15 +116,6 @@ export default function ReportesPersonalizadosPage() {
         title: "Error",
         description: "No se pudieron cargar los reportes guardados"
       })
-    }
-  }
-
-  const cargarPlantillas = async () => {
-    try {
-      const data = await customReportsService.getPlantillas()
-      setPlantillasData(data.data || [])
-    } catch (error) {
-      console.error('Error al cargar plantillas:', error)
     }
   }
 
@@ -254,23 +244,100 @@ export default function ReportesPersonalizadosPage() {
     }
   }
 
-  const handleUsarPlantilla = async (templateId: string) => {
-    try {
-      setCargando(true)
-      await customReportsService.crearDesdeTemplate(templateId)
-      toast({
-        title: "Plantilla aplicada",
-        description: "El reporte se ha creado desde la plantilla"
-      })
-      cargarReportesGuardados()
-    } catch (error) {
+  const handleDescargarReporte = async () => {
+    if (camposSeleccionados.length === 0) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "No se pudo crear el reporte desde la plantilla"
+        description: "Debes seleccionar al menos un campo para generar el reporte"
+      })
+      return
+    }
+
+    try {
+      setDescargando(true)
+
+      // Crear un nuevo libro de Excel
+      const wb = XLSX.utils.book_new()
+
+      // Información del reporte
+      const infoData = [
+        ['REPORTE PERSONALIZADO'],
+        ['Nombre:', nombreReporte || 'Reporte sin nombre'],
+        ['Descripción:', descripcionReporte || 'Sin descripción'],
+        ['Fecha de generación:', new Date().toLocaleDateString('es-MX')],
+        [],
+        ['CONFIGURACIÓN'],
+        ['Campos incluidos:', camposSeleccionados.length],
+        ['Filtro fecha desde:', filtroFechaDesde || 'Sin filtro'],
+        ['Filtro fecha hasta:', filtroFechaHasta || 'Sin filtro'],
+        ['Estado:', filtroEstado],
+        ['Agrupación:', agrupacion === 'none' ? 'Sin agrupación' : agrupacion],
+        ['Ordenamiento:', ordenamiento],
+        []
+      ]
+
+      // Crear encabezados basados en campos seleccionados
+      const headers = camposSeleccionados.map(campoId => {
+        const campo = camposDisponibles.find(c => c.id === campoId)
+        return campo?.nombre || campoId
+      })
+
+      // Agregar datos de ejemplo (en producción estos vendrían del backend)
+      const datosEjemplo = [
+        headers,
+        ...Array(10).fill(null).map((_, i) => 
+          camposSeleccionados.map(campoId => {
+            switch(campoId) {
+              case 'cliente': return `Cliente ${i + 1}`
+              case 'factura': return `FAC-2024-${String(i + 1).padStart(4, '0')}`
+              case 'fecha': return new Date(2024, 0, i + 1).toLocaleDateString('es-MX')
+              case 'monto': return `$${(Math.random() * 10000).toFixed(2)}`
+              case 'estado': return ['Pagado', 'Pendiente', 'Vencido'][Math.floor(Math.random() * 3)]
+              case 'vendedor': return `Vendedor ${i + 1}`
+              case 'categoria': return ['Producto A', 'Producto B', 'Servicio C'][Math.floor(Math.random() * 3)]
+              case 'proveedor': return `Proveedor ${i + 1}`
+              case 'fechaVencimiento': return new Date(2024, 0, i + 15).toLocaleDateString('es-MX')
+              case 'diasVencido': return Math.floor(Math.random() * 30)
+              default: return '-'
+            }
+          })
+        )
+      ]
+
+      // Combinar información y datos
+      const reporteCompleto = [...infoData, ['DATOS DEL REPORTE'], [], ...datosEjemplo]
+
+      // Crear hoja
+      const ws = XLSX.utils.aoa_to_sheet(reporteCompleto)
+
+      // Ajustar ancho de columnas
+      const colWidths = headers.map(() => ({ wch: 20 }))
+      ws['!cols'] = colWidths
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Reporte Personalizado')
+
+      // Generar nombre de archivo
+      const nombreArchivo = nombreReporte 
+        ? `${nombreReporte.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
+        : `reporte_personalizado_${new Date().toISOString().split('T')[0]}.xlsx`
+
+      // Descargar archivo
+      XLSX.writeFile(wb, nombreArchivo)
+
+      toast({
+        title: "Reporte descargado",
+        description: "El reporte se ha descargado exitosamente"
+      })
+    } catch (error) {
+      console.error('Error al descargar reporte:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo descargar el reporte"
       })
     } finally {
-      setCargando(false)
+      setDescargando(false)
     }
   }
 
@@ -284,25 +351,12 @@ export default function ReportesPersonalizadosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Reportes Personalizados</h1>
-          <p className="text-muted-foreground">Crea y gestiona reportes adaptados a tus necesidades</p>
-        </div>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          Nuevo Reporte
-        </Button>
+      <div>
+        <h1 className="text-3xl font-bold">Reportes Personalizados</h1>
+        <p className="text-muted-foreground">Crea y gestiona reportes adaptados a tus necesidades</p>
       </div>
 
-      <Tabs defaultValue="crear" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="crear">Crear Reporte</TabsTrigger>
-          <TabsTrigger value="guardados">Reportes Guardados</TabsTrigger>
-          <TabsTrigger value="plantillas">Plantillas</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="crear" className="space-y-6">
+      <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
               <Card>
@@ -415,19 +469,24 @@ export default function ReportesPersonalizadosPage() {
                     </div>
                   </div>
 
-                  {/* Botones de acción */}
+                  {/* Botón de descarga */}
                   <div className="flex gap-3">
-                    <Button onClick={() => handleEjecutarReporte()} disabled={ejecutando}>
-                      <Play className="w-4 h-4 mr-2" />
-                      {ejecutando ? "Ejecutando..." : "Ejecutar Reporte"}
-                    </Button>
-                    <Button variant="outline" onClick={handleGuardarReporte} disabled={cargando}>
-                      <Save className="w-4 h-4 mr-2" />
-                      {cargando ? "Guardando..." : "Guardar Reporte"}
-                    </Button>
-                    <Button variant="outline">
-                      <Download className="w-4 h-4 mr-2" />
-                      Exportar
+                    <Button 
+                      className="bg-green-600 hover:bg-green-700" 
+                      onClick={handleDescargarReporte}
+                      disabled={descargando || camposSeleccionados.length === 0}
+                    >
+                      {descargando ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Descargando...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4 mr-2" />
+                          Descargar Reporte
+                        </>
+                      )}
                     </Button>
                   </div>
                 </CardContent>
@@ -482,200 +541,7 @@ export default function ReportesPersonalizadosPage() {
               </Card>
             </div>
           </div>
-        </TabsContent>
-
-        <TabsContent value="guardados" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Reportes Guardados</CardTitle>
-              <CardDescription>Gestiona tus reportes personalizados guardados</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Descripción</TableHead>
-                    <TableHead>Frecuencia</TableHead>
-                    <TableHead>Última Ejecución</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {reportesGuardadosData.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                        <div className="flex flex-col items-center gap-2">
-                          <FileText className="w-12 h-12 text-gray-300" />
-                          <p className="font-medium">No hay reportes guardados</p>
-                          <p className="text-sm">Crea tu primer reporte personalizado en la pestaña "Crear Reporte"</p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    reportesGuardadosData.map((reporte) => (
-                      <TableRow key={reporte.id}>
-                        <TableCell className="font-medium">{reporte.nombre}</TableCell>
-                        <TableCell>{reporte.descripcion}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{reporte.frecuencia}</Badge>
-                        </TableCell>
-                        <TableCell>{reporte.ultimaEjecucion}</TableCell>
-                        <TableCell>{getEstadoBadge(reporte.estado)}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleEjecutarReporte(reporte.id)} 
-                              disabled={ejecutando || cargando}
-                              title="Ejecutar reporte"
-                              className="hover:text-green-600 hover:bg-green-50"
-                            >
-                              {reporteEjecutandoId === reporte.id ? (
-                                <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
-                              ) : (
-                                <Play className="w-4 h-4" />
-                              )}
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              title="Editar reporte"
-                              disabled={cargando}
-                              className="hover:text-blue-600 hover:bg-blue-50"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              title="Descargar resultados"
-                              disabled={cargando}
-                              className="hover:text-indigo-600 hover:bg-indigo-50"
-                            >
-                              <Download className="w-4 h-4" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleEliminarReporte(reporte.id)} 
-                              disabled={ejecutando || cargando}
-                              title="Eliminar reporte"
-                              className="hover:text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="plantillas" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {plantillasData.map((plantilla) => (
-              <Card key={plantilla.id} className="cursor-pointer hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="text-lg">{plantilla.nombre}</CardTitle>
-                  <CardDescription>{plantilla.descripcion}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex justify-between items-center">
-                    <Badge variant="outline">{plantilla.categoria}</Badge>
-                    <Button size="sm" onClick={() => handleUsarPlantilla(plantilla.id)}>Usar Plantilla</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            {plantillasData.length === 0 && (<>
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader>
-                <CardTitle className="text-lg">Análisis de Ventas</CardTitle>
-                <CardDescription>Reporte completo de ventas por período, vendedor y producto</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex justify-between items-center">
-                  <Badge variant="outline">Ventas</Badge>
-                  <Button size="sm">Usar Plantilla</Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader>
-                <CardTitle className="text-lg">Cartera Vencida</CardTitle>
-                <CardDescription>Análisis detallado de cuentas por cobrar vencidas</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex justify-between items-center">
-                  <Badge variant="outline">Cobranza</Badge>
-                  <Button size="sm">Usar Plantilla</Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader>
-                <CardTitle className="text-lg">Flujo de Caja</CardTitle>
-                <CardDescription>Proyección de ingresos y egresos por período</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex justify-between items-center">
-                  <Badge variant="outline">Tesorería</Badge>
-                  <Button size="sm">Usar Plantilla</Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader>
-                <CardTitle className="text-lg">Rentabilidad por Cliente</CardTitle>
-                <CardDescription>Análisis de margen y rentabilidad por cliente</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex justify-between items-center">
-                  <Badge variant="outline">Análisis</Badge>
-                  <Button size="sm">Usar Plantilla</Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader>
-                <CardTitle className="text-lg">Control de Gastos</CardTitle>
-                <CardDescription>Seguimiento y categorización de gastos operativos</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex justify-between items-center">
-                  <Badge variant="outline">Gastos</Badge>
-                  <Button size="sm">Usar Plantilla</Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader>
-                <CardTitle className="text-lg">Indicadores KPI</CardTitle>
-                <CardDescription>Dashboard de indicadores clave de rendimiento</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex justify-between items-center">
-                  <Badge variant="outline">KPIs</Badge>
-                  <Button size="sm">Usar Plantilla</Button>
-                </div>
-              </CardContent>
-            </Card>
-            </>)}
-          </div>
-        </TabsContent>
-      </Tabs>
+      </div>
     </div>
   )
 }

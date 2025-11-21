@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Upload, Download, Plus, Search, FileText, Loader2, Eye, Edit } from "lucide-react"
+import { Upload, Download, Plus, Search, FileText, Loader2, Eye, Edit, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import anticiposUploadService from "@/services/anticipos-upload.service"
 
@@ -338,6 +338,16 @@ export default function AnticiposPage() {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const reiniciarCargaMasiva = () => {
+    setArchivo(null)
+    setUploadResponse(null)
+    setValidacionResultado(null)
+    setImportacionResultado(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
   }
 
@@ -899,6 +909,64 @@ export default function AnticiposPage() {
                 </Card>
               </div>
 
+              {/* Mostrar errores detallados */}
+              {validacionResultado.errores && validacionResultado.errores.length > 0 && (
+                <Card className="border-red-200 bg-red-50">
+                  <CardHeader>
+                    <CardTitle className="text-red-800 text-base">Errores de Validación</CardTitle>
+                    <CardDescription className="text-red-600">
+                      Corrige los siguientes errores antes de importar
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {validacionResultado.errores.map((error: any, index: number) => (
+                        <div key={index} className="p-3 bg-white border border-red-200 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-red-800">
+                                Fila {error.fila}: {error.campo}
+                              </p>
+                              <p className="text-sm text-red-600 mt-1">
+                                {error.error}
+                              </p>
+                              {error.valor && (
+                                <p className="text-xs text-gray-600 mt-1">
+                                  Valor: {error.valor}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Mostrar advertencias si existen */}
+              {validacionResultado.advertencias && validacionResultado.advertencias.length > 0 && (
+                <Card className="border-yellow-200 bg-yellow-50">
+                  <CardHeader>
+                    <CardTitle className="text-yellow-800 text-base">Advertencias</CardTitle>
+                    <CardDescription className="text-yellow-600">
+                      Información importante sobre el proceso
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {validacionResultado.advertencias.map((advertencia: string, index: number) => (
+                        <div key={index} className="flex items-start gap-2 p-2 bg-white border border-yellow-200 rounded">
+                          <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                          <p className="text-sm text-yellow-800">{advertencia}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {validacionResultado.puedeImportar ? (
                 <div className="flex justify-end">
                   <Button onClick={importarDatos} disabled={loading}>
@@ -913,11 +981,45 @@ export default function AnticiposPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="text-red-600 text-sm">
-                  No se puede importar. Corrija los errores y vuelva a intentar.
-                </div>
+                <Button 
+                  onClick={reiniciarCargaMasiva}
+                  variant="outline" 
+                  className="w-full"
+                >
+                  Corregir y Cargar Nuevo Archivo
+                </Button>
               )}
             </div>
+          )}
+
+          {importacionResultado && (
+            <Card className="border-green-200 bg-green-50">
+              <CardHeader>
+                <CardTitle className="text-green-800 text-base">Importación Exitosa</CardTitle>
+                <CardDescription className="text-green-600">
+                  Los anticipos se han importado correctamente
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 p-3 bg-white border border-green-200 rounded">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-green-800">
+                        {importacionResultado.registrosImportados} anticipo(s) importado(s) exitosamente
+                      </p>
+                    </div>
+                  </div>
+                  <Button 
+                    onClick={reiniciarCargaMasiva}
+                    variant="outline" 
+                    className="w-full"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Cargar Más Anticipos
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </CardContent>
       </Card>

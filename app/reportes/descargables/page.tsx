@@ -13,7 +13,7 @@ import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Download, Settings, Play, Pause, Trash2 } from "lucide-react"
+import { Download, Settings, Play, Pause, Trash2, Loader2 } from "lucide-react"
 
 export default function ReportesDescargablesPage() {
   const { toast } = useToast()
@@ -39,6 +39,9 @@ export default function ReportesDescargablesPage() {
   // Estados para modal de editar reporte programado
   const [mostrarModalEditar, setMostrarModalEditar] = useState(false)
   const [reporteEditando, setReporteEditando] = useState<any>(null)
+  
+  // Estado para descarga en progreso
+  const [descargandoReporteId, setDescargandoReporteId] = useState<string | null>(null)
 
   // Cargar tipos de reporte disponibles
   useEffect(() => {
@@ -215,7 +218,8 @@ export default function ReportesDescargablesPage() {
           params.append('fechaFin', hoy.toISOString().split('T')[0])
         }
 
-        const url = `${process.env.NEXT_PUBLIC_API_URL}/reports/downloadable/export/${endpoint}${params.toString() ? `?${params.toString()}` : ''}`
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
+        const url = `${apiUrl}/reports/downloadable/export/${endpoint}${params.toString() ? `?${params.toString()}` : ''}`
         
         // Descargar con autenticación
         try {
@@ -413,6 +417,8 @@ export default function ReportesDescargablesPage() {
 
   const handleDescargarReporte = async (reporteId: string) => {
     try {
+      setDescargandoReporteId(reporteId)
+      
       // Encontrar el reporte en la lista
       const reporte = reportesGenerados.find(r => r.id === reporteId)
       if (!reporte) {
@@ -424,77 +430,103 @@ export default function ReportesDescargablesPage() {
         return
       }
 
-      // TODO: Registrar la descarga cuando el endpoint esté implementado
-      // await reportsService.registrarDescarga(reporteId)
-
-      // Determinar el endpoint según el tipo de reporte
+      // Determinar el endpoint y nombre de archivo según el tipo de reporte
+      const tipoReporte = reporte.tipos?.[0] || reporte.tipo || 'general'
+      console.log('Reporte completo:', reporte)
+      console.log('Tipo de reporte detectado:', tipoReporte)
+      
       let endpoint = ''
       let fileName = ''
       
-      if (reporte.tipos.includes('cuentas-cobrar')) {
-        endpoint = 'cuentas-cobrar'
-        fileName = 'cuentas_por_cobrar'
-      } else if (reporte.tipos.includes('cuentas-pagar')) {
-        endpoint = 'cuentas-pagar'
-        fileName = 'cuentas_por_pagar'
-      } else if (reporte.tipos.includes('flujo-efectivo')) {
-        endpoint = 'flujo-efectivo'
-        fileName = 'flujo_efectivo'
-      } else if (reporte.tipos.includes('estado-resultados')) {
-        endpoint = 'estado-resultados'
-        fileName = 'estado_resultados'
+      // Mapeo de tipos de reporte a endpoints
+      const tipoToEndpoint: Record<string, { endpoint: string, fileName: string }> = {
+        'cuentas-cobrar': { endpoint: 'cuentas-cobrar', fileName: 'cuentas_por_cobrar' },
+        'cuentas-pagar': { endpoint: 'cuentas-pagar', fileName: 'cuentas_por_pagar' },
+        'flujo-efectivo': { endpoint: 'flujo-efectivo', fileName: 'flujo_efectivo' },
+        'estado-resultados': { endpoint: 'estado-resultados', fileName: 'estado_resultados' },
+        'gastos': { endpoint: 'estado-resultados', fileName: 'estado_resultados' }, // Mapear gastos a estado-resultados
+        'ingresos': { endpoint: 'flujo-efectivo', fileName: 'flujo_efectivo' },
       }
+      
+      const mapping = tipoToEndpoint[tipoReporte]
+      
+      if (mapping) {
+        endpoint = mapping.endpoint
+        fileName = mapping.fileName
+      } else {
+        // Si no se encuentra en el mapeo, usar el tipo directamente
+        endpoint = tipoReporte
+        fileName = tipoReporte.replace(/-/g, '_')
+      }
+      
+      console.log('Endpoint a usar:', endpoint)
+      console.log('Nombre de archivo:', fileName)
 
-      if (endpoint) {
-        const token = localStorage.getItem('accessToken')
-        
-        if (!token) {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "No se encontró el token de autenticación. Por favor, inicia sesión nuevamente."
-          })
-          return
-        }
-        
-        const url = `${process.env.NEXT_PUBLIC_API_URL}/reports/downloadable/export/${endpoint}`
-
-        // Descargar con autenticación
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error('Error al descargar el reporte')
-        }
-
-        const blob = await response.blob()
-        const downloadUrl = window.URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = downloadUrl
-        link.download = `${fileName}_${new Date().getTime()}.xlsx`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        window.URL.revokeObjectURL(downloadUrl)
-
+      const token = localStorage.getItem('accessToken')
+      
+      if (!token) {
         toast({
-          title: "Descarga completada",
-          description: `Se ha descargado ${reporte.nombre}`
+          variant: "destructive",
+          title: "Error de autenticación",
+          description: "Por favor, inicia sesión nuevamente."
         })
-
-        // Recargar la lista para actualizar contador de descargas
-        setTimeout(() => cargarReportesGenerados(), 1000)
+        return
       }
-    } catch (error) {
+      
+      // Construir URL con parámetros si existen
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
+      const url = `${apiUrl}/reports/downloadable/export/${endpoint}`
+
+      // Descargar con autenticación
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Error response:', errorText)
+        throw new Error(`Error ${response.status}: ${response.statusText}`)
+      }
+
+      // Obtener el tipo de contenido y extensión
+      const contentType = response.headers.get('content-type')
+      let extension = 'xlsx'
+      if (contentType?.includes('pdf')) {
+        extension = 'pdf'
+      } else if (contentType?.includes('csv')) {
+        extension = 'csv'
+      }
+
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = `${fileName}_${new Date().toISOString().split('T')[0]}.${extension}`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+
+      toast({
+        title: "Descarga completada",
+        description: `El reporte "${reporte.nombre}" se ha descargado exitosamente`
+      })
+
+      // Recargar la lista para actualizar contador de descargas
+      setTimeout(() => cargarReportesGenerados(), 1000)
+      
+    } catch (error: any) {
+      console.error('Error al descargar reporte:', error)
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "No se pudo descargar el reporte"
+        title: "Error al descargar",
+        description: error.message || "No se pudo descargar el reporte. Por favor, intenta nuevamente."
       })
+    } finally {
+      setDescargandoReporteId(null)
     }
   }
 
@@ -712,14 +744,29 @@ export default function ReportesDescargablesPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {reporte.estado === "disponible" ? (
+                    {reporte.estado === "disponible" || reporte.estado === "completado" ? (
                       <Button 
                         size="sm" 
                         className="bg-green-600 hover:bg-green-700"
                         onClick={() => handleDescargarReporte(reporte.id)}
+                        disabled={descargandoReporteId === reporte.id}
                       >
-                        <Download className="h-4 w-4 mr-1" />
-                        Descargar
+                        {descargandoReporteId === reporte.id ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            Descargando...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4 mr-1" />
+                            Descargar
+                          </>
+                        )}
+                      </Button>
+                    ) : reporte.estado === "procesando" ? (
+                      <Button size="sm" variant="outline" disabled>
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        Procesando...
                       </Button>
                     ) : (
                       <Button size="sm" variant="outline" disabled>

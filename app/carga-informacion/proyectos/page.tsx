@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Upload, Download, Plus, Search, FileText, Calendar, Loader2, Eye, Edit } from "lucide-react"
+import { Upload, Download, Plus, Search, FileText, Calendar, Loader2, Eye, Edit, AlertCircle } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { Label } from "@/components/ui/label"
 import { projectsUploadService, type CrearProyectoData } from "@/services/projects-upload.service"
@@ -612,7 +612,7 @@ export default function ProyectosPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              {proyectos.filter((p) => p.estado === "En Progreso").length}
+              {proyectosFormateados.filter((p) => p.estado === "En Progreso").length}
             </div>
             <p className="text-xs text-muted-foreground">Activos</p>
           </CardContent>
@@ -623,7 +623,7 @@ export default function ProyectosPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {proyectos.filter((p) => p.estado === "Completado").length}
+              {proyectosFormateados.filter((p) => p.estado === "Completado").length}
             </div>
             <p className="text-xs text-muted-foreground">Finalizados</p>
           </CardContent>
@@ -634,7 +634,9 @@ export default function ProyectosPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-purple-600">
-              {Math.round(proyectos.reduce((sum, p) => sum + p.avance, 0) / proyectos.length)}%
+              {proyectosFormateados.length > 0 
+                ? Math.round(proyectosFormateados.reduce((sum, p) => sum + p.avance, 0) / proyectosFormateados.length)
+                : 0}%
             </div>
             <p className="text-xs text-muted-foreground">General</p>
           </CardContent>
@@ -682,7 +684,7 @@ export default function ProyectosPage() {
           )}
 
           {validacionResultado && !importacionResultado && (
-            <div className="space-y-2">
+            <div className="space-y-4">
               <div className="p-4 bg-green-50 rounded-lg">
                 <p className="text-sm font-medium text-green-800">
                   ✓ {validacionResultado.registrosValidos} registros válidos
@@ -693,7 +695,66 @@ export default function ProyectosPage() {
                   </p>
                 )}
               </div>
-              {validacionResultado.puedeImportar && (
+
+              {/* Mostrar errores detallados */}
+              {validacionResultado.errores && validacionResultado.errores.length > 0 && (
+                <Card className="border-red-200 bg-red-50">
+                  <CardHeader>
+                    <CardTitle className="text-red-800 text-base">Errores de Validación</CardTitle>
+                    <CardDescription className="text-red-600">
+                      Corrige los siguientes errores antes de importar
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {validacionResultado.errores.map((error: any, index: number) => (
+                        <div key={index} className="p-3 bg-white border border-red-200 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-red-800">
+                                Fila {error.fila}: {error.campo}
+                              </p>
+                              <p className="text-sm text-red-600 mt-1">
+                                {error.error}
+                              </p>
+                              {error.valor && (
+                                <p className="text-xs text-gray-600 mt-1">
+                                  Valor: {error.valor}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Mostrar advertencias si existen */}
+              {validacionResultado.advertencias && validacionResultado.advertencias.length > 0 && (
+                <Card className="border-yellow-200 bg-yellow-50">
+                  <CardHeader>
+                    <CardTitle className="text-yellow-800 text-base">Advertencias</CardTitle>
+                    <CardDescription className="text-yellow-600">
+                      Información importante sobre el proceso
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {validacionResultado.advertencias.map((advertencia: string, index: number) => (
+                        <div key={index} className="flex items-start gap-2 p-2 bg-white border border-yellow-200 rounded">
+                          <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                          <p className="text-sm text-yellow-800">{advertencia}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {validacionResultado.puedeImportar ? (
                 <Button onClick={importarDatos} disabled={loading} className="w-full">
                   {loading ? (
                     <>
@@ -703,6 +764,19 @@ export default function ProyectosPage() {
                   ) : (
                     "Confirmar e Importar"
                   )}
+                </Button>
+              ) : (
+                <Button 
+                  onClick={() => {
+                    setArchivo(null)
+                    setUploadResponse(null)
+                    setValidacionResultado(null)
+                    if (fileInputRef.current) fileInputRef.current.value = ''
+                  }} 
+                  variant="outline" 
+                  className="w-full"
+                >
+                  Corregir y Cargar Nuevo Archivo
                 </Button>
               )}
             </div>

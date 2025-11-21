@@ -643,6 +643,7 @@ function UsuariosPageContent() {
                                     )
                                     const permissionKey = `${role.id}-${permission.code}`
                                     const isUpdating = updatingPermission === permissionKey
+                                    const isSuperAdmin = role.name === 'super_admin'
 
                                     return (
                                       <div key={role.id} className="w-24 flex justify-center items-center">
@@ -651,10 +652,11 @@ function UsuariosPageContent() {
                                         ) : (
                                           <Switch
                                             checked={isChecked}
-                                            disabled={updatingPermission !== null}
+                                            disabled={updatingPermission !== null || isSuperAdmin}
                                             onCheckedChange={(checked) => {
                                               handleTogglePermission(role.id, permission.code, checked)
                                             }}
+                                            className={isSuperAdmin ? "opacity-50 cursor-not-allowed" : ""}
                                           />
                                         )}
                                       </div>

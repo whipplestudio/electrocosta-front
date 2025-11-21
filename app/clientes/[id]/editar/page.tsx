@@ -1,26 +1,25 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Save, ArrowLeft, Building, MapPin, CreditCard, Upload, FileSpreadsheet, Loader2, Download } from "lucide-react"
+import { Save, ArrowLeft, Building, MapPin, CreditCard, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { clientsService, CreateClientDto } from "@/services/clients.service"
 import { useToast } from "@/hooks/use-toast"
 
-export default function NuevoClientePage() {
+export default function EditarClientePage() {
   const router = useRouter()
+  const params = useParams()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
-  const [uploadingFile, setUploadingFile] = useState(false)
+  const [loadingData, setLoadingData] = useState(true)
   
   const [formData, setFormData] = useState({
     razonSocial: "",
@@ -36,6 +35,45 @@ export default function NuevoClientePage() {
     contacto: "",
     notas: "",
   })
+
+  // Cargar datos del cliente
+  useEffect(() => {
+    const loadClient = async () => {
+      try {
+        setLoadingData(true)
+        const id = params.id as string
+        const client = await clientsService.getById(id)
+        
+        setFormData({
+          razonSocial: client.name,
+          rfc: client.taxId,
+          email: client.email || "",
+          telefono: client.phone || "",
+          direccion: client.address || "",
+          ciudad: client.city || "",
+          estado: client.state || "",
+          codigoPostal: client.zipCode || "",
+          limiteCredito: client.creditLimit?.toString() || "",
+          diasCredito: client.paymentTerms?.toString() || "",
+          contacto: client.contactPerson || "",
+          notas: client.notes || "",
+        })
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "No se pudo cargar la información del cliente",
+          variant: "destructive",
+        })
+        router.push('/clientes')
+      } finally {
+        setLoadingData(false)
+      }
+    }
+
+    if (params.id) {
+      loadClient()
+    }
+  }, [params.id, router, toast])
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -63,18 +101,19 @@ export default function NuevoClientePage() {
         status: 'active',
       }
 
-      await clientsService.create(clientData)
+      const id = params.id as string
+      await clientsService.update(id, clientData)
       
       toast({
-        title: "✅ Cliente creado",
-        description: "El cliente ha sido registrado exitosamente",
+        title: "✅ Cliente actualizado",
+        description: "Los cambios han sido guardados exitosamente",
       })
 
-      router.push('/clientes')
+      router.push(`/clientes/${id}`)
     } catch (error) {
       toast({
         title: "❌ Error",
-        description: error instanceof Error ? error.message : "No se pudo crear el cliente",
+        description: error instanceof Error ? error.message : "No se pudo actualizar el cliente",
         variant: "destructive",
       })
     } finally {
@@ -82,60 +121,12 @@ export default function NuevoClientePage() {
     }
   }
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    try {
-      setUploadingFile(true)
-
-      const result = await clientsService.bulkUpload(file)
-      
-      toast({
-        title: "✅ Carga completada",
-        description: `${result.success} clientes creados. ${result.failed} errores.`,
-      })
-
-      if (result.errors.length > 0) {
-        console.error('Errores de carga:', result.errors)
-      }
-
-      router.push('/clientes')
-    } catch (error) {
-      toast({
-        title: "❌ Error",
-        description: error instanceof Error ? error.message : "No se pudo cargar el archivo",
-        variant: "destructive",
-      })
-    } finally {
-      setUploadingFile(false)
-      e.target.value = ''
-    }
-  }
-
-  const descargarPlantilla = async () => {
-    try {
-      const blob = await clientsService.descargarPlantilla()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = 'plantilla_clientes.xlsx'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-      
-      toast({
-        title: "Plantilla descargada",
-        description: "La plantilla se ha descargado exitosamente"
-      })
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "No se pudo descargar la plantilla"
-      })
-    }
+  if (loadingData) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
   return (
@@ -143,54 +134,21 @@ export default function NuevoClientePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/clientes">
+          <Link href={`/clientes/${params.id}`}>
             <Button variant="outline" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Volver
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold">Nuevo Cliente</h1>
-            <p className="text-muted-foreground">Registrar un nuevo cliente en el sistema</p>
+            <h1 className="text-2xl font-bold">Editar Cliente</h1>
+            <p className="text-muted-foreground">Actualizar información del cliente</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={descargarPlantilla}
-          >
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
-            Plantilla Excel
-          </Button>
-          <div className="relative">
-            <input
-              type="file"
-              id="file-upload"
-              className="hidden"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleFileUpload}
-              disabled={uploadingFile}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => document.getElementById('file-upload')?.click()}
-              disabled={uploadingFile}
-            >
-              {uploadingFile ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Upload className="h-4 w-4 mr-2" />
-              )}
-              Cargar Excel
-            </Button>
-          </div>
-          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-            <Building className="h-3 w-3 mr-1" />
-            Registro
-          </Badge>
-        </div>
+        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+          <Building className="h-3 w-3 mr-1" />
+          Edición
+        </Badge>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -356,7 +314,7 @@ export default function NuevoClientePage() {
 
         {/* Botones de Acción */}
         <div className="flex justify-end gap-4">
-          <Link href="/clientes">
+          <Link href={`/clientes/${params.id}`}>
             <Button variant="outline" disabled={loading}>Cancelar</Button>
           </Link>
           <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={loading}>
@@ -368,7 +326,7 @@ export default function NuevoClientePage() {
             ) : (
               <>
                 <Save className="h-4 w-4 mr-2" />
-                Guardar Cliente
+                Guardar Cambios
               </>
             )}
           </Button>

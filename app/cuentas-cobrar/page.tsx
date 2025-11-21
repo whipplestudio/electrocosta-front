@@ -119,11 +119,11 @@ function CuentasCobrarPageContent() {
   const loadClientsAndCategories = async () => {
     setLoadingSelects(true)
     try {
-      const [clientsData, categoriesData] = await Promise.all([
+      const [clientsResponse, categoriesData] = await Promise.all([
         clientsService.list(),
         categoriesService.list(),
       ])
-      setClients(clientsData)
+      setClients(clientsResponse.data) // Extraer el array de data
       setCategories(categoriesData.filter(cat => cat.type === 'income')) // Solo categorías de ingresos
     } catch (error) {
       console.error('Error al cargar clientes y categorías:', error)

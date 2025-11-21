@@ -13,6 +13,7 @@ import {
   Upload,
   Download,
   LogOut,
+  Users,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -29,8 +30,30 @@ const menuItems = [
     href: "/usuarios",
     requiredPermissionCodes: ["usuarios.usuarios.ver"],
     submenu: [
-      { title: "Gestión de Usuarios", href: "/usuarios" },
+      { 
+        title: "Gestión de Usuarios", 
+        href: "/usuarios",
+        requiredPermissionCodes: ["usuarios.usuarios.ver"]
+      },
       // { title: "Roles y Permisos", href: "/usuarios/roles" }, // Comentado temporalmente - se usará en el futuro
+    ],
+  },
+  {
+    title: "Clientes",
+    icon: Users,
+    href: "/clientes",
+    requiredPermissionCodes: ["clientes.clientes.listar", "clientes.clientes.leer"],
+    submenu: [
+      { 
+        title: "Gestión de Clientes", 
+        href: "/clientes",
+        requiredPermissionCodes: ["clientes.clientes.listar"]
+      },
+      { 
+        title: "Nuevo Cliente", 
+        href: "/clientes/nuevo",
+        requiredPermissionCodes: ["clientes.clientes.crear"]
+      },
     ],
   },
   {
@@ -39,10 +62,26 @@ const menuItems = [
     href: "/cuentas-cobrar",
     requiredPermissionCodes: ["cuentas_cobrar.registro.ver"],
     submenu: [
-      { title: "Registro", href: "/cuentas-cobrar" },
-      { title: "Seguimiento", href: "/cuentas-cobrar/seguimiento" },
-      { title: "Aplicación de Pagos", href: "/cuentas-cobrar/pagos" },
-      { title: "Reportes", href: "/cuentas-cobrar/reportes" },
+      { 
+        title: "Registro", 
+        href: "/cuentas-cobrar",
+        requiredPermissionCodes: ["cuentas_cobrar.cuentas.leer"]
+      },
+      { 
+        title: "Seguimiento", 
+        href: "/cuentas-cobrar/seguimiento",
+        requiredPermissionCodes: ["cuentas_cobrar.cuentas.leer"]
+      },
+      { 
+        title: "Aplicación de Pagos", 
+        href: "/cuentas-cobrar/pagos",
+        requiredPermissionCodes: ["cuentas_cobrar.cuentas.actualizar"]
+      },
+      { 
+        title: "Reportes", 
+        href: "/cuentas-cobrar/reportes",
+        requiredPermissionCodes: ["reportes.reportes.leer"]
+      },
     ],
   },
   {
@@ -51,11 +90,31 @@ const menuItems = [
     href: "/cuentas-pagar",
     requiredPermissionCodes: ["cuentas_pagar.registro.ver"],
     submenu: [
-      { title: "Registro", href: "/cuentas-pagar" },
-      { title: "Programación", href: "/cuentas-pagar/programacion" },
-      { title: "Aprobación", href: "/cuentas-pagar/aprobacion" },
-      { title: "Pagos", href: "/cuentas-pagar/pagos" },
-      { title: "Reportes de Vencimientos", href: "/cuentas-pagar/reportes" },
+      { 
+        title: "Registro", 
+        href: "/cuentas-pagar",
+        requiredPermissionCodes: ["cuentas_pagar.cuentas.leer"]
+      },
+      { 
+        title: "Programación", 
+        href: "/cuentas-pagar/programacion",
+        requiredPermissionCodes: ["cuentas_pagar.cuentas.leer"]
+      },
+      { 
+        title: "Aprobación", 
+        href: "/cuentas-pagar/aprobacion",
+        requiredPermissionCodes: ["cuentas_pagar.cuentas.actualizar"]
+      },
+      { 
+        title: "Pagos", 
+        href: "/cuentas-pagar/pagos",
+        requiredPermissionCodes: ["cuentas_pagar.cuentas.actualizar"]
+      },
+      { 
+        title: "Reportes de Vencimientos", 
+        href: "/cuentas-pagar/reportes",
+        requiredPermissionCodes: ["reportes.reportes.leer"]
+      },
     ],
   },
   {
@@ -64,10 +123,26 @@ const menuItems = [
     href: "/carga-informacion",
     requiredPermissionCodes: ["carga_informacion.modulo.acceder"],
     submenu: [
-      { title: "Ventas", href: "/carga-informacion/ventas" },
-      { title: "Gastos", href: "/carga-informacion/gastos" },
-      { title: "Proyectos", href: "/carga-informacion/proyectos" },
-      { title: "Anticipos", href: "/carga-informacion/anticipos" },
+      { 
+        title: "Ventas", 
+        href: "/carga-informacion/ventas",
+        requiredPermissionCodes: ["carga_informacion.ventas.cargar"]
+      },
+      { 
+        title: "Gastos", 
+        href: "/carga-informacion/gastos",
+        requiredPermissionCodes: ["carga_informacion.gastos.cargar"]
+      },
+      { 
+        title: "Proyectos", 
+        href: "/carga-informacion/proyectos",
+        requiredPermissionCodes: ["carga_informacion.proyectos.cargar"]
+      },
+      { 
+        title: "Anticipos", 
+        href: "/carga-informacion/anticipos",
+        requiredPermissionCodes: ["carga_informacion.anticipos.cargar"]
+      },
     ],
   },
   {
@@ -76,9 +151,21 @@ const menuItems = [
     href: "/reportes",
     requiredPermissionCodes: ["reportes.detallados.ver"],
     submenu: [
-      { title: "Detallados", href: "/reportes/detallados" },
-      { title: "Descargables", href: "/reportes/descargables" },
-      { title: "Personalizados", href: "/reportes/personalizados" },
+      { 
+        title: "Detallados", 
+        href: "/reportes/detallados",
+        requiredPermissionCodes: ["reportes.reportes.leer"]
+      },
+      { 
+        title: "Descargables", 
+        href: "/reportes/descargables",
+        requiredPermissionCodes: ["reportes.reportes.crear"]
+      },
+      { 
+        title: "Personalizados", 
+        href: "/reportes/personalizados",
+        requiredPermissionCodes: ["reportes.reportes.crear"]
+      },
     ],
   },
 ]
@@ -99,6 +186,7 @@ export function AppSidebar({ className }: SidebarProps) {
       .getMyPermissionCodes()
       .then((codes) => {
         if (isMounted) {
+          console.log('🔑 Permisos del usuario cargados:', codes)
           setUserPermissionCodes(codes)
           setPermissionsLoading(false)
         }
@@ -138,6 +226,16 @@ export function AppSidebar({ className }: SidebarProps) {
     
     // Verificar si el usuario tiene al menos uno de los permisos requeridos
     return requiredCodes.some((code) => userPermissionCodes.includes(code))
+  }
+
+  // Nueva función: Verifica si el usuario tiene acceso a CUALQUIER submenú del módulo
+  const hasAnySubmenuAccess = (submenu?: Array<{ requiredPermissionCodes?: string[] }>) => {
+    if (!submenu || submenu.length === 0) return false
+    if (permissionsLoading) return false
+    
+    return submenu.some((subitem) => 
+      hasModuleAccess((subitem as any).requiredPermissionCodes)
+    )
   }
 
   const handleLogout = () => {
@@ -181,7 +279,11 @@ export function AppSidebar({ className }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
         {menuItems.map((item) => {
-          if (!hasModuleAccess(item.requiredPermissionCodes)) {
+          // Verificar si tiene acceso directo al módulo O a algún submenú
+          const hasDirectAccess = hasModuleAccess(item.requiredPermissionCodes)
+          const hasSubmenuAccess = hasAnySubmenuAccess(item.submenu as any)
+          
+          if (!hasDirectAccess && !hasSubmenuAccess) {
             return null
           }
 
@@ -216,17 +318,19 @@ export function AppSidebar({ className }: SidebarProps) {
 
               {hasSubmenu && !collapsed && isExpanded && (
                 <div className="ml-6 mt-1 space-y-1">
-                  {item.submenu?.map((subitem) => (
-                    <Link key={subitem.href} href={subitem.href}>
-                      <Button
-                        variant={pathname === subitem.href ? "secondary" : "ghost"}
-                        size="sm"
-                        className="w-full justify-start h-8 text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        {subitem.title}
-                      </Button>
-                    </Link>
-                  ))}
+                  {item.submenu
+                    ?.filter((subitem) => hasModuleAccess((subitem as any).requiredPermissionCodes))
+                    .map((subitem) => (
+                      <Link key={subitem.href} href={subitem.href}>
+                        <Button
+                          variant={pathname === subitem.href ? "secondary" : "ghost"}
+                          size="sm"
+                          className="w-full justify-start h-8 text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          {subitem.title}
+                        </Button>
+                      </Link>
+                    ))}
                 </div>
               )}
             </div>

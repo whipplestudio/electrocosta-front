@@ -16,13 +16,33 @@ const ROUTE_PERMISSIONS: RoutePermissionMap[] = [
     name: 'Usuarios y Roles',
   },
   {
+    path: '/clientes',
+    requiredPermissions: ['clientes.clientes.listar', 'clientes.clientes.leer'],
+    name: 'Clientes',
+  },
+  {
+    path: '/clientes/nuevo',
+    requiredPermissions: ['clientes.clientes.crear'],
+    name: 'Nuevo Cliente',
+  },
+  {
+    path: '/clientes/:id',
+    requiredPermissions: ['clientes.clientes.leer', 'clientes.clientes.listar'],
+    name: 'Detalle Cliente',
+  },
+  {
+    path: '/clientes/:id/editar',
+    requiredPermissions: ['clientes.clientes.actualizar'],
+    name: 'Editar Cliente',
+  },
+  {
     path: '/cuentas-cobrar',
-    requiredPermissions: ['cuentas_cobrar.registro.ver'],
+    requiredPermissions: ['cuentas_cobrar.registro.ver', 'cuentas_cobrar.cuentas.leer'],
     name: 'Cuentas por Cobrar',
   },
   {
     path: '/cuentas-pagar',
-    requiredPermissions: ['cuentas_pagar.registro.ver'],
+    requiredPermissions: ['cuentas_pagar.registro.ver', 'cuentas_pagar.cuentas.leer'],
     name: 'Cuentas por Pagar',
   },
   {
@@ -31,8 +51,28 @@ const ROUTE_PERMISSIONS: RoutePermissionMap[] = [
     name: 'Área de Carga',
   },
   {
+    path: '/carga-informacion/ventas',
+    requiredPermissions: ['carga_informacion.ventas.cargar'],
+    name: 'Área de Carga - Ventas',
+  },
+  {
+    path: '/carga-informacion/gastos',
+    requiredPermissions: ['carga_informacion.gastos.cargar'],
+    name: 'Área de Carga - Gastos',
+  },
+  {
+    path: '/carga-informacion/proyectos',
+    requiredPermissions: ['carga_informacion.proyectos.cargar'],
+    name: 'Área de Carga - Proyectos',
+  },
+  {
+    path: '/carga-informacion/anticipos',
+    requiredPermissions: ['carga_informacion.anticipos.cargar'],
+    name: 'Área de Carga - Anticipos',
+  },
+  {
     path: '/reportes',
-    requiredPermissions: ['reportes.detallados.ver'],
+    requiredPermissions: ['reportes.detallados.ver', 'reportes.reportes.leer'],
     name: 'Reportes',
   },
 ]

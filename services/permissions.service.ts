@@ -35,4 +35,21 @@ export const permissionsService = {
       throw new Error(handleApiError(error));
     }
   },
+
+  // Permisos efectivos del usuario autenticado (solo codes)
+  async getMyPermissionCodes(): Promise<string[]> {
+    try {
+      const response = await apiClient.get<{
+        usuario_id: string;
+        rol: string;
+        permisos: { codigo: string; nombre: string; modulo: string }[];
+        permisos_agrupados: Record<string, string[]>;
+      }>('/permisos/usuario/me/permisos');
+
+      const permisos = response.data.permisos || [];
+      return permisos.map((p) => p.codigo);
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
 };

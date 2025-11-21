@@ -18,30 +18,30 @@ import {
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Plus, Edit, Trash2, Shield, Users, Key, Loader2 } from "lucide-react"
 import { usersService } from "@/services/users.service"
 import { rolesService } from "@/services/roles.service"
+import { permissionsService, type Permission } from "@/services/permissions.service"
 import { useToast } from "@/hooks/use-toast"
 import type { User, Role, UserStatus, CreateUserDto, UpdateUserDto } from "@/types/users"
+import { RouteProtection } from "@/components/route-protection"
 
-const availablePermissions = [
-  { id: "dashboard", name: "Dashboard Ejecutivo" },
-  { id: "cuentas_cobrar", name: "Cuentas por Cobrar" },
-  { id: "cuentas_pagar", name: "Cuentas por Pagar" },
-  { id: "carga_informacion", name: "Carga de Información" },
-  { id: "reportes", name: "Reportes" },
-  { id: "facturas", name: "Facturas" },
-  { id: "clientes", name: "Clientes" },
-  { id: "proveedores", name: "Proveedores" },
-  { id: "tesoreria", name: "Tesorería" },
-  { id: "usuarios", name: "Usuarios y Accesos" },
-  { id: "configuracion", name: "Configuración" },
-]
+// Los permisos ahora se cargan dinámicamente desde la API
 
 export default function UsuariosPage() {
+  return (
+    <RouteProtection requiredPermissions={["usuarios.usuarios.ver"]}>
+      <UsuariosPageContent />
+    </RouteProtection>
+  )
+}
+
+function UsuariosPageContent() {
   const { toast } = useToast()
   const [users, setUsers] = useState<User[]>([])
   const [roles, setRoles] = useState<Role[]>([])
+  const [permissions, setPermissions] = useState<Permission[]>([])
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false)
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
@@ -54,11 +54,13 @@ export default function UsuariosPage() {
   const [filterStatus, setFilterStatus] = useState<UserStatus | "all">("all")
   const [formData, setFormData] = useState<Partial<CreateUserDto>>({})
   const [roleFormData, setRoleFormData] = useState<{name?: string; description?: string; level?: number; permissions?: string[]}>({ permissions: [] })
+  const [updatingPermission, setUpdatingPermission] = useState<string | null>(null) // Para trackear roleId-permissionCode siendo actualizado
 
   // Cargar datos iniciales
   useEffect(() => {
     loadUsers()
     loadRoles()
+    loadPermissions()
   }, [])
 
   const loadUsers = async () => {
@@ -91,6 +93,126 @@ export default function UsuariosPage() {
         description: error instanceof Error ? error.message : "Error al cargar roles",
         variant: "destructive",
       })
+    }
+  }
+
+  const loadPermissions = async () => {
+    try {
+      const data = await permissionsService.getAll()
+      // Ordenar por módulo, recurso y acción para mejor visualización
+      const sorted = data.sort((a, b) => {
+        if (a.module !== b.module) return a.module.localeCompare(b.module)
+        if (a.resource !== b.resource) return a.resource.localeCompare(b.resource)
+        return a.action.localeCompare(b.action)
+      })
+      setPermissions(sorted)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Error al cargar permisos",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Agrupar permisos por módulo y recurso
+  const groupedPermissions = permissions.reduce((acc, permission) => {
+    if (!acc[permission.module]) {
+      acc[permission.module] = {}
+    }
+    if (!acc[permission.module][permission.resource]) {
+      acc[permission.module][permission.resource] = []
+    }
+    acc[permission.module][permission.resource].push(permission)
+    return acc
+  }, {} as Record<string, Record<string, Permission[]>>)
+
+  // Nombres legibles para los módulos
+  const moduleNames: Record<string, string> = {
+    usuarios: "Usuarios y Roles",
+    cuentas_cobrar: "Cuentas por Cobrar",
+    cuentas_pagar: "Cuentas por Pagar",
+    reportes: "Reportes",
+    dashboard: "Dashboard",
+    carga_informacion: "Área de Carga",
+  }
+
+  // Nombres legibles para los recursos
+  const resourceNames: Record<string, string> = {
+    usuarios: "Usuarios",
+    roles: "Roles",
+    permisos: "Permisos",
+    registro: "Registro",
+    seguimiento: "Seguimiento",
+    pagos: "Aplicación de Pagos",
+    programacion: "Programación",
+    aprobacion: "Aprobación",
+    reportes: "Reportes",
+    detallados: "Reportes Detallados",
+    descargables: "Reportes Descargables",
+    personalizados: "Reportes Personalizados",
+    general: "Dashboard General",
+    financiero: "Dashboard Financiero",
+    modulo: "Acceso al Módulo",
+    ventas: "Ventas",
+    gastos: "Gastos",
+    proyectos: "Proyectos",
+    anticipos: "Anticipos",
+  }
+
+  // Nombres legibles para las acciones
+  const actionNames: Record<string, string> = {
+    ver: "Ver",
+    crear: "Crear",
+    editar: "Editar",
+    eliminar: "Eliminar",
+    asignar: "Asignar",
+    aplicar: "Aplicar",
+    generar: "Generar",
+    descargar: "Descargar",
+    programar: "Programar",
+    aprobar: "Aprobar",
+    acceder: "Acceder",
+  }
+
+  const handleTogglePermission = async (roleId: string, permissionCode: string, checked: boolean) => {
+    const permissionKey = `${roleId}-${permissionCode}`
+    
+    try {
+      setUpdatingPermission(permissionKey)
+      
+      const role = roles.find((r) => r.id === roleId)
+      if (!role) return
+
+      // Trabajar con codes directamente; el backend acepta IDs o codes y los resuelve
+      const currentPermissionCodes = (role.permissions || []).map((p: any) => p.code)
+
+      let newPermissionCodes: string[]
+      if (checked) {
+        // Asignar permiso
+        if (currentPermissionCodes.includes(permissionCode)) {
+          return
+        }
+        newPermissionCodes = [...currentPermissionCodes, permissionCode]
+      } else {
+        // Revocar permiso
+        newPermissionCodes = currentPermissionCodes.filter((code) => code !== permissionCode)
+      }
+
+      await rolesService.assignPermissions(roleId, newPermissionCodes)
+      toast({
+        title: "Permiso actualizado",
+        description: checked ? "Permiso asignado correctamente" : "Permiso revocado correctamente",
+      })
+      await loadRoles()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Error al actualizar permiso",
+        variant: "destructive",
+      })
+    } finally {
+      setUpdatingPermission(null)
     }
   }
 
@@ -473,38 +595,81 @@ export default function UsuariosPage() {
           <Card>
             <CardHeader>
               <CardTitle>Matriz de Permisos</CardTitle>
-              <CardDescription>Visualiza y gestiona los permisos por rol</CardDescription>
+              <CardDescription>Gestiona los permisos por rol organizados por módulos</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-2">Módulo</th>
-                      {roles.map((role) => (
-                        <th key={role.id} className="text-center p-2 min-w-24">
-                          {role.name}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {availablePermissions.map((permission) => (
-                      <tr key={permission.id} className="border-b">
-                        <td className="p-2 font-medium">{permission.name}</td>
-                        {roles.map((role) => (
-                          <td key={role.id} className="text-center p-2">
-                            <Switch
-                              checked={false}
-                              disabled={true}
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* Encabezado de roles */}
+              <div className="mb-4 flex gap-2 items-center">
+                <div className="flex-1 font-semibold text-sm">Permiso</div>
+                {roles.map((role) => (
+                  <div key={role.id} className="w-24 text-center">
+                    <Badge variant="outline" className="text-xs">
+                      {role.name}
+                    </Badge>
+                  </div>
+                ))}
               </div>
+
+              {/* Acordeones por módulo */}
+              <Accordion type="multiple" className="w-full">
+                {Object.entries(groupedPermissions).map(([module, resources]) => (
+                  <AccordionItem key={module} value={module}>
+                    <AccordionTrigger className="hover:no-underline">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-4 w-4" />
+                        <span className="font-semibold">{moduleNames[module] || module}</span>
+                        <Badge variant="secondary" className="ml-2">
+                          {Object.values(resources).flat().length} permisos
+                        </Badge>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-4 pt-2">
+                        {Object.entries(resources).map(([resource, perms]) => (
+                          <div key={resource} className="border rounded-lg p-4">
+                            <h4 className="font-medium mb-3 text-sm flex items-center gap-2">
+                              <Key className="h-3 w-3" />
+                              {resourceNames[resource] || resource}
+                            </h4>
+                            <div className="space-y-2">
+                              {perms.map((permission) => (
+                                <div key={permission.id} className="flex items-center gap-2 py-1">
+                                  <div className="flex-1 text-sm text-muted-foreground">
+                                    {actionNames[permission.action] || permission.action}
+                                  </div>
+                                  {roles.map((role) => {
+                                    const isChecked = !!role.permissions?.some(
+                                      (p: any) => p.code === permission.code
+                                    )
+                                    const permissionKey = `${role.id}-${permission.code}`
+                                    const isUpdating = updatingPermission === permissionKey
+
+                                    return (
+                                      <div key={role.id} className="w-24 flex justify-center items-center">
+                                        {isUpdating ? (
+                                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                        ) : (
+                                          <Switch
+                                            checked={isChecked}
+                                            disabled={updatingPermission !== null}
+                                            onCheckedChange={(checked) => {
+                                              handleTogglePermission(role.id, permission.code, checked)
+                                            }}
+                                          />
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
             </CardContent>
           </Card>
         </TabsContent>

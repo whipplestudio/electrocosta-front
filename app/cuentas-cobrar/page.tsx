@@ -40,6 +40,7 @@ import { useAccountsReceivable } from "@/hooks/use-accounts-receivable"
 import { AccountReceivable, AccountReceivableStatus } from "@/types/accounts-receivable"
 import { clientsService, type Client } from "@/services/clients.service"
 import { categoriesService, type Category } from "@/services/categories.service"
+import { RouteProtection } from "@/components/route-protection"
 
 // Helper para mapear estados del backend al frontend
 const mapEstado = (status: AccountReceivableStatus): string => {
@@ -60,6 +61,14 @@ const mapEstado = (status: AccountReceivableStatus): string => {
 }
 
 export default function CuentasCobrarPage() {
+  return (
+    <RouteProtection requiredPermissions={["cuentas_cobrar.registro.ver"]}>
+      <CuentasCobrarPageContent />
+    </RouteProtection>
+  )
+}
+
+function CuentasCobrarPageContent() {
   const {
     accounts,
     dashboard,

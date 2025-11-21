@@ -202,19 +202,31 @@ export interface FollowUpFilterDto {
 // ============================================
 
 export interface DashboardData {
-  totalPending: number;
-  totalOverdue: number;
-  totalCollected: number;
-  pendingCount: number;
-  overdueCount: number;
-  averageCollectionDays: number;
-  byStatus: {
-    pending: number;
-    partial: number;
-    paid: number;
-    overdue: number;
-    cancelled: number;
+  summary: {
+    totalReceivable: string | number;
+    totalOverdue: string | number;
+    totalUpcoming: string | number;
+    totalAccounts: number;
+    overdueAccounts: number;
+    upcomingAccounts: number;
   };
+  recentActivity: AccountReceivable[];
+  topDebtors: {
+    client: {
+      id: string;
+      name: string;
+    };
+    totalAmount: string | number;
+    totalBalance: string | number;
+    invoiceCount: number;
+  }[];
+  monthlyTrend: {
+    month: string;
+    issued: string | number;
+    collected: string | number;
+    invoiceCount: number;
+    paymentCount: number;
+  }[];
 }
 
 export interface AgingReportSummary {

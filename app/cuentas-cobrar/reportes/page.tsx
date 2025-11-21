@@ -14,7 +14,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Download, TrendingUp, Calendar, DollarSign, Users, Loader2 } from "lucide-react"
 import { accountsReceivableService } from "@/services/accounts-receivable.service"
 import { clientsService, Client } from "@/services/clients.service"
-import type { DashboardData, AgingReport } from "@/types/accounts-receivable"
+import type { DashboardData, AgingReport, Analytics } from "@/types/accounts-receivable"
+import { RouteProtection } from "@/components/route-protection"
 import * as XLSX from 'xlsx'
 
 interface AgingBucket {
@@ -24,13 +25,22 @@ interface AgingBucket {
 }
 
 export default function ReportesCuentasCobrar() {
+  return (
+    <RouteProtection requiredPermissions={["cuentas_cobrar.reportes.ver"]}>
+      <ReportesCuentasCobrarContent />
+    </RouteProtection>
+  )
+}
+
+function ReportesCuentasCobrarContent() {
   const [loading, setLoading] = useState(true)
+  const [applyingFilters, setApplyingFilters] = useState(false)
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [selectedClient, setSelectedClient] = useState("all")
   const [clients, setClients] = useState<Client[]>([])
   const [agingData, setAgingData] = useState<AgingBucket[]>([])
-  const [dashboard, setDashboard] = useState<DashboardData | null>(null)
+  const [dashboard, setDashboard] = useState<DashboardData | Analytics | null>(null)
 
   // Cargar clientes
   const loadClients = useCallback(async () => {
@@ -42,10 +52,13 @@ export default function ReportesCuentasCobrar() {
     }
   }, [])
 
-  // Cargar dashboard
-  const loadDashboard = useCallback(async () => {
+  // Cargar dashboard - sin dependencias de los filtros
+  const loadDashboard = useCallback(async (from?: string, to?: string) => {
     try {
-      const data = await accountsReceivableService.getDashboard()
+      // Si hay filtros de fecha, usar analytics endpoint, si no, usar dashboard
+      const data = (from || to)
+        ? await accountsReceivableService.getAnalytics(from || undefined, to || undefined)
+        : await accountsReceivableService.getDashboard()
       setDashboard(data)
     } catch (error) {
       console.error('Error al cargar dashboard:', error)
@@ -53,13 +66,13 @@ export default function ReportesCuentasCobrar() {
     }
   }, [])
 
-  // Cargar reporte de antigüedad
-  const loadAgingReport = useCallback(async () => {
+  // Cargar reporte de antigüedad - sin dependencias de los filtros
+  const loadAgingReport = useCallback(async (clientId?: string, cutoffDate?: string) => {
     try {
-      const cutoffDate = dateTo || new Date().toISOString().split('T')[0]
+      const finalCutoffDate = cutoffDate || new Date().toISOString().split('T')[0]
       const response = await accountsReceivableService.getAgingReport(
-        selectedClient !== 'all' ? selectedClient : undefined,
-        cutoffDate
+        clientId && clientId !== 'all' ? clientId : undefined,
+        finalCutoffDate
       )
       
       // Transformar datos para el gráfico
@@ -76,7 +89,7 @@ export default function ReportesCuentasCobrar() {
       console.error('Error al cargar reporte de antigüedad:', error)
       toast.error('Error al cargar el reporte de antigüedad')
     }
-  }, [selectedClient, dateTo])
+  }, [])
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -96,9 +109,38 @@ export default function ReportesCuentasCobrar() {
   }, [loadClients, loadDashboard, loadAgingReport])
 
   // Aplicar filtros
-  const handleApplyFilters = () => {
-    loadAgingReport()
-    loadDashboard()
+  const handleApplyFilters = async () => {
+    setApplyingFilters(true)
+    try {
+      await Promise.all([
+        loadAgingReport(selectedClient, dateTo),
+        loadDashboard(dateFrom, dateTo),
+      ])
+      toast.success('Filtros aplicados correctamente')
+    } catch (error) {
+      toast.error('Error al aplicar filtros')
+    } finally {
+      setApplyingFilters(false)
+    }
+  }
+
+  // Limpiar filtros
+  const handleClearFilters = async () => {
+    setDateFrom('')
+    setDateTo('')
+    setSelectedClient('all')
+    setApplyingFilters(true)
+    try {
+      await Promise.all([
+        loadAgingReport('all', undefined),
+        loadDashboard(undefined, undefined),
+      ])
+      toast.success('Filtros limpiados')
+    } catch (error) {
+      toast.error('Error al limpiar filtros')
+    } finally {
+      setApplyingFilters(false)
+    }
   }
 
   // Exportar reporte de antigüedad a Excel
@@ -136,13 +178,26 @@ export default function ReportesCuentasCobrar() {
 
       // Agregar hoja de KPIs
       const kpiData = [
-        { 'Indicador': 'Total por Cobrar', 'Valor': `$${(dashboard?.totalPending || 0).toLocaleString()}` },
-        { 'Indicador': 'Días Promedio', 'Valor': `${Math.round(dashboard?.averageCollectionDays || 0)} días` },
-        { 'Indicador': 'Efectividad', 'Valor': dashboard && dashboard.totalPending > 0 
-            ? `${((dashboard.totalCollected / (dashboard.totalCollected + dashboard.totalPending)) * 100).toFixed(1)}%`
-            : '0.0%' },
-        { 'Indicador': 'Cuentas Vencidas', 'Valor': dashboard?.overdueCount || 0 },
-        { 'Indicador': 'Monto Vencido', 'Valor': `$${(dashboard?.totalOverdue || 0).toLocaleString()}` },
+        { 
+          'Indicador': 'Total por Cobrar', 
+          'Valor': `$${(dashboard && 'summary' in dashboard ? Number(dashboard.summary.totalReceivable) : 0).toLocaleString()}` 
+        },
+        { 
+          'Indicador': 'Total de Cuentas', 
+          'Valor': dashboard && 'summary' in dashboard ? dashboard.summary.totalAccounts : 0
+        },
+        { 
+          'Indicador': 'Cuentas Vencidas', 
+          'Valor': dashboard && 'summary' in dashboard ? dashboard.summary.overdueAccounts : 0 
+        },
+        { 
+          'Indicador': 'Monto Vencido', 
+          'Valor': `$${(dashboard && 'summary' in dashboard ? Number(dashboard.summary.totalOverdue) : 0).toLocaleString()}` 
+        },
+        { 
+          'Indicador': 'Monto Próximo', 
+          'Valor': `$${(dashboard && 'summary' in dashboard ? Number(dashboard.summary.totalUpcoming) : 0).toLocaleString()}` 
+        },
       ]
       const kpiWorksheet = XLSX.utils.json_to_sheet(kpiData)
       kpiWorksheet['!cols'] = [{ wch: 20 }, { wch: 20 }]
@@ -236,9 +291,21 @@ export default function ReportesCuentasCobrar() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-end">
-              <Button className="w-full" onClick={handleApplyFilters}>
+            <div className="flex items-end gap-2">
+              <Button 
+                className="flex-1" 
+                onClick={handleApplyFilters}
+                disabled={applyingFilters}
+              >
+                {applyingFilters && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Aplicar Filtros
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={handleClearFilters}
+                disabled={applyingFilters || (!dateFrom && !dateTo && selectedClient === 'all')}
+              >
+                Limpiar
               </Button>
             </div>
           </div>
@@ -253,36 +320,36 @@ export default function ReportesCuentasCobrar() {
             <DollarSign className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${(dashboard?.totalPending || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Total pendiente</p>
+            <div className="text-2xl font-bold">
+              ${(dashboard && 'summary' in dashboard ? Number(dashboard.summary.totalReceivable) : 0).toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">Total pendiente de cobro</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Días Promedio</CardTitle>
-            <Calendar className="h-4 w-4 text-orange-600" />
+            <CardTitle className="text-sm font-medium">Total Cuentas</CardTitle>
+            <Users className="h-4 w-4 text-orange-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {Math.round(dashboard?.averageCollectionDays || 0)} días
+              {dashboard && 'summary' in dashboard ? dashboard.summary.totalAccounts : 0}
             </div>
-            <p className="text-xs text-muted-foreground">Promedio de cobro</p>
+            <p className="text-xs text-muted-foreground">Total de cuentas</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Efectividad</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm font-medium">Próximo a Vencer</CardTitle>
+            <Calendar className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {dashboard && dashboard.totalPending > 0 
-                ? ((dashboard.totalCollected / (dashboard.totalCollected + dashboard.totalPending)) * 100).toFixed(1)
-                : '0.0'}%
+              ${(dashboard && 'summary' in dashboard ? Number(dashboard.summary.totalUpcoming) : 0).toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground">Tasa de cobro</p>
+            <p className="text-xs text-muted-foreground">Monto por vencer</p>
           </CardContent>
         </Card>
 
@@ -292,19 +359,17 @@ export default function ReportesCuentasCobrar() {
             <Users className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{dashboard?.overdueCount || 0}</div>
+            <div className="text-2xl font-bold text-red-600">
+              {dashboard && 'summary' in dashboard ? dashboard.summary.overdueAccounts : 0}
+            </div>
             <p className="text-xs text-muted-foreground">
-              ${(dashboard?.totalOverdue || 0).toLocaleString()}
+              ${(dashboard && 'summary' in dashboard ? Number(dashboard.summary.totalOverdue) : 0).toLocaleString()}
             </p>
           </CardContent>
         </Card>
       </div>
 
       <Tabs defaultValue="ageing" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="ageing">Antigüedad de Saldos</TabsTrigger>
-        </TabsList>
-
         <TabsContent value="ageing" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <Card>

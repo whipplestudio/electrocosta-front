@@ -288,12 +288,6 @@ function CuentasCobrarPageContent() {
     }
   }
 
-  const exportarExcel = () => {
-    // TODO: Implementar exportación real
-    console.log("Exportando cuentas por cobrar a Excel...")
-    toast.info('Funcionalidad de exportación en desarrollo')
-  }
-
   // Mostrar loading state
   if (isLoading && accounts.length === 0) {
     return (
@@ -311,16 +305,10 @@ function CuentasCobrarPageContent() {
           <h1 className="text-3xl font-bold">Cuentas por Cobrar</h1>
           <p className="text-muted-foreground">Gestiona las cuentas pendientes de cobro</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={exportarExcel}>
-            <Download className="h-4 w-4 mr-2" />
-            Exportar Excel
-          </Button>
-          <Button onClick={handleNuevaCuenta}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nueva Cuenta
-          </Button>
-        </div>
+        <Button onClick={handleNuevaCuenta}>
+          <Plus className="h-4 w-4 mr-2" />
+          Nueva Cuenta
+        </Button>
       </div>
 
       {/* KPIs */}
@@ -625,91 +613,93 @@ function CuentasCobrarPageContent() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="clientId">Cliente *</Label>
-                <Select 
-                  value={formData.clientId}
-                  onValueChange={(value) => setFormData({...formData, clientId: value})}
-                  disabled={loadingSelects || selectedCuenta !== null}
-                >
-                  <SelectTrigger id="clientId">
-                    <SelectValue placeholder="Selecciona un cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {loadingSelects ? (
-                      <SelectItem value="loading" disabled>
-                        Cargando...
+            {/* Cliente - Campo completo para evitar superposición */}
+            <div className="space-y-2">
+              <Label htmlFor="clientId">Cliente *</Label>
+              <Select 
+                value={formData.clientId}
+                onValueChange={(value) => setFormData({...formData, clientId: value})}
+                disabled={loadingSelects || selectedCuenta !== null}
+              >
+                <SelectTrigger id="clientId">
+                  <SelectValue placeholder="Selecciona un cliente" />
+                </SelectTrigger>
+                <SelectContent>
+                  {loadingSelects ? (
+                    <SelectItem value="loading" disabled>
+                      Cargando...
+                    </SelectItem>
+                  ) : clients.length === 0 ? (
+                    <SelectItem value="empty" disabled>
+                      No hay clientes disponibles
+                    </SelectItem>
+                  ) : (
+                    clients.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.name} - {client.taxId}
                       </SelectItem>
-                    ) : clients.length === 0 ? (
-                      <SelectItem value="empty" disabled>
-                        No hay clientes disponibles
-                      </SelectItem>
-                    ) : (
-                      clients.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.name} - {client.taxId}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                {selectedCuenta && (
-                  <p className="text-xs text-muted-foreground">
-                    No se puede cambiar el cliente al editar
-                  </p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="factura">Número de Factura *</Label>
-                <Input 
-                  id="factura" 
-                  placeholder="FAC-2024-XXX"
-                  value={formData.invoiceNumber}
-                  onChange={(e) => setFormData({...formData, invoiceNumber: e.target.value})}
-                />
-              </div>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              {selectedCuenta && (
+                <p className="text-xs text-muted-foreground">
+                  No se puede cambiar el cliente al editar
+                </p>
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="monto">Monto Total *</Label>
-                <Input 
-                  id="monto" 
-                  type="number" 
-                  placeholder="0"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({...formData, amount: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="categoria">Categoría</Label>
-                <Select 
-                  value={formData.categoryId}
-                  onValueChange={(value) => setFormData({...formData, categoryId: value})}
-                  disabled={loadingSelects}
-                >
-                  <SelectTrigger id="categoria">
-                    <SelectValue placeholder="Selecciona una categoría (opcional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {loadingSelects ? (
-                      <SelectItem value="loading" disabled>
-                        Cargando...
+            
+            {/* Número de Factura */}
+            <div className="space-y-2">
+              <Label htmlFor="factura">Número de Factura *</Label>
+              <Input 
+                id="factura" 
+                placeholder="FAC-2024-XXX"
+                value={formData.invoiceNumber}
+                onChange={(e) => setFormData({...formData, invoiceNumber: e.target.value})}
+              />
+            </div>
+            {/* Monto Total */}
+            <div className="space-y-2">
+              <Label htmlFor="monto">Monto Total *</Label>
+              <Input 
+                id="monto" 
+                type="number" 
+                placeholder="0"
+                value={formData.amount}
+                onChange={(e) => setFormData({...formData, amount: e.target.value})}
+              />
+            </div>
+            
+            {/* Categoría */}
+            <div className="space-y-2">
+              <Label htmlFor="categoria">Categoría</Label>
+              <Select 
+                value={formData.categoryId}
+                onValueChange={(value) => setFormData({...formData, categoryId: value})}
+                disabled={loadingSelects}
+              >
+                <SelectTrigger id="categoria">
+                  <SelectValue placeholder="Selecciona una categoría (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {loadingSelects ? (
+                    <SelectItem value="loading" disabled>
+                      Cargando...
+                    </SelectItem>
+                  ) : categories.length === 0 ? (
+                    <SelectItem value="empty" disabled>
+                      No hay categorías disponibles
+                    </SelectItem>
+                  ) : (
+                    categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
                       </SelectItem>
-                    ) : categories.length === 0 ? (
-                      <SelectItem value="empty" disabled>
-                        No hay categorías disponibles
-                      </SelectItem>
-                    ) : (
-                      categories.map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

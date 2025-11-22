@@ -1,214 +1,202 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
-import { Shield, Users, Edit, Plus, Loader2 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Plus, Edit, Trash2 } from "lucide-react"
 import { rolesService } from "@/services/roles.service"
-import { permissionsService, type Permission } from "@/services/permissions.service"
 import { useToast } from "@/hooks/use-toast"
 import type { Role } from "@/types/users"
+import { RouteProtection } from "@/components/route-protection"
 
-// Mapeo de permisos a descripciones amigables
-const permissionLabels: { [key: string]: { title: string; description: string } } = {
-  "dashboard.general.ver": { title: "Dashboard Ejecutivo", description: "Ver métricas y KPIs" },
-  "cuentas_cobrar.cuentas.listar": { title: "Cuentas por Cobrar", description: "Gestionar cobranzas" },
-  "cuentas_pagar.cuentas.listar": { title: "Cuentas por Pagar", description: "Gestionar pagos" },
-  "reportes.detallados.generar": { title: "Reportes", description: "Generar reportes" },
-  "usuarios.usuarios.listar": { title: "Usuarios", description: "Gestionar usuarios" },
-  "usuarios.roles.listar": { title: "Configuración", description: "Configurar sistema" },
+export default function RolesPage() {
+  return (
+    <RouteProtection requiredPermissions={["usuarios.roles.ver"]}>
+      <RolesPageContent />
+    </RouteProtection>
+  )
 }
 
-export default function RolesPermisos() {
+function RolesPageContent() {
   const { toast } = useToast()
-  const [roles, setRoles] = useState<any[]>([])
-  const [allPermissions, setAllPermissions] = useState<Permission[]>([])
-  const [rolSeleccionado, setRolSeleccionado] = useState<any | null>(null)
-  const [rolePermissions, setRolePermissions] = useState<Permission[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [roles, setRoles] = useState<Role[]>([])
+  const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false)
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null)
+  const [roleFormData, setRoleFormData] = useState<{name?: string; description?: string; level?: number}>({ level: 1 })
 
   useEffect(() => {
-    loadData()
+    loadRoles()
   }, [])
 
-  const loadData = async () => {
+  const loadRoles = async () => {
     try {
-      setLoading(true)
-      const [rolesData, permissionsData] = await Promise.all([
-        rolesService.getAll(),
-        permissionsService.getAll(),
-      ])
-      setRoles(rolesData)
-      setAllPermissions(permissionsData)
-      if (rolesData.length > 0) {
-        handleSelectRole(rolesData[0])
-      }
+      const data = await rolesService.getAll()
+      setRoles(data)
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Error al cargar datos",
+        description: error instanceof Error ? error.message : "Error al cargar roles",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
     }
   }
 
-  const handleSelectRole = async (role: any) => {
-    setRolSeleccionado(role)
+  const handleCreateRole = () => {
+    setSelectedRole(null)
+    setRoleFormData({ level: 1 })
+    setIsRoleDialogOpen(true)
+  }
+
+  const handleEditRole = (role: Role) => {
+    setSelectedRole(role)
+    setRoleFormData({
+      name: role.name,
+      description: role.description,
+      level: role.level,
+    })
+    setIsRoleDialogOpen(true)
+  }
+
+  const handleSaveRole = async () => {
     try {
-      const permData = await rolesService.getPermissions(role.id)
-      setRolePermissions(permData.permissions || [])
-    } catch (error) {
-      console.error("Error loading permissions:", error)
-      setRolePermissions(role.permissions || [])
-    }
-  }
-
-  const togglePermission = (permissionId: string) => {
-    const hasPermission = rolePermissions.some(p => p.id === permissionId)
-    if (hasPermission) {
-      setRolePermissions(rolePermissions.filter(p => p.id !== permissionId))
-    } else {
-      const perm = allPermissions.find(p => p.id === permissionId)
-      if (perm) {
-        setRolePermissions([...rolePermissions, perm])
+      if (selectedRole) {
+        await rolesService.update(selectedRole.id, roleFormData as any)
+        toast({
+          title: "Rol actualizado",
+          description: "El rol ha sido actualizado exitosamente",
+        })
+      } else {
+        await rolesService.create(roleFormData as any)
+        toast({
+          title: "Rol creado",
+          description: "El rol ha sido creado exitosamente",
+        })
       }
+      setIsRoleDialogOpen(false)
+      loadRoles()
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Error al guardar rol",
+        variant: "destructive",
+      })
     }
   }
 
-  const handleSavePermissions = async () => {
-    if (!rolSeleccionado) return
+  const handleDeleteRole = async (roleId: string) => {
+    if (!confirm("¿Estás seguro de eliminar este rol?")) return
     
     try {
-      setSaving(true)
-      const permissionIds = rolePermissions.map(p => p.id)
-      await rolesService.assignPermissions(rolSeleccionado.id, permissionIds)
+      await rolesService.delete(roleId)
       toast({
-        title: "Permisos actualizados",
-        description: "Los permisos del rol han sido actualizados exitosamente",
+        title: "Rol eliminado",
+        description: "El rol ha sido eliminado exitosamente",
       })
-      loadData()
+      loadRoles()
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Error al actualizar permisos",
+        description: error instanceof Error ? error.message : "Error al eliminar rol",
         variant: "destructive",
       })
-    } finally {
-      setSaving(false)
     }
-  }
-
-  const getDisplayPermissions = () => {
-    // Mostrar todos los permisos disponibles
-    return allPermissions
   }
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Shield className="h-6 w-6 text-blue-600" />
-          <h1 className="text-2xl font-bold">Roles y Permisos</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Roles</h1>
+          <p className="text-muted-foreground">Gestiona los roles del sistema</p>
         </div>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo Rol
-        </Button>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Input placeholder="Buscar roles..." className="w-80" />
+          </div>
+          <Button onClick={handleCreateRole}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo Rol
+          </Button>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Roles del Sistema</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {roles.map((rol) => (
-                <div
-                  key={rol.id}
-                  className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                    rolSeleccionado?.id === rol.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"
-                  }`}
-                  onClick={() => handleSelectRole(rol)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">{rol.name}</h4>
-                      <p className="text-sm text-muted-foreground">{rol.description}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      <Badge variant="secondary">{rol.userCount || 0}</Badge>
-                    </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {roles.map((role) => (
+            <Card key={role.id}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">{role.name}</CardTitle>
+                  <Badge variant="outline">{role._count?.users || 0} usuarios</Badge>
+                </div>
+                <CardDescription>{role.description}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium">Nivel:</Label>
+                    <p className="text-sm text-muted-foreground mt-1">Nivel {role.level}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => handleEditRole(role)}>
+                      <Edit className="h-4 w-4 mr-1" />
+                      Editar
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleDeleteRole(role.id)}>
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Eliminar
+                    </Button>
                   </div>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Permisos - {rolSeleccionado?.name || "Sin seleccionar"}</CardTitle>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={handleSavePermissions}
-                  disabled={saving || !rolSeleccionado}
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <Edit className="h-4 w-4 mr-2" />
-                      Guardar
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {getDisplayPermissions().map((permission) => {
-                    const label = permissionLabels[permission.code] || {
-                      title: permission.name,
-                      description: permission.description,
-                    }
-                    const isChecked = rolePermissions.some(p => p.id === permission.id)
-                    
-                    return (
-                      <div key={permission.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div>
-                          <h4 className="font-medium">{label.title}</h4>
-                          <p className="text-sm text-muted-foreground">{label.description}</p>
-                        </div>
-                        <Switch 
-                          checked={isChecked}
-                          onCheckedChange={() => togglePermission(permission.id)}
-                          disabled={!rolSeleccionado}
-                        />
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ))}
         </div>
-      )}
+      </div>
+
+      {/* Dialog para crear/editar rol */}
+      <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{selectedRole ? "Editar Rol" : "Nuevo Rol"}</DialogTitle>
+            <DialogDescription>
+              {selectedRole ? "Modifica los permisos del rol" : "Crea un nuevo rol con permisos específicos"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="roleName">Nombre del rol</Label>
+              <Input id="roleName" placeholder="Ej: Supervisor de Ventas" value={roleFormData.name || ""} onChange={(e) => setRoleFormData({...roleFormData, name: e.target.value})} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="roleDescription">Descripción</Label>
+              <Input id="roleDescription" placeholder="Describe las responsabilidades del rol" value={roleFormData.description || ""} onChange={(e) => setRoleFormData({...roleFormData, description: e.target.value})} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="roleLevel">Nivel</Label>
+              <Input id="roleLevel" type="number" placeholder="1-10" value={roleFormData.level || 1} onChange={(e) => setRoleFormData({...roleFormData, level: parseInt(e.target.value) || 1})} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsRoleDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveRole}>{selectedRole ? "Guardar Cambios" : "Crear Rol"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

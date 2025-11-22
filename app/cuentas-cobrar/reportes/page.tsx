@@ -45,10 +45,12 @@ function ReportesCuentasCobrarContent() {
   // Cargar clientes
   const loadClients = useCallback(async () => {
     try {
-      const data = await clientsService.list()
-      setClients(data)
+      const response = await clientsService.list({ limit: 1000 })
+      setClients(response.data || [])
     } catch (error) {
       console.error('Error al cargar clientes:', error)
+      toast.error('Error al cargar clientes')
+      setClients([])
     }
   }, [])
 

@@ -31,11 +31,20 @@ const menuItems = [
     requiredPermissionCodes: ["usuarios.usuarios.ver"],
     submenu: [
       { 
-        title: "Gestión de Usuarios", 
+        title: "Usuarios", 
         href: "/usuarios",
         requiredPermissionCodes: ["usuarios.usuarios.ver"]
       },
-      // { title: "Roles y Permisos", href: "/usuarios/roles" }, // Comentado temporalmente - se usará en el futuro
+      { 
+        title: "Roles", 
+        href: "/usuarios/roles",
+        requiredPermissionCodes: ["usuarios.roles.ver"]
+      },
+      { 
+        title: "Permisos", 
+        href: "/usuarios/permisos",
+        requiredPermissionCodes: ["usuarios.permisos.ver"]
+      },
     ],
   },
   {
@@ -65,22 +74,22 @@ const menuItems = [
       { 
         title: "Registro", 
         href: "/cuentas-cobrar",
-        requiredPermissionCodes: ["cuentas_cobrar.cuentas.leer"]
+        requiredPermissionCodes: ["cuentas_cobrar.registro.ver"]
       },
       { 
         title: "Seguimiento", 
         href: "/cuentas-cobrar/seguimiento",
-        requiredPermissionCodes: ["cuentas_cobrar.cuentas.leer"]
+        requiredPermissionCodes: ["cuentas_cobrar.seguimiento.ver"]
       },
       { 
         title: "Aplicación de Pagos", 
         href: "/cuentas-cobrar/pagos",
-        requiredPermissionCodes: ["cuentas_cobrar.cuentas.actualizar"]
+        requiredPermissionCodes: ["cuentas_cobrar.pagos.ver"]
       },
       { 
         title: "Reportes", 
         href: "/cuentas-cobrar/reportes",
-        requiredPermissionCodes: ["reportes.reportes.leer"]
+        requiredPermissionCodes: ["cuentas_cobrar.reportes.ver"]
       },
     ],
   },
@@ -93,27 +102,27 @@ const menuItems = [
       { 
         title: "Registro", 
         href: "/cuentas-pagar",
-        requiredPermissionCodes: ["cuentas_pagar.cuentas.leer"]
+        requiredPermissionCodes: ["cuentas_pagar.registro.ver"]
       },
       { 
         title: "Programación", 
         href: "/cuentas-pagar/programacion",
-        requiredPermissionCodes: ["cuentas_pagar.cuentas.leer"]
+        requiredPermissionCodes: ["cuentas_pagar.programacion.ver"]
       },
       { 
         title: "Aprobación", 
         href: "/cuentas-pagar/aprobacion",
-        requiredPermissionCodes: ["cuentas_pagar.cuentas.actualizar"]
+        requiredPermissionCodes: ["cuentas_pagar.aprobacion.ver"]
       },
       { 
         title: "Pagos", 
         href: "/cuentas-pagar/pagos",
-        requiredPermissionCodes: ["cuentas_pagar.cuentas.actualizar"]
+        requiredPermissionCodes: ["cuentas_pagar.pagos.ver"]
       },
       { 
         title: "Reportes de Vencimientos", 
-        href: "/cuentas-pagar/reportes",
-        requiredPermissionCodes: ["reportes.reportes.leer"]
+        href: "/cuentas-pagar/reportes-vencimiento",
+        requiredPermissionCodes: ["cuentas_pagar.reportes_vencimiento.ver"]
       },
     ],
   },
@@ -121,27 +130,22 @@ const menuItems = [
     title: "Área de Carga",
     icon: Upload,
     href: "/carga-informacion",
-    requiredPermissionCodes: ["carga_informacion.modulo.acceder"],
+    requiredPermissionCodes: ["carga_informacion.ventas.ver", "carga_informacion.gastos.ver", "carga_informacion.proyectos.ver"],
     submenu: [
       { 
         title: "Ventas", 
         href: "/carga-informacion/ventas",
-        requiredPermissionCodes: ["carga_informacion.ventas.cargar"]
+        requiredPermissionCodes: ["carga_informacion.ventas.ver"]
       },
       { 
         title: "Gastos", 
         href: "/carga-informacion/gastos",
-        requiredPermissionCodes: ["carga_informacion.gastos.cargar"]
+        requiredPermissionCodes: ["carga_informacion.gastos.ver"]
       },
       { 
         title: "Proyectos", 
         href: "/carga-informacion/proyectos",
-        requiredPermissionCodes: ["carga_informacion.proyectos.cargar"]
-      },
-      { 
-        title: "Anticipos", 
-        href: "/carga-informacion/anticipos",
-        requiredPermissionCodes: ["carga_informacion.anticipos.cargar"]
+        requiredPermissionCodes: ["carga_informacion.proyectos.ver"]
       },
     ],
   },
@@ -153,18 +157,18 @@ const menuItems = [
     submenu: [
       { 
         title: "Detallados", 
-        href: "/reportes/detallados",
-        requiredPermissionCodes: ["reportes.reportes.leer"]
+        href: "/reportes",
+        requiredPermissionCodes: ["reportes.detallados.ver"]
       },
       { 
         title: "Descargables", 
         href: "/reportes/descargables",
-        requiredPermissionCodes: ["reportes.reportes.crear"]
+        requiredPermissionCodes: ["reportes.descargables.ver"]
       },
       { 
         title: "Personalizados", 
         href: "/reportes/personalizados",
-        requiredPermissionCodes: ["reportes.reportes.crear"]
+        requiredPermissionCodes: ["reportes.personalizados.ver"]
       },
     ],
   },

@@ -37,43 +37,78 @@ const ROUTE_PERMISSIONS: RoutePermissionMap[] = [
   },
   {
     path: '/cuentas-cobrar',
-    requiredPermissions: ['cuentas_cobrar.registro.ver', 'cuentas_cobrar.cuentas.leer'],
-    name: 'Cuentas por Cobrar',
+    requiredPermissions: ['cuentas_cobrar.registro.ver'],
+    name: 'Registro Cuentas por Cobrar',
+  },
+  {
+    path: '/cuentas-cobrar/seguimiento',
+    requiredPermissions: ['cuentas_cobrar.seguimiento.ver'],
+    name: 'Seguimiento',
+  },
+  {
+    path: '/cuentas-cobrar/pagos',
+    requiredPermissions: ['cuentas_cobrar.pagos.ver'],
+    name: 'Aplicación de Pagos',
+  },
+  {
+    path: '/cuentas-cobrar/reportes',
+    requiredPermissions: ['cuentas_cobrar.reportes.ver'],
+    name: 'Reportes',
   },
   {
     path: '/cuentas-pagar',
-    requiredPermissions: ['cuentas_pagar.registro.ver', 'cuentas_pagar.cuentas.leer'],
-    name: 'Cuentas por Pagar',
+    requiredPermissions: ['cuentas_pagar.registro.ver'],
+    name: 'Registro Cuentas por Pagar',
   },
   {
-    path: '/carga-informacion',
-    requiredPermissions: ['carga_informacion.modulo.acceder'],
-    name: 'Área de Carga',
+    path: '/cuentas-pagar/programacion',
+    requiredPermissions: ['cuentas_pagar.programacion.ver'],
+    name: 'Programación',
+  },
+  {
+    path: '/cuentas-pagar/aprobacion',
+    requiredPermissions: ['cuentas_pagar.aprobacion.ver'],
+    name: 'Aprobación',
+  },
+  {
+    path: '/cuentas-pagar/pagos',
+    requiredPermissions: ['cuentas_pagar.pagos.ver'],
+    name: 'Pagos',
+  },
+  {
+    path: '/cuentas-pagar/reportes-vencimiento',
+    requiredPermissions: ['cuentas_pagar.reportes_vencimiento.ver'],
+    name: 'Reportes de Vencimiento',
   },
   {
     path: '/carga-informacion/ventas',
-    requiredPermissions: ['carga_informacion.ventas.cargar'],
-    name: 'Área de Carga - Ventas',
+    requiredPermissions: ['carga_informacion.ventas.ver'],
+    name: 'Carga de Ventas',
   },
   {
     path: '/carga-informacion/gastos',
-    requiredPermissions: ['carga_informacion.gastos.cargar'],
-    name: 'Área de Carga - Gastos',
+    requiredPermissions: ['carga_informacion.gastos.ver'],
+    name: 'Carga de Gastos',
   },
   {
     path: '/carga-informacion/proyectos',
-    requiredPermissions: ['carga_informacion.proyectos.cargar'],
-    name: 'Área de Carga - Proyectos',
-  },
-  {
-    path: '/carga-informacion/anticipos',
-    requiredPermissions: ['carga_informacion.anticipos.cargar'],
-    name: 'Área de Carga - Anticipos',
+    requiredPermissions: ['carga_informacion.proyectos.ver'],
+    name: 'Carga de Proyectos',
   },
   {
     path: '/reportes',
-    requiredPermissions: ['reportes.detallados.ver', 'reportes.reportes.leer'],
-    name: 'Reportes',
+    requiredPermissions: ['reportes.detallados.ver'],
+    name: 'Reportes Detallados',
+  },
+  {
+    path: '/reportes/descargables',
+    requiredPermissions: ['reportes.descargables.ver'],
+    name: 'Reportes Descargables',
+  },
+  {
+    path: '/reportes/personalizados',
+    requiredPermissions: ['reportes.personalizados.ver'],
+    name: 'Reportes Personalizados',
   },
 ]
 

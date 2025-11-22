@@ -51,12 +51,12 @@ const menuItems = [
     title: "Clientes",
     icon: Users,
     href: "/clientes",
-    requiredPermissionCodes: ["clientes.clientes.listar", "clientes.clientes.leer"],
+    requiredPermissionCodes: ["clientes.clientes.ver"],
     submenu: [
       { 
         title: "Gestión de Clientes", 
         href: "/clientes",
-        requiredPermissionCodes: ["clientes.clientes.listar"]
+        requiredPermissionCodes: ["clientes.clientes.ver"]
       },
       { 
         title: "Nuevo Cliente", 

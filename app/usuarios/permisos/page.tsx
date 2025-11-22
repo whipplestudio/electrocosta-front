@@ -110,7 +110,6 @@ function PermisosPageContent() {
     ver: "Ver",
     crear: "Crear",
     editar: "Editar",
-    actualizar: "Actualizar",
     eliminar: "Eliminar",
     asignar: "Asignar",
     aplicar: "Aplicar",
@@ -119,8 +118,8 @@ function PermisosPageContent() {
     programar: "Programar",
     aprobar: "Aprobar",
     acceder: "Acceder",
-    listar: "Listar",
-    leer: "Leer",
+    cargar: "Cargar",
+    registrar: "Registrar",
   }
 
   const handleTogglePermission = async (roleId: string, permissionCode: string, checked: boolean) => {

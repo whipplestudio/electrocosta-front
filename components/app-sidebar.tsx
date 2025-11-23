@@ -14,6 +14,7 @@ import {
   Download,
   LogOut,
   Users,
+  Tag,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -64,6 +65,13 @@ const menuItems = [
         requiredPermissionCodes: ["clientes.clientes.crear"]
       },
     ],
+  },
+  {
+    title: "Categorías",
+    icon: Tag,
+    href: "/categorias",
+    requiredPermissionCodes: ["categorias.categorias.ver"],
+    submenu: [],
   },
   {
     title: "Cuentas por Cobrar",

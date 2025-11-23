@@ -124,7 +124,18 @@ function CuentasCobrarPageContent() {
         categoriesService.list(),
       ])
       setClients(clientsResponse.data) // Extraer el array de data
-      setCategories(categoriesData.filter(cat => cat.type === 'income')) // Solo categorías de ingresos
+      
+      // Filtrar solo categorías de tipo "income" (ingresos)
+      const incomeCategories = categoriesData.filter(cat => cat.type === 'income')
+      console.log('📊 Total de categorías:', categoriesData.length)
+      console.log('💰 Categorías de ingreso:', incomeCategories.length)
+      
+      if (incomeCategories.length === 0 && categoriesData.length > 0) {
+        console.warn('⚠️ Hay categorías creadas pero ninguna es de tipo "Ingreso"')
+        toast.warning('No hay categorías de tipo "Ingreso". Crea categorías de ingreso en el módulo de Categorías.')
+      }
+      
+      setCategories(incomeCategories)
     } catch (error) {
       console.error('Error al cargar clientes y categorías:', error)
       toast.error('Error al cargar opciones del formulario')
@@ -689,7 +700,7 @@ function CuentasCobrarPageContent() {
                     </SelectItem>
                   ) : categories.length === 0 ? (
                     <SelectItem value="empty" disabled>
-                      No hay categorías disponibles
+                      No hay categorías de tipo "Ingreso". Ve a /categorias para crear una.
                     </SelectItem>
                   ) : (
                     categories.map((category) => (

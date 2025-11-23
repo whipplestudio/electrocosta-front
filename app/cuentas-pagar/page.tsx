@@ -108,7 +108,18 @@ export default function CuentasPagarPage() {
       ]);
       
       setSuppliers(suppliersResp.data)
-      setCategories(categoriesResp.data.filter((cat) => cat.type === 'expense'))
+      
+      // Filtrar solo categorías de tipo "expense" (egresos)
+      const expenseCategories = categoriesResp.data.filter((cat) => cat.type === 'expense')
+      console.log('📊 Total de categorías:', categoriesResp.data.length)
+      console.log('💸 Categorías de egreso:', expenseCategories.length)
+      
+      if (expenseCategories.length === 0 && categoriesResp.data.length > 0) {
+        console.warn('⚠️ Hay categorías creadas pero ninguna es de tipo "Egreso"')
+        toast.warning('No hay categorías de tipo "Egreso". Crea categorías de egreso en el módulo de Categorías.')
+      }
+      
+      setCategories(expenseCategories)
     } catch (error) {
       console.error("Error al cargar opciones:", error)
       toast.error("Error al cargar opciones del formulario")
@@ -552,11 +563,11 @@ export default function CuentasPagarPage() {
               <Label>Categoría</Label>
               <Select value={formData.categoryId} onValueChange={(v) => setFormData({ ...formData, categoryId: v })} disabled={loadingSelects}>
                 <SelectTrigger>
-                  <SelectValue placeholder={loadingSelects ? "Cargando..." : categories.length === 0 ? "No hay categorías" : "Selecciona categoría (opcional)"} />
+                  <SelectValue placeholder={loadingSelects ? "Cargando..." : categories.length === 0 ? "No hay categorías de egreso" : "Selecciona categoría (opcional)"} />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground">No hay categorías de gastos</div>
+                    <div className="p-2 text-sm text-muted-foreground">No hay categorías de tipo "Egreso". Ve a /categorias para crear una.</div>
                   ) : (
                     categories.map((c) => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>

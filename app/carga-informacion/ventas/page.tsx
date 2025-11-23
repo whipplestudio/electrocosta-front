@@ -27,6 +27,7 @@ export default function CargaVentas() {
   // Estados compartidos
   const [historial, setHistorial] = useState<HistorialCarga[]>([])
   const [loadingHistorial, setLoadingHistorial] = useState(false)
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false)
 
   // ==========================================================================
   // CARGA DE HISTORIAL
@@ -184,6 +185,7 @@ export default function CargaVentas() {
 
   const handleDescargarPlantilla = async () => {
     try {
+      setDownloadingTemplate(true)
       const blob = await salesUploadService.descargarPlantilla()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -205,6 +207,8 @@ export default function CargaVentas() {
         title: "Error",
         description: "No se pudo descargar la plantilla"
       })
+    } finally {
+      setDownloadingTemplate(false)
     }
   }
 
@@ -252,9 +256,18 @@ export default function CargaVentas() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Carga de Información - Ventas</h1>
-        <Button variant="outline" onClick={handleDescargarPlantilla}>
-          <Download className="h-4 w-4 mr-2" />
-          Descargar Plantilla
+        <Button variant="outline" onClick={handleDescargarPlantilla} disabled={downloadingTemplate}>
+          {downloadingTemplate ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Descargando...
+            </>
+          ) : (
+            <>
+              <Download className="h-4 w-4 mr-2" />
+              Descargar Plantilla
+            </>
+          )}
         </Button>
       </div>
 
@@ -384,28 +397,6 @@ export default function CargaVentas() {
           </CardContent>
         </Card>
       </div>
-
-      {/* INSTRUCCIONES */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Instrucciones</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <h4 className="font-medium">Formato del archivo Excel/CSV:</h4>
-            <ul className="text-sm text-muted-foreground space-y-1">
-              <li>• Formato: Excel (.xlsx) o CSV</li>
-              <li>• Columnas requeridas: fecha_venta, numero_factura, cliente_ruc, producto_servicio, cantidad, precio_unitario, subtotal, igv, total, forma_pago</li>
-              <li>• Máximo 10MB de tamaño</li>
-            </ul>
-          </div>
-
-          <Button variant="outline" className="w-full" onClick={handleDescargarPlantilla}>
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
-            Descargar Plantilla de Ejemplo
-          </Button>
-        </CardContent>
-      </Card>
 
       {/* HISTORIAL */}
       <Card>

@@ -35,6 +35,11 @@ export default function ProyectosPage() {
   const [proyectos, setProyectos] = useState<any[]>([])
   const [loadingProyectos, setLoadingProyectos] = useState(false)
   
+  // Estados para usuarios
+  const [usuarios, setUsuarios] = useState<any[]>([])
+  const [loadingUsuarios, setLoadingUsuarios] = useState(false)
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false)
+  
   // Estados para carga masiva
   const [archivo, setArchivo] = useState<File | null>(null)
   const [uploadResponse, setUploadResponse] = useState<any>(null)
@@ -86,9 +91,30 @@ export default function ProyectosPage() {
     }
   }, [toast])
 
+  // Cargar usuarios
+  const cargarUsuarios = useCallback(async () => {
+    try {
+      setLoadingUsuarios(true)
+      const response = await fetch('http://localhost:3001/api/v1/users/simple/list', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setUsuarios(data)
+      }
+    } catch (error) {
+      console.error('Error al cargar usuarios:', error)
+    } finally {
+      setLoadingUsuarios(false)
+    }
+  }, [])
+
   useEffect(() => {
     cargarProyectos()
-  }, [cargarProyectos])
+    cargarUsuarios()
+  }, [cargarProyectos, cargarUsuarios])
 
   // Función para crear proyecto manual
   const crearNuevoProyecto = async () => {
@@ -248,6 +274,7 @@ export default function ProyectosPage() {
 
   const descargarPlantilla = async () => {
     try {
+      setDownloadingTemplate(true)
       const blob = await projectsUploadService.descargarPlantilla()
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -268,6 +295,8 @@ export default function ProyectosPage() {
         title: "Error",
         description: "No se pudo descargar la plantilla"
       })
+    } finally {
+      setDownloadingTemplate(false)
     }
   }
 
@@ -428,9 +457,18 @@ export default function ProyectosPage() {
           <p className="text-muted-foreground">Gestión de proyectos y contratos</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={descargarPlantilla}>
-            <Download className="h-4 w-4 mr-2" />
-            Plantilla Excel
+          <Button variant="outline" onClick={descargarPlantilla} disabled={downloadingTemplate}>
+            {downloadingTemplate ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Descargando...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4 mr-2" />
+                Plantilla Excel
+              </>
+            )}
           </Button>
           <Dialog open={openDialog} onOpenChange={setOpenDialog}>
             <DialogTrigger asChild>
@@ -544,30 +582,45 @@ export default function ProyectosPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Email Responsable *</Label>
-                    <Input 
-                      type="email"
-                      placeholder="gerente@empresa.com"
-                      value={nuevoProyecto.responsableEmail}
-                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, responsableEmail: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label>Estado *</Label>
-                    <Select value={nuevoProyecto.estado} onValueChange={(value) => setNuevoProyecto({...nuevoProyecto, estado: value})}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="planificacion">Planificación</SelectItem>
-                        <SelectItem value="en_progreso">En Progreso</SelectItem>
-                        <SelectItem value="pausado">Pausado</SelectItem>
-                        <SelectItem value="completado">Completado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div>
+                  <Label>Responsable del Proyecto *</Label>
+                  <Select 
+                    value={nuevoProyecto.responsableEmail} 
+                    onValueChange={(value) => setNuevoProyecto({...nuevoProyecto, responsableEmail: value})}
+                    disabled={loadingUsuarios}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={loadingUsuarios ? "Cargando usuarios..." : "Selecciona un responsable"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {usuarios.length === 0 ? (
+                        <SelectItem value="sin-usuarios" disabled>
+                          No hay usuarios disponibles
+                        </SelectItem>
+                      ) : (
+                        usuarios.map((usuario) => (
+                          <SelectItem key={usuario.id} value={usuario.email}>
+                            {usuario.fullName} ({usuario.email})
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Estado *</Label>
+                  <Select value={nuevoProyecto.estado} onValueChange={(value) => setNuevoProyecto({...nuevoProyecto, estado: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="planificacion">Planificación</SelectItem>
+                      <SelectItem value="en_progreso">En Progreso</SelectItem>
+                      <SelectItem value="pausado">Pausado</SelectItem>
+                      <SelectItem value="completado">Completado</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <Textarea 
@@ -1128,33 +1181,49 @@ export default function ProyectosPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Email Responsable *</Label>
-                  <Input 
-                    type="email"
-                    value={proyectoParaEditar.responsableEmail}
-                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, responsableEmail: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <Label>Estado *</Label>
-                  <Select 
-                    value={proyectoParaEditar.estado} 
-                    onValueChange={(value) => setProyectoParaEditar({...proyectoParaEditar, estado: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="planificacion">Planificación</SelectItem>
-                      <SelectItem value="en_progreso">En Progreso</SelectItem>
-                      <SelectItem value="pausado">Pausado</SelectItem>
-                      <SelectItem value="completado">Completado</SelectItem>
-                      <SelectItem value="cancelado">Cancelado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div>
+                <Label>Responsable del Proyecto *</Label>
+                <Select 
+                  value={proyectoParaEditar.responsableEmail} 
+                  onValueChange={(value) => setProyectoParaEditar({...proyectoParaEditar, responsableEmail: value})}
+                  disabled={loadingUsuarios}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingUsuarios ? "Cargando usuarios..." : "Selecciona un responsable"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {usuarios.length === 0 ? (
+                      <SelectItem value="sin-usuarios" disabled>
+                        No hay usuarios disponibles
+                      </SelectItem>
+                    ) : (
+                      usuarios.map((usuario) => (
+                        <SelectItem key={usuario.id} value={usuario.email}>
+                          {usuario.fullName} ({usuario.email})
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Estado *</Label>
+                <Select 
+                  value={proyectoParaEditar.estado} 
+                  onValueChange={(value) => setProyectoParaEditar({...proyectoParaEditar, estado: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="planificacion">Planificación</SelectItem>
+                    <SelectItem value="en_progreso">En Progreso</SelectItem>
+                    <SelectItem value="pausado">Pausado</SelectItem>
+                    <SelectItem value="completado">Completado</SelectItem>
+                    <SelectItem value="cancelado">Cancelado</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

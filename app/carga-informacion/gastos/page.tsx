@@ -59,6 +59,7 @@ export default function GastosPage() {
   // Estados de historial
   const [historial, setHistorial] = useState<HistorialCarga[]>([])
   const [loadingHistorial, setLoadingHistorial] = useState(false)
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   
   // Estados para formulario de nuevo gasto
   const [openDialog, setOpenDialog] = useState(false)
@@ -228,6 +229,7 @@ export default function GastosPage() {
 
   const descargarPlantilla = async () => {
     try {
+      setDownloadingTemplate(true)
       const blob = await expensesUploadService.descargarPlantilla()
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -248,6 +250,8 @@ export default function GastosPage() {
         title: "Error",
         description: "No se pudo descargar la plantilla"
       })
+    } finally {
+      setDownloadingTemplate(false)
     }
   }
 
@@ -532,9 +536,18 @@ export default function GastosPage() {
           <p className="text-muted-foreground">Gestión de gastos operativos y administrativos</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={descargarPlantilla}>
-            <Download className="h-4 w-4 mr-2" />
-            Plantilla Excel
+          <Button variant="outline" onClick={descargarPlantilla} disabled={downloadingTemplate}>
+            {downloadingTemplate ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Descargando...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4 mr-2" />
+                Plantilla Excel
+              </>
+            )}
           </Button>
           <Dialog open={openDialog} onOpenChange={setOpenDialog}>
             <DialogTrigger asChild>

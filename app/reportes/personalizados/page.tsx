@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Download, Play, Save, Edit, Trash2, ChevronDown, Settings, FileText, Loader2 } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Plus, Download, Save, Edit, Trash2, ChevronDown, Settings, FileText, Loader2, Eye } from "lucide-react"
 import * as XLSX from 'xlsx'
 
 const reportesGuardados = [
@@ -72,6 +73,12 @@ export default function ReportesPersonalizadosPage() {
   const [ejecutando, setEjecutando] = useState(false)
   const [reporteEjecutandoId, setReporteEjecutandoId] = useState<string | null>(null)
   const [descargando, setDescargando] = useState(false)
+  
+  // Estados para visualización de reportes
+  const [mostrarModalVisualizacion, setMostrarModalVisualizacion] = useState(false)
+  const [reporteVisualizando, setReporteVisualizando] = useState<any>(null)
+  const [datosReporteVisualizacion, setDatosReporteVisualizacion] = useState<any>(null)
+  const [cargandoVisualizacion, setCargandoVisualizacion] = useState(false)
 
   const toggleCampo = (campoId: string) => {
     setCamposSeleccionados((prev) =>
@@ -194,12 +201,20 @@ export default function ReportesPersonalizadosPage() {
       if (reporteId) {
         const resultado = await customReportsService.ejecutarReporte(reporteId)
         toast({
-          title: "✅ Reporte ejecutado",
-          description: `Se obtuvieron ${resultado.totalRegistros} registros`,
+          title: "✅ Reporte ejecutado exitosamente",
+          description: `${resultado.nombre} - ${resultado.totalRegistros} registros obtenidos`,
         })
         
-        // Opcional: Abrir modal o descargar resultados
-        console.log('Datos del reporte:', resultado.datos)
+        // Mostrar datos en consola para debugging
+        console.log('📊 Resultados del reporte:', {
+          nombre: resultado.nombre,
+          totalRegistros: resultado.totalRegistros,
+          fechaEjecucion: resultado.fechaEjecucion,
+          datos: resultado.resultados
+        })
+
+        // Recargar lista para actualizar contador de ejecuciones
+        await cargarReportesGuardados()
       } else {
         toast({
           title: "Reporte ejecutado",
@@ -244,6 +259,126 @@ export default function ReportesPersonalizadosPage() {
     }
   }
 
+  const handleDescargarReporteGuardado = async (reporteId: string) => {
+    try {
+      setDescargando(true)
+      setReporteEjecutandoId(reporteId)
+
+      // Obtener datos del reporte
+      const reporteInfo = await customReportsService.getReportePorId(reporteId)
+      
+      // Ejecutar el reporte para obtener datos reales
+      const resultado = await customReportsService.ejecutarReporte(reporteId)
+      
+      // Crear un nuevo libro de Excel
+      const wb = XLSX.utils.book_new()
+
+      // Información del reporte
+      const infoData = [
+        ['REPORTE PERSONALIZADO'],
+        ['Nombre:', reporteInfo.nombre],
+        ['Descripción:', reporteInfo.descripcion || 'Sin descripción'],
+        ['Fecha de generación:', new Date().toLocaleDateString('es-MX')],
+        ['Total de registros:', resultado.totalRegistros || 0],
+        ['Autor:', reporteInfo.autor],
+        []
+      ]
+
+      // Obtener configuración del reporte
+      const config = reporteInfo.configuracion || {}
+      const camposConfig = config.campos || []
+
+      // Crear encabezados basados en campos del reporte
+      const headers = camposConfig.map((campoId: string) => {
+        const campo = camposDisponibles.find(c => c.id === campoId)
+        return campo?.nombre || campoId
+      })
+
+      // Convertir datos reales del backend a formato de Excel
+      const datosReales = resultado.resultados || []
+      const datosExcel = datosReales.map((registro: any) => {
+        return camposConfig.map((campoId: string) => {
+          const valor = registro[campoId]
+          if (valor === null || valor === undefined) return '-'
+          if (valor instanceof Date) return valor.toLocaleDateString('es-MX')
+          if (typeof valor === 'number') return valor
+          return String(valor)
+        })
+      })
+
+      // Combinar información y datos
+      const reporteCompleto = [
+        ...infoData, 
+        ['DATOS DEL REPORTE'], 
+        [],
+        headers,
+        ...datosExcel
+      ]
+
+      // Crear hoja
+      const ws = XLSX.utils.aoa_to_sheet(reporteCompleto)
+
+      // Ajustar ancho de columnas
+      const colWidths = headers.map(() => ({ wch: 20 }))
+      ws['!cols'] = colWidths
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Reporte Personalizado')
+
+      // Generar nombre de archivo
+      const nombreArchivo = `${reporteInfo.nombre.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
+
+      // Descargar archivo
+      XLSX.writeFile(wb, nombreArchivo)
+
+      toast({
+        title: "Reporte descargado",
+        description: `${reporteInfo.nombre} - ${resultado.totalRegistros || 0} registros`
+      })
+    } catch (error: any) {
+      console.error('Error al descargar reporte:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "No se pudo descargar el reporte"
+      })
+    } finally {
+      setDescargando(false)
+      setReporteEjecutandoId(null)
+    }
+  }
+
+  const handleVisualizarReporte = async (reporteId: string) => {
+    try {
+      setCargandoVisualizacion(true)
+      setMostrarModalVisualizacion(true)
+
+      // Obtener información del reporte
+      const reporteInfo = await customReportsService.getReportePorId(reporteId)
+      console.log('📋 Info del reporte:', reporteInfo)
+      setReporteVisualizando(reporteInfo)
+
+      // Ejecutar el reporte para obtener datos
+      const resultado = await customReportsService.ejecutarReporte(reporteId)
+      console.log('📊 Resultado de ejecutar reporte:', resultado)
+      setDatosReporteVisualizacion(resultado)
+
+      if (!resultado.resultados || resultado.resultados.length === 0) {
+        console.warn('⚠️ No se obtuvieron resultados del reporte')
+      }
+
+    } catch (error: any) {
+      console.error('❌ Error al visualizar reporte:', error)
+      toast({
+        variant: "destructive",
+        title: "Error al cargar datos",
+        description: error.message || "No se pudo cargar la visualización del reporte"
+      })
+      setMostrarModalVisualizacion(false)
+    } finally {
+      setCargandoVisualizacion(false)
+    }
+  }
+
   const handleDescargarReporte = async () => {
     if (camposSeleccionados.length === 0) {
       toast({
@@ -257,6 +392,29 @@ export default function ReportesPersonalizadosPage() {
     try {
       setDescargando(true)
 
+      // Crear reporte temporal o usar existente
+      const reporteData = {
+        nombre: nombreReporte || 'Reporte Temporal',
+        descripcion: descripcionReporte,
+        tipoBase: 'cuentas_cobrar',
+        configuracion: {
+          campos: camposSeleccionados,
+          filtros: {
+            fechaDesde: filtroFechaDesde,
+            fechaHasta: filtroFechaHasta,
+            estado: filtroEstado
+          },
+          agrupacion: agrupacion === 'none' ? null : agrupacion,
+          ordenamiento
+        }
+      }
+
+      // Guardar el reporte
+      const reporteCreado = await customReportsService.crearReporte(reporteData)
+      
+      // Ejecutar el reporte para obtener datos reales
+      const resultado = await customReportsService.ejecutarReporte(reporteCreado.id)
+      
       // Crear un nuevo libro de Excel
       const wb = XLSX.utils.book_new()
 
@@ -266,6 +424,7 @@ export default function ReportesPersonalizadosPage() {
         ['Nombre:', nombreReporte || 'Reporte sin nombre'],
         ['Descripción:', descripcionReporte || 'Sin descripción'],
         ['Fecha de generación:', new Date().toLocaleDateString('es-MX')],
+        ['Total de registros:', resultado.totalRegistros || 0],
         [],
         ['CONFIGURACIÓN'],
         ['Campos incluidos:', camposSeleccionados.length],
@@ -283,30 +442,26 @@ export default function ReportesPersonalizadosPage() {
         return campo?.nombre || campoId
       })
 
-      // Agregar datos de ejemplo (en producción estos vendrían del backend)
-      const datosEjemplo = [
-        headers,
-        ...Array(10).fill(null).map((_, i) => 
-          camposSeleccionados.map(campoId => {
-            switch(campoId) {
-              case 'cliente': return `Cliente ${i + 1}`
-              case 'factura': return `FAC-2024-${String(i + 1).padStart(4, '0')}`
-              case 'fecha': return new Date(2024, 0, i + 1).toLocaleDateString('es-MX')
-              case 'monto': return `$${(Math.random() * 10000).toFixed(2)}`
-              case 'estado': return ['Pagado', 'Pendiente', 'Vencido'][Math.floor(Math.random() * 3)]
-              case 'vendedor': return `Vendedor ${i + 1}`
-              case 'categoria': return ['Producto A', 'Producto B', 'Servicio C'][Math.floor(Math.random() * 3)]
-              case 'proveedor': return `Proveedor ${i + 1}`
-              case 'fechaVencimiento': return new Date(2024, 0, i + 15).toLocaleDateString('es-MX')
-              case 'diasVencido': return Math.floor(Math.random() * 30)
-              default: return '-'
-            }
-          })
-        )
-      ]
+      // Convertir datos reales del backend a formato de Excel
+      const datosReales = resultado.resultados || []
+      const datosExcel = datosReales.map((registro: any) => {
+        return camposSeleccionados.map(campoId => {
+          const valor = registro[campoId]
+          if (valor === null || valor === undefined) return '-'
+          if (valor instanceof Date) return valor.toLocaleDateString('es-MX')
+          if (typeof valor === 'number') return valor
+          return String(valor)
+        })
+      })
 
       // Combinar información y datos
-      const reporteCompleto = [...infoData, ['DATOS DEL REPORTE'], [], ...datosEjemplo]
+      const reporteCompleto = [
+        ...infoData, 
+        ['DATOS DEL REPORTE'], 
+        [],
+        headers,
+        ...datosExcel
+      ]
 
       // Crear hoja
       const ws = XLSX.utils.aoa_to_sheet(reporteCompleto)
@@ -327,14 +482,17 @@ export default function ReportesPersonalizadosPage() {
 
       toast({
         title: "Reporte descargado",
-        description: "El reporte se ha descargado exitosamente"
+        description: `Reporte generado con ${resultado.totalRegistros || 0} registros`
       })
-    } catch (error) {
+
+      // Recargar lista de reportes
+      await cargarReportesGuardados()
+    } catch (error: any) {
       console.error('Error al descargar reporte:', error)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "No se pudo descargar el reporte"
+        description: error.message || "No se pudo descargar el reporte"
       })
     } finally {
       setDescargando(false)
@@ -519,28 +677,243 @@ export default function ReportesPersonalizadosPage() {
                   )}
                 </CardContent>
               </Card>
-
-              <Card className="mt-4">
-                <CardHeader>
-                  <CardTitle>Formatos de Exportación</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="excel" defaultChecked />
-                    <Label htmlFor="excel">Excel (.xlsx)</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="csv" />
-                    <Label htmlFor="csv">CSV (.csv)</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="pdf" />
-                    <Label htmlFor="pdf">PDF (.pdf)</Label>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           </div>
+
+          {/* Reportes Guardados */}
+          {reportesGuardadosData.length > 0 && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Reportes Guardados</CardTitle>
+                <CardDescription>Tus reportes personalizados disponibles</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Descripción</TableHead>
+                      <TableHead>Última Ejecución</TableHead>
+                      <TableHead>Frecuencia</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {reportesGuardadosData.map((reporte) => (
+                      <TableRow key={reporte.id}>
+                        <TableCell className="font-medium">{reporte.nombre}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{reporte.descripcion}</TableCell>
+                        <TableCell className="text-sm">{reporte.ultimaEjecucion}</TableCell>
+                        <TableCell className="text-sm">{reporte.frecuencia}</TableCell>
+                        <TableCell>
+                          <Badge variant={reporte.estado === 'activo' ? 'default' : 'secondary'}>
+                            {reporte.estado}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleVisualizarReporte(reporte.id)}
+                              disabled={cargandoVisualizacion}
+                              title="Ver reporte"
+                              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDescargarReporteGuardado(reporte.id)}
+                              disabled={descargando && reporteEjecutandoId === reporte.id}
+                              title="Descargar reporte"
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                            >
+                              {descargando && reporteEjecutandoId === reporte.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Download className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEliminarReporte(reporte.id)}
+                              disabled={cargando}
+                              title="Eliminar reporte"
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Modal para Visualizar Reporte */}
+          <Dialog open={mostrarModalVisualizacion} onOpenChange={(open) => {
+            setMostrarModalVisualizacion(open)
+            if (!open) {
+              setReporteVisualizando(null)
+              setDatosReporteVisualizacion(null)
+              setCargandoVisualizacion(false)
+            }
+          }}>
+            <DialogContent className="sm:max-w-[900px] max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  {reporteVisualizando?.nombre || 'Visualización de Reporte'}
+                </DialogTitle>
+                <DialogDescription>
+                  {reporteVisualizando?.descripcion || 'Datos del reporte personalizado'}
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="py-4">
+                {cargandoVisualizacion ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                    <span className="ml-2">Cargando datos...</span>
+                  </div>
+                ) : datosReporteVisualizacion?.resultados ? (
+                  <div className="space-y-4">
+                    {/* Información del reporte */}
+                    <Card className="bg-blue-50 border-blue-200">
+                      <CardContent className="p-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Total de Registros</p>
+                            <p className="text-2xl font-bold text-blue-900">{datosReporteVisualizacion.totalRegistros || 0}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Campos</p>
+                            <p className="text-lg font-semibold">{reporteVisualizando?.configuracion?.campos?.length || 0}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Tipo Base</p>
+                            <p className="text-sm font-medium capitalize">{reporteVisualizando?.tipoBase || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Autor</p>
+                            <p className="text-sm font-medium">{reporteVisualizando?.autor || 'N/A'}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Tabla de datos */}
+                    {datosReporteVisualizacion.resultados.length > 0 ? (
+                      <div className="max-h-96 overflow-auto border rounded-lg">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              {Object.keys(datosReporteVisualizacion.resultados[0]).map((key) => (
+                                <TableHead key={key} className="capitalize">{key}</TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {datosReporteVisualizacion.resultados.map((registro: any, index: number) => (
+                              <TableRow key={index}>
+                                {Object.values(registro).map((valor: any, idx: number) => (
+                                  <TableCell key={idx}>
+                                    {valor instanceof Date 
+                                      ? valor.toLocaleDateString('es-MX')
+                                      : typeof valor === 'number'
+                                      ? valor.toLocaleString('es-MX')
+                                      : String(valor)}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <p className="text-center py-8 text-muted-foreground">No hay datos para mostrar</p>
+                    )}
+                  </div>
+                ) : datosReporteVisualizacion ? (
+                  <div className="space-y-4">
+                    <Card className="bg-amber-50 border-amber-300">
+                      <CardContent className="p-6 text-center">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="rounded-full bg-amber-100 p-3">
+                            <FileText className="h-8 w-8 text-amber-600" />
+                          </div>
+                          <div>
+                            <p className="text-lg font-semibold text-amber-900">No se encontraron datos</p>
+                            <p className="text-sm text-amber-700 mt-1">
+                              El reporte se ejecutó correctamente pero no hay registros que coincidan con los filtros aplicados
+                            </p>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-2 space-y-1">
+                            <p><strong>Tipo:</strong> {reporteVisualizando?.tipoBase}</p>
+                            {reporteVisualizando?.configuracion?.filtros && (
+                              <div className="mt-2">
+                                <p className="font-medium">Filtros aplicados:</p>
+                                <pre className="text-left bg-white p-2 rounded mt-1 max-w-md">
+                                  {JSON.stringify(reporteVisualizando.configuracion.filtros, null, 2)}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                          <details className="mt-3 w-full">
+                            <summary className="text-xs cursor-pointer text-blue-600 hover:text-blue-800">Ver respuesta completa de la API</summary>
+                            <pre className="mt-2 text-xs bg-white p-3 rounded overflow-auto max-h-40 text-left border">
+                              {JSON.stringify(datosReporteVisualizacion, null, 2)}
+                            </pre>
+                          </details>
+                          <p className="text-xs text-muted-foreground mt-4 max-w-lg">
+                            💡 <strong>Sugerencia:</strong> Verifica que haya datos en la base de datos para el tipo de reporte "{reporteVisualizando?.tipoBase}" 
+                            o ajusta los filtros del reporte.
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                ) : (
+                  <p className="text-center py-4 text-muted-foreground">No hay datos disponibles</p>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setMostrarModalVisualizacion(false)}
+                >
+                  Cerrar
+                </Button>
+                <Button 
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={() => {
+                    if (reporteVisualizando?.id) {
+                      handleDescargarReporteGuardado(reporteVisualizando.id)
+                    }
+                  }}
+                  disabled={!reporteVisualizando?.id || (descargando && reporteEjecutandoId === reporteVisualizando?.id)}
+                >
+                  {descargando && reporteEjecutandoId === reporteVisualizando?.id ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Descargando...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Descargar Excel
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
       </div>
     </div>
   )

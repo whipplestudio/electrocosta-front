@@ -152,14 +152,9 @@ const menuItems = [
   {
     title: "Reportes",
     icon: Download,
-    href: "/reportes",
-    requiredPermissionCodes: ["reportes.detallados.ver"],
+    href: "/reportes/descargables",
+    requiredPermissionCodes: ["reportes.descargables.ver"],
     submenu: [
-      { 
-        title: "Detallados", 
-        href: "/reportes",
-        requiredPermissionCodes: ["reportes.detallados.ver"]
-      },
       { 
         title: "Descargables", 
         href: "/reportes/descargables",

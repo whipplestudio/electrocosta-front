@@ -13,7 +13,7 @@ import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Download, Settings, Play, Pause, Trash2, Loader2 } from "lucide-react"
+import { Download, Settings, Play, Pause, Trash2, Loader2, Eye } from "lucide-react"
 
 export default function ReportesDescargablesPage() {
   const { toast } = useToast()
@@ -44,6 +44,12 @@ export default function ReportesDescargablesPage() {
   
   // Estado para descarga en progreso
   const [descargandoReporteId, setDescargandoReporteId] = useState<string | null>(null)
+  
+  // Estados para visualización de reportes
+  const [mostrarModalVisualizacion, setMostrarModalVisualizacion] = useState(false)
+  const [reporteVisualizando, setReporteVisualizando] = useState<any>(null)
+  const [datosReporteVisualizacion, setDatosReporteVisualizacion] = useState<any>(null)
+  const [cargandoVisualizacion, setCargandoVisualizacion] = useState(false)
 
   // Cargar tipos de reporte disponibles
   useEffect(() => {
@@ -549,6 +555,397 @@ export default function ReportesDescargablesPage() {
     }
   }
 
+  const handleVisualizarReporte = async (reporteId: string) => {
+    try {
+      setCargandoVisualizacion(true)
+      setMostrarModalVisualizacion(true)
+      
+      // Encontrar el reporte en la lista
+      const reporte = reportesGenerados.find(r => r.id === reporteId)
+      if (!reporte) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Reporte no encontrado"
+        })
+        setMostrarModalVisualizacion(false)
+        return
+      }
+
+      setReporteVisualizando(reporte)
+
+      // Determinar el tipo de reporte
+      const tipoReporte = reporte.tipos?.[0] || reporte.tipo || 'general'
+      
+      const token = localStorage.getItem('accessToken')
+      
+      if (!token) {
+        toast({
+          variant: "destructive",
+          title: "Error de autenticación",
+          description: "Por favor, inicia sesión nuevamente."
+        })
+        setMostrarModalVisualizacion(false)
+        return
+      }
+
+      // Mapeo de tipos a endpoints para obtener datos JSON
+      let endpoint = ''
+      
+      switch (tipoReporte) {
+        case 'cuentas-cobrar':
+          endpoint = '/accounts-receivable/reports/due-dates'
+          break
+        case 'cuentas-pagar':
+          endpoint = '/accounts-payable/reports/due-dates'
+          break
+        case 'flujo-efectivo':
+          endpoint = '/accounts-payable/reports/cash-flow'
+          break
+        case 'estado-resultados':
+          endpoint = '/accounts-payable/reports/dashboard'
+          break
+        default:
+          endpoint = '/accounts-payable/reports/dashboard'
+      }
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
+      const url = `${apiUrl}${endpoint}`
+
+      // Obtener datos en formato JSON
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`)
+      }
+
+      const datos = await response.json()
+      setDatosReporteVisualizacion(datos)
+
+    } catch (error: any) {
+      console.error('Error al visualizar reporte:', error)
+      toast({
+        variant: "destructive",
+        title: "Error al cargar datos",
+        description: error.message || "No se pudo cargar la visualización del reporte"
+      })
+      setMostrarModalVisualizacion(false)
+    } finally {
+      setCargandoVisualizacion(false)
+    }
+  }
+
+  const renderizarDatosReporte = () => {
+    if (cargandoVisualizacion) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <span className="ml-2">Cargando datos...</span>
+        </div>
+      )
+    }
+
+    if (!datosReporteVisualizacion) {
+      return <p className="text-center py-4 text-muted-foreground">No hay datos disponibles</p>
+    }
+
+    const datos = datosReporteVisualizacion
+
+    // Detectar si tiene estructura de cuentas (overdue, upcoming, summary)
+    const esCuentas = datos.overdue || datos.upcoming || datos.summary
+
+    // Detectar si tiene estructura de dashboard/métricas (keyMetrics, categoryBreakdown, etc.)
+    const esDashboard = datos.keyMetrics || datos.categoryBreakdown || datos.agingDistribution || datos.upcomingPayments
+
+    // Renderizar UI para reportes de cuentas (cobrar/pagar)
+    if (esCuentas && !esDashboard) {
+      const cuentas = [...(datos.overdue || []), ...(datos.upcoming || [])]
+
+      return (
+        <div className="space-y-4">
+          {/* Resumen */}
+          {datos.summary && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Vencido</p>
+                <p className="text-lg font-bold text-red-600">{datos.summary.totalOverdue || 0}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Monto Vencido</p>
+                <p className="text-lg font-bold">${typeof datos.summary.overdueAmount === 'number' ? datos.summary.overdueAmount.toLocaleString('es-MX', { minimumFractionDigits: 2 }) : datos.summary.overdueAmount}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Próximo</p>
+                <p className="text-lg font-bold text-blue-600">{datos.summary.totalUpcoming || 0}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Monto Próximo</p>
+                <p className="text-lg font-bold">${typeof datos.summary.upcomingAmount === 'number' ? datos.summary.upcomingAmount.toLocaleString('es-MX', { minimumFractionDigits: 2 }) : datos.summary.upcomingAmount}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Tabla de cuentas */}
+          {cuentas.length > 0 ? (
+            <div className="max-h-96 overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Factura</TableHead>
+                    <TableHead>Cliente/Proveedor</TableHead>
+                    <TableHead>Monto</TableHead>
+                    <TableHead>Fecha Vencimiento</TableHead>
+                    <TableHead>Estado</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {cuentas.map((cuenta: any, index: number) => (
+                    <TableRow key={cuenta.id || index}>
+                      <TableCell className="font-medium">{cuenta.invoiceNumber}</TableCell>
+                      <TableCell>{cuenta.supplierName || cuenta.supplier?.name || cuenta.clientName || 'N/A'}</TableCell>
+                      <TableCell className="font-semibold">${typeof cuenta.amount === 'number' ? cuenta.amount.toLocaleString('es-MX', { minimumFractionDigits: 2 }) : cuenta.amount}</TableCell>
+                      <TableCell>{new Date(cuenta.dueDate).toLocaleDateString('es-MX')}</TableCell>
+                      <TableCell>
+                        <Badge variant={cuenta.daysOverdue > 0 ? 'destructive' : 'default'}>
+                          {cuenta.daysOverdue > 0 ? `${cuenta.daysOverdue} días vencido` : cuenta.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="text-center py-4 text-muted-foreground">No hay cuentas para mostrar</p>
+          )}
+        </div>
+      )
+    }
+
+    // Si tiene estructura de dashboard, usar la UI mejorada
+    if (esDashboard) {
+      return (
+        <div className="space-y-6 max-h-[600px] overflow-y-auto">
+          {/* Métricas Clave */}
+          {datos.keyMetrics && (
+            <div>
+              <h3 className="text-lg font-semibold mb-3">📊 Métricas Clave</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 overflow-hidden">
+                  <CardContent className="p-4">
+                    <p className="text-xs text-blue-700 font-medium mb-2">Total por Pagar</p>
+                    <p className="text-base sm:text-lg font-bold text-blue-900 break-words leading-tight">
+                      ${typeof datos.keyMetrics.totalPayable === 'number' 
+                        ? datos.keyMetrics.totalPayable.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        : datos.keyMetrics.totalPayable}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200 overflow-hidden">
+                  <CardContent className="p-4">
+                    <p className="text-xs text-red-700 font-medium mb-2">Total Vencido</p>
+                    <p className="text-base sm:text-lg font-bold text-red-900 break-words leading-tight">
+                      ${typeof datos.keyMetrics.totalOverdue === 'number' 
+                        ? datos.keyMetrics.totalOverdue.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        : datos.keyMetrics.totalOverdue}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 overflow-hidden">
+                  <CardContent className="p-4">
+                    <p className="text-xs text-orange-700 font-medium mb-2">Crítico Vencido</p>
+                    <p className="text-2xl font-bold text-orange-900 leading-tight">{datos.keyMetrics.criticalOverdue || 0}</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 overflow-hidden">
+                  <CardContent className="p-4">
+                    <p className="text-xs text-green-700 font-medium mb-2">Próximos Esta Semana</p>
+                    <p className="text-2xl font-bold text-green-900 leading-tight">{datos.keyMetrics.upcomingThisWeek || 0}</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 overflow-hidden">
+                  <CardContent className="p-4">
+                    <p className="text-xs text-purple-700 font-medium mb-2">Promedio Días Vencido</p>
+                    <p className="text-2xl font-bold text-purple-900 leading-tight">{datos.keyMetrics.avgOverdueDays || 0}</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+
+          {/* Próximos Pagos */}
+          {datos.upcomingPayments && datos.upcomingPayments.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold mb-3">📅 Próximos Pagos</h3>
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Proveedor</TableHead>
+                        <TableHead>Monto</TableHead>
+                        <TableHead>Fecha Vencimiento</TableHead>
+                        <TableHead>Días</TableHead>
+                        <TableHead>Programado</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {datos.upcomingPayments.map((pago: any, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">{pago.supplier}</TableCell>
+                          <TableCell className="text-green-700 font-semibold">
+                            ${typeof pago.amount === 'number' 
+                              ? pago.amount.toLocaleString('es-MX', { minimumFractionDigits: 2 })
+                              : pago.amount}
+                          </TableCell>
+                          <TableCell>{new Date(pago.dueDate).toLocaleDateString('es-MX')}</TableCell>
+                          <TableCell>
+                            <Badge variant={pago.daysUntilDue === 0 ? 'destructive' : 'default'}>
+                              {pago.daysUntilDue === 0 ? 'Hoy' : `${pago.daysUntilDue} días`}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {pago.scheduled ? (
+                              <Badge className="bg-green-100 text-green-800">✓ Sí</Badge>
+                            ) : (
+                              <Badge variant="secondary">No</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Cuentas Vencidas */}
+          {datos.overdueAccounts && datos.overdueAccounts.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold mb-3 text-red-600">⚠️ Cuentas Vencidas</h3>
+              <Card className="border-red-200">
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Proveedor</TableHead>
+                        <TableHead>Monto</TableHead>
+                        <TableHead>Fecha Vencimiento</TableHead>
+                        <TableHead>Días Vencido</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {datos.overdueAccounts.map((cuenta: any, index: number) => (
+                        <TableRow key={index} className="bg-red-50">
+                          <TableCell className="font-medium">{cuenta.supplier}</TableCell>
+                          <TableCell className="text-red-700 font-semibold">
+                            ${typeof cuenta.amount === 'number' 
+                              ? cuenta.amount.toLocaleString('es-MX', { minimumFractionDigits: 2 })
+                              : cuenta.amount}
+                          </TableCell>
+                          <TableCell>{new Date(cuenta.dueDate).toLocaleDateString('es-MX')}</TableCell>
+                          <TableCell>
+                            <Badge variant="destructive">{cuenta.daysOverdue} días</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Desglose por Categoría */}
+          {datos.categoryBreakdown && datos.categoryBreakdown.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold mb-3">📁 Desglose por Categoría</h3>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="space-y-3">
+                    {datos.categoryBreakdown.map((categoria: any, index: number) => (
+                      <div key={index} className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{categoria.category}</span>
+                            <Badge variant="outline">{categoria.count} {categoria.count === 1 ? 'cuenta' : 'cuentas'}</Badge>
+                          </div>
+                          <span className="text-lg font-bold">
+                            ${typeof categoria.amount === 'number' 
+                              ? categoria.amount.toLocaleString('es-MX', { minimumFractionDigits: 2 })
+                              : categoria.amount}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
+                            <div 
+                              className="bg-blue-600 h-full rounded-full transition-all"
+                              style={{ width: `${categoria.percentage}%` }}
+                            />
+                          </div>
+                          <span className="text-sm text-muted-foreground min-w-[60px] text-right">
+                            {typeof categoria.percentage === 'number' 
+                              ? categoria.percentage.toFixed(2)
+                              : categoria.percentage}%
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Distribución de Antigüedad */}
+          {datos.agingDistribution && datos.agingDistribution.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold mb-3">⏱️ Distribución de Antigüedad</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {datos.agingDistribution.map((rango: any, index: number) => (
+                  <Card key={index} className="border-2">
+                    <CardContent className="p-4">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">{rango.label}</p>
+                      <p className="text-xl font-bold mb-1">
+                        ${typeof rango.value === 'number' 
+                          ? rango.value.toLocaleString('es-MX', { minimumFractionDigits: 2 })
+                          : rango.value}
+                      </p>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{rango.count} cuentas</span>
+                        <span>{typeof rango.percentage === 'number' ? rango.percentage.toFixed(1) : rango.percentage}%</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    // Para otros tipos de reportes, mostrar estructura JSON
+    return (
+      <div className="max-h-96 overflow-auto">
+        <pre className="bg-gray-50 p-4 rounded-lg text-xs">
+          {JSON.stringify(datosReporteVisualizacion, null, 2)}
+        </pre>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -780,35 +1177,50 @@ export default function ReportesDescargablesPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {reporte.estado === "disponible" || reporte.estado === "completado" ? (
-                      <Button 
-                        size="sm" 
-                        className="bg-green-600 hover:bg-green-700"
-                        onClick={() => handleDescargarReporte(reporte.id)}
-                        disabled={descargandoReporteId === reporte.id}
-                      >
-                        {descargandoReporteId === reporte.id ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                            Descargando...
-                          </>
-                        ) : (
-                          <>
-                            <Download className="h-4 w-4 mr-1" />
-                            Descargar
-                          </>
-                        )}
-                      </Button>
-                    ) : reporte.estado === "procesando" ? (
-                      <Button size="sm" variant="outline" disabled>
-                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                        Procesando...
-                      </Button>
-                    ) : (
-                      <Button size="sm" variant="outline" disabled>
-                        No disponible
-                      </Button>
-                    )}
+                    <div className="flex gap-2">
+                      {reporte.estado === "disponible" || reporte.estado === "completado" ? (
+                        <>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
+                            onClick={() => handleVisualizarReporte(reporte.id)}
+                            title="Ver reporte en pantalla"
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            Ver
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            className="bg-green-600 hover:bg-green-700"
+                            onClick={() => handleDescargarReporte(reporte.id)}
+                            disabled={descargandoReporteId === reporte.id}
+                            title="Descargar reporte"
+                          >
+                            {descargandoReporteId === reporte.id ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                Descargando...
+                              </>
+                            ) : (
+                              <>
+                                <Download className="h-4 w-4 mr-1" />
+                                Descargar
+                              </>
+                            )}
+                          </Button>
+                        </>
+                      ) : reporte.estado === "procesando" ? (
+                        <Button size="sm" variant="outline" disabled>
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          Procesando...
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="outline" disabled>
+                          No disponible
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -1027,6 +1439,61 @@ export default function ReportesDescargablesPage() {
             </Button>
             <Button onClick={handleGuardarEdicion}>
               Guardar Cambios
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para Visualizar Reporte */}
+      <Dialog open={mostrarModalVisualizacion} onOpenChange={(open) => {
+        setMostrarModalVisualizacion(open)
+        if (!open) {
+          setReporteVisualizando(null)
+          setDatosReporteVisualizacion(null)
+          setCargandoVisualizacion(false)
+        }
+      }}>
+        <DialogContent className="sm:max-w-[900px] max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>
+              {reporteVisualizando?.nombre || 'Visualización de Reporte'}
+            </DialogTitle>
+            <DialogDescription>
+              {reporteVisualizando?.fechaGeneracion && `Generado el ${reporteVisualizando.fechaGeneracion}`}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            {renderizarDatosReporte()}
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setMostrarModalVisualizacion(false)}
+            >
+              Cerrar
+            </Button>
+            <Button 
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() => {
+                if (reporteVisualizando?.id) {
+                  handleDescargarReporte(reporteVisualizando.id)
+                }
+              }}
+              disabled={!reporteVisualizando?.id || descargandoReporteId === reporteVisualizando?.id}
+            >
+              {descargandoReporteId === reporteVisualizando?.id ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Descargando...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Descargar Excel
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

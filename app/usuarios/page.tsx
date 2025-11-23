@@ -17,9 +17,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
-import { Plus, Edit, Trash2, Shield, Loader2 } from "lucide-react"
+import { Plus, Edit, Trash2, Shield, Loader2, Eye, EyeOff } from "lucide-react"
 import { usersService } from "@/services/users.service"
 import { rolesService } from "@/services/roles.service"
+import { authService } from "@/services/auth.service"
 import { useToast } from "@/hooks/use-toast"
 import type { User, Role, UserStatus, CreateUserDto, UpdateUserDto } from "@/types/users"
 import { RouteProtection } from "@/components/route-protection"
@@ -47,11 +48,25 @@ function UsuariosPageContent() {
   const [filterRole, setFilterRole] = useState<string>("")
   const [filterStatus, setFilterStatus] = useState<UserStatus | "all">("all")
   const [formData, setFormData] = useState<Partial<CreateUserDto>>({})
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
 
   // Cargar datos iniciales
   useEffect(() => {
     loadUsers()
     loadRoles()
+    
+    // Obtener rol del usuario actual
+    const currentUser = authService.getCurrentUser()
+    console.log("👤 Usuario actual:", currentUser)
+    
+    if (currentUser?.role?.name) {
+      // Usuario guardado en localStorage (tiene rol completo)
+      console.log("✅ Rol detectado:", currentUser.role.name)
+      setCurrentUserRole(currentUser.role.name)
+    } else {
+      console.warn("⚠️ No se pudo detectar el rol. Por favor, cierra sesión e inicia sesión nuevamente.")
+    }
   }, [])
 
   const loadUsers = async () => {
@@ -141,6 +156,7 @@ function UsuariosPageContent() {
   const handleCreateUser = () => {
     setSelectedUser(null)
     setFormData({})
+    setShowPassword(false)
     setIsUserDialogOpen(true)
   }
 
@@ -156,7 +172,9 @@ function UsuariosPageContent() {
       roleId: user.roleId,
       departmentId: user.departmentId,
       status: user.status,
+      password: "", // Limpiar contraseña al editar
     })
+    setShowPassword(false)
     setIsUserDialogOpen(true)
   }
 
@@ -166,6 +184,12 @@ function UsuariosPageContent() {
       if (selectedUser) {
         // Editar
         const { email: _email, cargo: _cargo, ...updatePayload } = formData
+        
+        // Si la contraseña está vacía, eliminarla del payload
+        if (!updatePayload.password) {
+          delete updatePayload.password
+        }
+        
         await usersService.update(selectedUser.id, updatePayload as UpdateUserDto)
         toast({
           title: "Usuario actualizado",
@@ -204,6 +228,7 @@ function UsuariosPageContent() {
         })
       }
       setIsUserDialogOpen(false)
+      setShowPassword(false)
       loadUsers()
     } catch (error) {
       toast({
@@ -380,10 +405,31 @@ function UsuariosPageContent() {
               <Label htmlFor="email">Email *</Label>
               <Input id="email" type="email" placeholder="usuario@electrocosta.com" value={formData.email || ""} onChange={(e) => setFormData({...formData, email: e.target.value})} required />
             </div>
-            {!selectedUser && (
+            {(!selectedUser || currentUserRole === 'super_admin') && (
               <div className="space-y-2">
-                <Label htmlFor="password">Contraseña *</Label>
-                <Input id="password" type="password" placeholder="********" value={formData.password || ""} onChange={(e) => setFormData({...formData, password: e.target.value})} required />
+                <Label htmlFor="password">{selectedUser ? "Nueva Contraseña (opcional)" : "Contraseña *"}</Label>
+                <div className="relative">
+                  <Input 
+                    id="password" 
+                    type={showPassword ? "text" : "password"}
+                    placeholder={selectedUser ? "Dejar vacío para no cambiar" : "********"} 
+                    value={formData.password || ""} 
+                    onChange={(e) => setFormData({...formData, password: e.target.value})} 
+                    required={!selectedUser}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
             )}
             <div className="space-y-2">
@@ -411,7 +457,10 @@ function UsuariosPageContent() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsUserDialogOpen(false)}>
+            <Button variant="outline" onClick={() => {
+              setIsUserDialogOpen(false)
+              setShowPassword(false)
+            }}>
               Cancelar
             </Button>
             <Button onClick={handleSaveUser} disabled={savingUser}>

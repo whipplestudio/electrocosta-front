@@ -38,15 +38,15 @@ function ReportesCuentasCobrarContent() {
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [selectedClient, setSelectedClient] = useState("all")
-  const [clients, setClients] = useState<Client[]>([])
+  const [clients, setClients] = useState<Pick<Client, 'id' | 'name'>[]>([])
   const [agingData, setAgingData] = useState<AgingBucket[]>([])
   const [dashboard, setDashboard] = useState<DashboardData | Analytics | null>(null)
 
-  // Cargar clientes
+  // Cargar clientes - usando endpoint optimizado sin paginación
   const loadClients = useCallback(async () => {
     try {
-      const response = await clientsService.list({ limit: 1000 })
-      setClients(response.data || [])
+      const response = await clientsService.listAll()
+      setClients(response || [])
     } catch (error) {
       console.error('Error al cargar clientes:', error)
       toast.error('Error al cargar clientes')

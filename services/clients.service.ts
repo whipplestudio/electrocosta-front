@@ -35,6 +35,16 @@ export interface ClientFilterParams {
 }
 
 export const clientsService = {
+  async listAll(): Promise<Pick<Client, 'id' | 'name'>[]> {
+    try {
+      // Endpoint optimizado para selects - sin paginación, solo id y name
+      const response = await apiClient.get<Pick<Client, 'id' | 'name'>[]>('/clients/all');
+      return response.data;
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
+
   async list(params?: ClientFilterParams): Promise<ClientListResponse> {
     try {
       // Construir parámetros solo con valores definidos

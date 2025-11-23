@@ -310,9 +310,14 @@ function AplicacionPagosContent() {
                                   size="sm" 
                                   variant="outline"
                                   onClick={() => loadPaymentHistory(account)}
+                                  disabled={loadingHistory}
                                   title="Ver historial de pagos"
                                 >
-                                  <History className="h-4 w-4" />
+                                  {loadingHistory ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <History className="h-4 w-4" />
+                                  )}
                                 </Button>
                                 <Button 
                                   size="sm" 

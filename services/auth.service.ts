@@ -33,6 +33,10 @@ export const authService = {
       if (response.data.refreshToken) {
         localStorage.setItem('refreshToken', response.data.refreshToken);
       }
+      // Guardar información del usuario completo (incluye rol)
+      if (response.data.user) {
+        localStorage.setItem('currentUser', JSON.stringify(response.data.user));
+      }
       
       return response.data;
     } catch (error) {
@@ -49,14 +53,25 @@ export const authService = {
       // Limpiar tokens del localStorage
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
+      localStorage.removeItem('currentUser');
     }
   },
 
   getCurrentUser() {
+    // Primero intentar obtener el usuario guardado (tiene info completa)
+    const userStr = localStorage.getItem('currentUser');
+    if (userStr) {
+      try {
+        return JSON.parse(userStr);
+      } catch {
+        // Si falla, continuar con el método anterior
+      }
+    }
+    
+    // Fallback: decodificar el JWT (solo tiene roleId, no el nombre)
     const token = localStorage.getItem('accessToken');
     if (!token) return null;
     
-    // Decodificar el JWT (básico, sin validación)
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       return payload;

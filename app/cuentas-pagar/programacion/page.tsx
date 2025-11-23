@@ -32,6 +32,7 @@ export default function ProgramacionPagosPage() {
   const [availableAccounts, setAvailableAccounts] = useState<AccountPayable[]>([])
   const [showScheduleDialog, setShowScheduleDialog] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [summary, setSummary] = useState({
     totalScheduled: 0,
     totalCompleted: 0,
@@ -188,7 +189,10 @@ export default function ProgramacionPagosPage() {
   const handleCancelSchedule = async (scheduleId: string) => {
     if (!confirm('¿Estás seguro de cancelar esta programación de pago?')) return
 
+    if (cancellingId) return
+
     try {
+      setCancellingId(scheduleId)
       await paymentSchedulingService.cancelSchedule(scheduleId)
       toast({
         title: "✅ Éxito",
@@ -202,6 +206,8 @@ export default function ProgramacionPagosPage() {
         title: "Error",
         description: error.response?.data?.message || 'Error al cancelar la programación'
       })
+    } finally {
+      setCancellingId(null)
     }
   }
 
@@ -235,8 +241,9 @@ export default function ProgramacionPagosPage() {
 
   // Filtrar pagos
   const filteredSchedules = schedules.filter((schedule) => {
+    const supplierName = schedule.accountPayable?.supplier?.name || (schedule.accountPayable as any)?.supplierName || '';
     const matchesSearch =
-      schedule.accountPayable?.supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       schedule.accountPayable?.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       schedule.reference?.toLowerCase().includes(searchTerm.toLowerCase())
     
@@ -390,7 +397,7 @@ export default function ProgramacionPagosPage() {
                     <TableRow key={schedule.id}>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{schedule.accountPayable?.supplier.name || 'N/A'}</div>
+                          <div className="font-medium">{schedule.accountPayable?.supplier?.name || (schedule.accountPayable as any)?.supplierName || 'N/A'}</div>
                           {schedule.reference && (
                             <div className="text-sm text-muted-foreground">Ref: {schedule.reference}</div>
                           )}
@@ -425,9 +432,19 @@ export default function ProgramacionPagosPage() {
                               size="sm" 
                               variant="outline"
                               onClick={() => handleCancelSchedule(schedule.id)}
+                              disabled={cancellingId === schedule.id}
                             >
-                              <X className="h-4 w-4 mr-1" />
-                              Cancelar
+                              {cancellingId === schedule.id ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  Cancelando...
+                                </>
+                              ) : (
+                                <>
+                                  <X className="h-4 w-4 mr-1" />
+                                  Cancelar
+                                </>
+                              )}
                             </Button>
                           )}
                         </div>
@@ -461,7 +478,7 @@ export default function ProgramacionPagosPage() {
                 <SelectContent>
                   {availableAccounts.map(account => (
                     <SelectItem key={account.id} value={account.id}>
-                      {account.invoiceNumber} - {account.supplier.name} - ${Number(account.amount).toLocaleString()}
+                      {account.invoiceNumber} - {account.supplier?.name || (account as any).supplierName || 'N/A'} - ${Number(account.amount).toLocaleString()}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -484,6 +501,7 @@ export default function ProgramacionPagosPage() {
                   type="date" 
                   value={formData.scheduledDate}
                   onChange={(e) => setFormData({ ...formData, scheduledDate: e.target.value })}
+                  min={new Date().toISOString().split('T')[0]}
                 />
               </div>
             </div>

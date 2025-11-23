@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useToast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,7 +22,6 @@ import { CheckCircle, XCircle, Clock, Search, Loader2, AlertCircle } from "lucid
 import { paymentApprovalService, type PendingApproval } from "@/services/payment-approval.service"
 
 export default function AprobacionPage() {
-  const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [approvals, setApprovals] = useState<PendingApproval[]>([])
   const [searchTerm, setSearchTerm] = useState("")
@@ -52,17 +51,14 @@ export default function AprobacionPage() {
         totalApproved: Number(data.summary?.totalApproved) || 0,
         countApproved: Number(data.summary?.countApproved) || 0,
       })
-    } catch (error) {
-      console.error('Error al cargar aprobaciones:', error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Error al cargar las solicitudes de aprobación"
-      })
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || "Error al cargar las solicitudes de aprobación"
+      toast.error(errorMessage)
     } finally {
+      console.log('Finalizando carga de datos')
       setLoading(false)
     }
-  }, [toast])
+  }, [])
 
   useEffect(() => {
     loadData()
@@ -83,22 +79,27 @@ export default function AprobacionPage() {
       await paymentApprovalService.approvePayment(selectedApproval.id, {
         notes: approveNotes || undefined
       })
-      toast({
-        title: "✅ Éxito",
-        description: "Pago aprobado exitosamente"
-      })
+      toast.success("Pago aprobado exitosamente")
       setShowApproveDialog(false)
       setSelectedApproval(null)
       setApproveNotes("")
       await loadData()
     } catch (error: any) {
-      console.error('Error al aprobar:', error)
-      toast({
-        variant: "destructive",
-        title: "❌ Error",
-        description: error.response?.data?.message || "Error al aprobar el pago"
-      })
+      console.error('Error capturado en confirmApprove:', error)
+      console.error('Error response:', error.response)
+      console.error('Error message:', error.message)
+      const errorMessage = error.response?.data?.message || error.message || "Error al aprobar el pago"
+      console.log('Mostrando toast con mensaje:', errorMessage)
+      
+      // Mostrar el toast de error
+      toast.error(errorMessage)
+      
+      // Cerrar el diálogo
+      setShowApproveDialog(false)
+      setSelectedApproval(null)
+      setApproveNotes("")
     } finally {
+      console.log('Finalizando proceso de aprobación')
       setSubmitting(false)
     }
   }
@@ -115,47 +116,53 @@ export default function AprobacionPage() {
     if (!selectedApproval) return
 
     if (!rejectReason.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Error de validación",
-        description: "Debes indicar el motivo del rechazo"
-      })
+      toast.error("Debes indicar el motivo del rechazo")
       return
     }
 
     try {
       setSubmitting(true)
+      console.log('Intentando rechazar pago con ID:', selectedApproval.id)
       await paymentApprovalService.rejectPayment(selectedApproval.id, {
         reason: rejectReason,
         notes: rejectNotes || undefined
       })
-      toast({
-        title: "✅ Éxito",
-        description: "Pago rechazado exitosamente"
-      })
+      console.log('Pago rechazado exitosamente')
+      toast.success("Pago rechazado exitosamente")
       setShowRejectDialog(false)
       setSelectedApproval(null)
       setRejectReason("")
       setRejectNotes("")
       await loadData()
     } catch (error: any) {
-      console.error('Error al rechazar:', error)
-      toast({
-        variant: "destructive",
-        title: "❌ Error",
-        description: error.response?.data?.message || "Error al rechazar el pago"
-      })
+      console.error('Error capturado en confirmReject:', error)
+      console.error('Error response:', error.response)
+      console.error('Error message:', error.message)
+      const errorMessage = error.response?.data?.message || error.message || "Error al rechazar el pago"
+      console.log('Mostrando toast con mensaje:', errorMessage)
+      
+      // Mostrar el toast de error
+      toast.error(errorMessage)
+      
+      // Cerrar el diálogo
+      setShowRejectDialog(false)
+      setSelectedApproval(null)
+      setRejectReason("")
+      setRejectNotes("")
     } finally {
+      console.log('Finalizando proceso de rechazo')
       setSubmitting(false)
     }
   }
 
   // Filtrar aprobaciones
   const filteredApprovals = approvals.filter(approval => {
+    const supplierName = approval.accountPayable.supplier?.name || (approval.accountPayable as any).supplierName || '';
+    const description = approval.accountPayable.description || '';
     const matchSearch = 
-      approval.accountPayable.supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       approval.accountPayable.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      approval.accountPayable.description.toLowerCase().includes(searchTerm.toLowerCase())
+      description.toLowerCase().includes(searchTerm.toLowerCase())
     return matchSearch
   })
 
@@ -310,7 +317,7 @@ export default function AprobacionPage() {
                       <TableCell>
                         <div>
                           <div className="font-medium">
-                            {approval.accountPayable.supplier.name}
+                            {approval.accountPayable.supplier?.name || (approval.accountPayable as any).supplierName || 'N/A'}
                           </div>
                           <div className="text-sm text-gray-500">
                             {approval.accountPayable.invoiceNumber}
@@ -391,7 +398,7 @@ export default function AprobacionPage() {
               <div className="p-4 bg-gray-50 rounded-lg space-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Proveedor:</span>
-                  <span className="text-sm font-medium">{selectedApproval.accountPayable.supplier.name}</span>
+                  <span className="text-sm font-medium">{selectedApproval.accountPayable.supplier?.name || (selectedApproval.accountPayable as any).supplierName || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Factura:</span>
@@ -468,7 +475,7 @@ export default function AprobacionPage() {
               <div className="p-4 bg-gray-50 rounded-lg space-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Proveedor:</span>
-                  <span className="text-sm font-medium">{selectedApproval.accountPayable.supplier.name}</span>
+                  <span className="text-sm font-medium">{selectedApproval.accountPayable.supplier?.name || (selectedApproval.accountPayable as any).supplierName || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Factura:</span>

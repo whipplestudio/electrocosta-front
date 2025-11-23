@@ -27,6 +27,9 @@ export default function CuentasPagarPage() {
   const [loading, setLoading] = useState(true)
   const [loadingSelects, setLoadingSelects] = useState(false)
   const [applyingFilters, setApplyingFilters] = useState(false)
+  const [savingAccount, setSavingAccount] = useState(false)
+  const [approvingId, setApprovingId] = useState<string | null>(null)
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [filters, setFilters] = useState({
     status: "all" as string,
     approvalStatus: "all" as string,
@@ -36,6 +39,7 @@ export default function CuentasPagarPage() {
   const [selectedAccount, setSelectedAccount] = useState<AccountPayable | null>(null)
   const [formData, setFormData] = useState({
     supplierId: "",
+    supplierName: "",
     invoiceNumber: "",
     amount: "",
     categoryId: "",
@@ -129,6 +133,7 @@ export default function CuentasPagarPage() {
     setSelectedAccount(null)
     setFormData({
       supplierId: "",
+      supplierName: "",
       invoiceNumber: "",
       amount: "",
       categoryId: "",
@@ -142,7 +147,8 @@ export default function CuentasPagarPage() {
   const handleEditarCuenta = (cuenta: AccountPayable) => {
     setSelectedAccount(cuenta)
     setFormData({
-      supplierId: cuenta.supplierId,
+      supplierId: cuenta.supplierId || "",
+      supplierName: cuenta.supplier?.name || cuenta.supplierName || "",
       invoiceNumber: cuenta.invoiceNumber,
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || "",
@@ -154,12 +160,15 @@ export default function CuentasPagarPage() {
   }
 
   const handleSubmitForm = async () => {
-    if (!formData.supplierId || !formData.invoiceNumber || !formData.amount || !formData.issueDate || !formData.dueDate) {
+    if (!formData.supplierName || !formData.invoiceNumber || !formData.amount || !formData.issueDate || !formData.dueDate) {
       toast.error("Por favor completa todos los campos requeridos")
       return
     }
 
+    if (savingAccount) return
+
     try {
+      setSavingAccount(true)
       if (selectedAccount) {
         await accountsPayableService.update(selectedAccount.id, {
           invoiceNumber: formData.invoiceNumber,
@@ -172,7 +181,7 @@ export default function CuentasPagarPage() {
         toast.success("Cuenta actualizada exitosamente")
       } else {
         await accountsPayableService.create({
-          supplierId: formData.supplierId,
+          supplierName: formData.supplierName,
           invoiceNumber: formData.invoiceNumber,
           amount: parseFloat(formData.amount),
           categoryId: formData.categoryId || undefined,
@@ -189,6 +198,8 @@ export default function CuentasPagarPage() {
     } catch (error) {
       console.error("Error al guardar cuenta:", error)
       toast.error("Error al guardar la cuenta")
+    } finally {
+      setSavingAccount(false)
     }
   }
 
@@ -205,26 +216,34 @@ export default function CuentasPagarPage() {
   }
 
   const handleAprobar = async (id: string) => {
+    if (approvingId || rejectingId) return
     try {
+      setApprovingId(id)
       await accountsPayableService.approve(id)
       toast.success("Cuenta aprobada")
       fetchAccounts(filters)
       fetchDashboard()
     } catch (error) {
       toast.error("Error al aprobar")
+    } finally {
+      setApprovingId(null)
     }
   }
 
   const handleRechazar = async (id: string) => {
+    if (approvingId || rejectingId) return
     const reason = prompt("Razón del rechazo:")
     if (!reason) return
     try {
+      setRejectingId(id)
       await accountsPayableService.reject(id, { reason })
       toast.success("Cuenta rechazada")
       fetchAccounts(filters)
       fetchDashboard()
     } catch (error) {
       toast.error("Error al rechazar")
+    } finally {
+      setRejectingId(null)
     }
   }
 
@@ -446,7 +465,7 @@ export default function CuentasPagarPage() {
               ) : (
                 accounts.map((cuenta) => (
                   <TableRow key={cuenta.id}>
-                    <TableCell>{cuenta.supplier.name}</TableCell>
+                    <TableCell>{cuenta.supplier?.name || cuenta.supplierName || 'N/A'}</TableCell>
                     <TableCell>{cuenta.invoiceNumber}</TableCell>
                     <TableCell>${parseFloat(cuenta.amount).toLocaleString()}</TableCell>
                     <TableCell>{format(new Date(cuenta.dueDate), "dd MMM yyyy", { locale: es })}</TableCell>
@@ -456,11 +475,29 @@ export default function CuentasPagarPage() {
                       <div className="flex gap-2">
                         {cuenta.approvalStatus === "pending" && (
                           <>
-                            <Button size="sm" variant="ghost" onClick={() => handleAprobar(cuenta.id)}>
-                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              onClick={() => handleAprobar(cuenta.id)}
+                              disabled={approvingId === cuenta.id || rejectingId === cuenta.id}
+                            >
+                              {approvingId === cuenta.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-green-600" />
+                              ) : (
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                              )}
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => handleRechazar(cuenta.id)}>
-                              <XCircle className="h-4 w-4 text-red-600" />
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              onClick={() => handleRechazar(cuenta.id)}
+                              disabled={approvingId === cuenta.id || rejectingId === cuenta.id}
+                            >
+                              {rejectingId === cuenta.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-red-600" />
+                              ) : (
+                                <XCircle className="h-4 w-4 text-red-600" />
+                              )}
                             </Button>
                           </>
                         )}
@@ -489,20 +526,12 @@ export default function CuentasPagarPage() {
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>Proveedor *</Label>
-              <Select value={formData.supplierId} onValueChange={(v) => setFormData({ ...formData, supplierId: v })} disabled={!!selectedAccount || loadingSelects}>
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingSelects ? "Cargando..." : suppliers.length === 0 ? "No hay proveedores" : "Selecciona proveedor"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {suppliers.length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground">No hay proveedores disponibles</div>
-                  ) : (
-                    suppliers.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+              <Input
+                value={formData.supplierName}
+                onChange={(e) => setFormData({ ...formData, supplierName: e.target.value })}
+                placeholder="Nombre del proveedor"
+                disabled={!!selectedAccount}
+              />
             </div>
             <div className="grid gap-2">
               <Label>Número de Factura *</Label>
@@ -573,8 +602,17 @@ export default function CuentasPagarPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSubmitForm}>{selectedAccount ? "Actualizar" : "Crear"}</Button>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={savingAccount}>Cancelar</Button>
+            <Button onClick={handleSubmitForm} disabled={savingAccount}>
+              {savingAccount ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {selectedAccount ? "Actualizando..." : "Creando..."}
+                </>
+              ) : (
+                selectedAccount ? "Actualizar" : "Crear"
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

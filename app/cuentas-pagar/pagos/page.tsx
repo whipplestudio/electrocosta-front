@@ -198,10 +198,13 @@ export default function AplicacionPagosCuentasPagar() {
     setShowRegisterDialog(true)
   }
 
-  const filteredAccounts = accounts.filter(account =>
-    account.supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    account.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredAccounts = accounts.filter(account => {
+    const supplierName = account.supplier?.name || (account as any).supplierName || '';
+    return (
+      supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      account.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  })
 
   const getStatusBadge = (status: string) => {
     const config: Record<string, { label: string; className: string }> = {
@@ -314,7 +317,7 @@ export default function AplicacionPagosCuentasPagar() {
                 ) : (
                   filteredAccounts.map((account) => (
                     <TableRow key={account.id}>
-                      <TableCell className="font-medium">{account.supplier.name}</TableCell>
+                      <TableCell className="font-medium">{account.supplier?.name || (account as any).supplierName || 'N/A'}</TableCell>
                       <TableCell>{account.invoiceNumber}</TableCell>
                       <TableCell>${Number(account.amount).toLocaleString()}</TableCell>
                       <TableCell className="font-bold text-red-600">
@@ -368,7 +371,7 @@ export default function AplicacionPagosCuentasPagar() {
               <div className="rounded-lg bg-muted p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Proveedor:</span>
-                  <span className="font-medium">{selectedAccount.supplier.name}</span>
+                  <span className="font-medium">{selectedAccount.supplier?.name || (selectedAccount as any).supplierName || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Factura:</span>
@@ -491,7 +494,7 @@ export default function AplicacionPagosCuentasPagar() {
                       <p>• Concepto: Se usará la referencia del pago</p>
                       <p>• Monto: Se usará el monto del pago (${formData.amount})</p>
                       <p>• Método de pago: Se usará el método del pago ({paymentMethodLabels[formData.paymentMethod]})</p>
-                      <p>• Proveedor: {selectedAccount?.supplier.name}</p>
+                      <p>• Proveedor: {selectedAccount?.supplier?.name || (selectedAccount as any).supplierName || 'N/A'}</p>
                     </div>
                   </div>
                 )}
@@ -527,7 +530,7 @@ export default function AplicacionPagosCuentasPagar() {
               <div className="rounded-lg bg-muted p-4 space-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Proveedor:</span>
-                  <span className="font-medium">{selectedAccount.supplier.name}</span>
+                  <span className="font-medium">{selectedAccount.supplier?.name || (selectedAccount as any).supplierName || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Factura:</span>

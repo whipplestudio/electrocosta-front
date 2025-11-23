@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calendar, Download, AlertTriangle, Clock, TrendingDown, DollarSign } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
+import * as XLSX from 'xlsx'
 
 
 export default function ReportesCuentasPagar() {
@@ -84,6 +85,50 @@ export default function ReportesCuentasPagar() {
     proximo: "default",
   } as const
 
+  // Función para exportar a Excel
+  const handleExportReport = () => {
+    try {
+      // Preparar datos para exportar
+      const dataToExport = allAccounts.map(item => ({
+        'Proveedor': item.supplierName || item.supplier?.name || 'N/A',
+        'Factura': item.invoiceNumber,
+        'Monto': Number(item.amount),
+        'Fecha de Vencimiento': formatDate(item.dueDate),
+        'Estado': item.estado === 'vencido' ? 'Vencido' : item.estado === 'hoy' ? 'Vence Hoy' : 'Próximo',
+        'Categoría': item.category?.name || 'N/A',
+        'Días': item.estado === 'vencido' 
+          ? `${item.daysOverdue} días vencido` 
+          : item.daysUntilDue === 0 
+            ? 'Vence hoy' 
+            : `Vence en ${item.daysUntilDue} días`
+      }))
+
+      // Crear libro de trabajo
+      const ws = XLSX.utils.json_to_sheet(dataToExport)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Reporte de Vencimientos')
+
+      // Generar nombre de archivo con fecha
+      const fecha = new Date().toLocaleDateString('es-MX').replace(/\//g, '-')
+      const fileName = `Reporte_Vencimientos_${fecha}.xlsx`
+
+      // Descargar archivo
+      XLSX.writeFile(wb, fileName)
+
+      toast({
+        title: "✅ Éxito",
+        description: "Reporte exportado exitosamente"
+      })
+    } catch (error) {
+      console.error('Error al exportar:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al exportar el reporte"
+      })
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -91,7 +136,7 @@ export default function ReportesCuentasPagar() {
           <h1 className="text-3xl font-bold tracking-tight">Reportes de Vencimientos</h1>
           <p className="text-muted-foreground">Análisis y seguimiento de cuentas por pagar</p>
         </div>
-        <Button>
+        <Button onClick={handleExportReport}>
           <Download className="mr-2 h-4 w-4" />
           Exportar Reporte
         </Button>
@@ -210,7 +255,7 @@ export default function ReportesCuentasPagar() {
                     ) : (
                       allAccounts.map((item) => (
                         <TableRow key={item.id}>
-                          <TableCell className="font-medium">{item.supplier.name}</TableCell>
+                          <TableCell className="font-medium">{item.supplierName || item.supplier?.name || 'N/A'}</TableCell>
                           <TableCell>{item.invoiceNumber}</TableCell>
                           <TableCell>${Number(item.amount).toLocaleString()}</TableCell>
                           <TableCell>{formatDate(item.dueDate)}</TableCell>

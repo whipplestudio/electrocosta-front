@@ -120,9 +120,9 @@ const menuItems = [
         requiredPermissionCodes: ["cuentas_pagar.pagos.ver"]
       },
       { 
-        title: "Reportes de Vencimientos", 
-        href: "/cuentas-pagar/reportes-vencimiento",
-        requiredPermissionCodes: ["cuentas_pagar.reportes_vencimiento.ver"]
+        title: "Reportes", 
+        href: "/cuentas-pagar/reportes",
+        requiredPermissionCodes: ["cuentas_pagar.reportes.ver"]
       },
     ],
   },

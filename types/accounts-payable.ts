@@ -58,8 +58,9 @@ export interface PaymentSchedule {
 
 export interface AccountPayable {
   id: string;
-  supplierId: string;
-  supplier: Supplier;
+  supplierId?: string | null;
+  supplierName?: string | null;
+  supplier?: Supplier | null;
   projectId?: string;
   project?: Project;
   categoryId?: string;
@@ -99,7 +100,8 @@ export interface AccountPayable {
 // ============================================
 
 export interface CreateAccountPayableDto {
-  supplierId: string;
+  supplierId?: string;
+  supplierName?: string;
   projectId?: string;
   categoryId?: string;
   invoiceNumber: string;

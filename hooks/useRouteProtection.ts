@@ -76,9 +76,9 @@ const ROUTE_PERMISSIONS: RoutePermissionMap[] = [
     name: 'Pagos',
   },
   {
-    path: '/cuentas-pagar/reportes-vencimiento',
-    requiredPermissions: ['cuentas_pagar.reportes_vencimiento.ver'],
-    name: 'Reportes de Vencimiento',
+    path: '/cuentas-pagar/reportes',
+    requiredPermissions: ['cuentas_pagar.reportes.ver'],
+    name: 'Reportes',
   },
   {
     path: '/carga-informacion/ventas',

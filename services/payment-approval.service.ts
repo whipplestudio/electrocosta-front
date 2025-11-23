@@ -61,19 +61,34 @@ export interface PendingApprovalsResponse {
 
 export const paymentApprovalService = {
   async getPendingApprovals(filters?: ApprovalFilters): Promise<PendingApprovalsResponse> {
-    const response = await apiClient.get<PendingApprovalsResponse>(
-      '/accounts-payable/approvals/pending',
-      { params: filters }
-    )
-    return response.data
+    try {
+      const response = await apiClient.get<PendingApprovalsResponse>(
+        '/accounts-payable/approvals/pending',
+        { params: filters }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Error in getPendingApprovals service:', error)
+      throw error
+    }
   },
 
   async approvePayment(scheduleId: string, data: ApprovePaymentDto): Promise<void> {
-    await apiClient.post(`/accounts-payable/schedules/${scheduleId}/approve`, data)
+    try {
+      await apiClient.post(`/accounts-payable/schedules/${scheduleId}/approve`, data)
+    } catch (error) {
+      console.error('Error in approvePayment service:', error)
+      throw error
+    }
   },
 
   async rejectPayment(scheduleId: string, data: RejectPaymentDto): Promise<void> {
-    await apiClient.post(`/accounts-payable/schedules/${scheduleId}/reject`, data)
+    try {
+      await apiClient.post(`/accounts-payable/schedules/${scheduleId}/reject`, data)
+    } catch (error) {
+      console.error('Error in rejectPayment service:', error)
+      throw error
+    }
   },
 
   async batchApprove(scheduleIds: string[], notes?: string): Promise<void> {

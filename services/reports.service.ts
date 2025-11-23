@@ -37,11 +37,13 @@ export interface TopSuppliersReportFilters {
 
 export interface AccountPayableItem {
   id: string
-  supplier: {
+  supplierId?: string | null
+  supplierName?: string
+  supplier?: {
     id: string
     name: string
     email?: string
-  }
+  } | null
   invoiceNumber: string
   amount: number | string
   balance: number | string

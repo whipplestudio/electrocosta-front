@@ -132,13 +132,6 @@ function LoginForm() {
               <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
                 {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
               </Button>
-
-              <p className="text-sm text-center text-muted-foreground">
-                ¿No tienes una cuenta?{" "}
-                <Link href="/registro" className="text-primary font-medium hover:underline">
-                  Regístrate aquí
-                </Link>
-              </p>
             </CardFooter>
           </form>
         </Card>

@@ -36,11 +36,8 @@ export default function RegistroPage() {
 
     setIsLoading(true)
 
-    // Simular llamada a API
     setTimeout(() => {
       console.log("[v0] Registration attempt:", formData)
-      // Aquí iría la lógica de registro con el backend
-      // Por ahora, redirigimos al login
       router.push("/login")
       setIsLoading(false)
     }, 1000)

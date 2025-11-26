@@ -110,14 +110,19 @@ export default function ReportesDescargablesPage() {
 
   const cargarProyectos = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/v1/projects', {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
+      const response = await fetch(`${apiUrl}/carga/proyectos/listado?limit=100`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Content-Type': 'application/json',
         }
       })
       if (response.ok) {
         const data = await response.json()
+        console.log('📂 Proyectos cargados:', data)
         setProyectos(data.data || [])
+      } else {
+        console.error('Error al cargar proyectos, status:', response.status)
       }
     } catch (error) {
       console.error('Error al cargar proyectos:', error)

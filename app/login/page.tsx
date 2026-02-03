@@ -69,29 +69,32 @@ function LoginForm() {
       <Suspense fallback={null}>
         <LoginErrorHandler />
       </Suspense>
+      {/* Fondo mejorado con Material Design 3 */}
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-4">
-        <Card className="w-full max-w-md shadow-lg">
-          <CardHeader className="space-y-4 text-center">
-            <div className="mx-auto w-16 h-16 bg-primary rounded-2xl flex items-center justify-center">
-              <DollarSign className="h-10 w-10 text-primary-foreground" />
+        <Card className="w-full max-w-md shadow-2xl border-0">
+          {/* Header con mejor diseño */}
+          <CardHeader className="space-y-6 text-center pt-8 pb-6">
+            <div className="mx-auto w-20 h-20 bg-primary rounded-3xl flex items-center justify-center shadow-lg transition-transform hover:scale-105">
+              <DollarSign className="h-12 w-12 text-primary-foreground" />
             </div>
-            <div>
-              <CardTitle className="text-2xl font-bold">Electro Costa</CardTitle>
-              <CardDescription className="text-base mt-2">ERP Financiero - Iniciar Sesión</CardDescription>
+            <div className="space-y-2">
+              <CardTitle className="text-3xl font-bold tracking-tight">Electro Costa</CardTitle>
+              <CardDescription className="text-base font-medium">ERP Financiero - Iniciar Sesión</CardDescription>
             </div>
           </CardHeader>
 
           <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-4">
+            {/* Contenido del formulario mejorado */}
+            <CardContent className="space-y-6 px-8">
               <div className="space-y-2">
-                <Label htmlFor="email">Correo Electrónico</Label>
+                <Label htmlFor="email" className="text-sm font-semibold">Correo Electrónico</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
                     placeholder="usuario@electrocoasta.com"
-                    className="pl-10"
+                    className="pl-12 h-12 text-base"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     required
@@ -101,18 +104,21 @@ function LoginForm() {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Contraseña</Label>
-                  <Link href="/recuperar-password" className="text-xs text-primary hover:underline">
+                  <Label htmlFor="password" className="text-sm font-semibold">Contraseña</Label>
+                  <Link 
+                    href="/recuperar-password" 
+                    className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+                  >
                     ¿Olvidaste tu contraseña?
                   </Link>
                 </div>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
-                    className="pl-10 pr-10"
+                    className="pl-12 pr-12 h-12 text-base"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     required
@@ -120,16 +126,22 @@ function LoginForm() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
               </div>
             </CardContent>
 
-            <CardFooter className="flex flex-col space-y-4">
-              <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+            {/* Footer con botón mejorado */}
+            <CardFooter className="flex flex-col space-y-4 px-8 pb-8 pt-2">
+              <Button 
+                type="submit" 
+                className="w-full h-12 text-base font-semibold bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all" 
+                size="lg" 
+                disabled={isLoading}
+              >
                 {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
               </Button>
             </CardFooter>

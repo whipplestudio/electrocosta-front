@@ -273,31 +273,36 @@ export function AppSidebar({ className }: SidebarProps) {
   return (
     <div
       className={cn(
-        "relative flex flex-col bg-card border-r border-border transition-all duration-300",
+        "relative flex flex-col bg-card border-r border-border transition-all duration-300 shadow-sm",
         collapsed ? "w-16" : "w-64",
         className,
       )}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border">
+      {/* Header con mejor diseño */}
+      <div className="flex items-center justify-between px-4 py-5 border-b border-border bg-gradient-to-b from-card to-card/95">
         {!collapsed && (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <DollarSign className="h-5 w-5 text-primary-foreground" />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-md transition-transform hover:scale-105">
+              <DollarSign className="h-6 w-6 text-primary-foreground" />
             </div>
             <div>
-              <h2 className="font-semibold text-sm">Electro Costa</h2>
-              <p className="text-xs text-muted-foreground">ERP Financiero</p>
+              <h2 className="font-bold text-base tracking-tight">Electro Costa</h2>
+              <p className="text-xs text-muted-foreground font-medium">ERP Financiero</p>
             </div>
           </div>
         )}
-        <Button variant="ghost" size="sm" onClick={() => setCollapsed(!collapsed)} className="h-8 w-8 p-0">
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={() => setCollapsed(!collapsed)} 
+          className="h-9 w-9 p-0 hover:bg-accent/50 transition-all"
+        >
+          {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
         </Button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+      {/* Navigation con mejor espaciado */}
+      <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
         {menuItems.map((item) => {
           // Verificar si tiene acceso directo al módulo O a algún submenú
           const hasDirectAccess = hasModuleAccess(item.requiredPermissionCodes)
@@ -317,27 +322,35 @@ export function AppSidebar({ className }: SidebarProps) {
               {hasSubmenu && !collapsed ? (
                 <Button
                   variant={isActive ? "secondary" : "ghost"}
-                  className={cn("w-full justify-start gap-3 h-10", collapsed && "justify-center px-2")}
+                  className={cn(
+                    "w-full justify-start gap-3 h-11 rounded-lg font-medium transition-all",
+                    collapsed && "justify-center px-2",
+                    isActive && "shadow-sm"
+                  )}
                   onClick={() => toggleSubmenu(item.href)}
                 >
-                  <Icon className="h-4 w-4 flex-shrink-0" />
-                  <span className="text-sm font-medium flex-1 text-left">{item.title}</span>
-                  <ChevronRight className={cn("h-3 w-3 transition-transform", isExpanded && "rotate-90")} />
+                  <Icon className="h-5 w-5 flex-shrink-0" />
+                  <span className="text-sm flex-1 text-left">{item.title}</span>
+                  <ChevronRight className={cn("h-4 w-4 transition-transform duration-200", isExpanded && "rotate-90")} />
                 </Button>
               ) : (
                 <Link href={item.href}>
                   <Button
                     variant={isActive ? "secondary" : "ghost"}
-                    className={cn("w-full justify-start gap-3 h-10", collapsed && "justify-center px-2")}
+                    className={cn(
+                      "w-full justify-start gap-3 h-11 rounded-lg font-medium transition-all",
+                      collapsed && "justify-center px-2",
+                      isActive && "shadow-sm"
+                    )}
                   >
-                    <Icon className="h-4 w-4 flex-shrink-0" />
-                    {!collapsed && <span className="text-sm font-medium flex-1 text-left">{item.title}</span>}
+                    <Icon className="h-5 w-5 flex-shrink-0" />
+                    {!collapsed && <span className="text-sm flex-1 text-left">{item.title}</span>}
                   </Button>
                 </Link>
               )}
 
               {hasSubmenu && !collapsed && isExpanded && (
-                <div className="ml-6 mt-1 space-y-1">
+                <div className="ml-8 mt-1.5 space-y-1 border-l-2 border-border/50 pl-3">
                   {item.submenu
                     ?.filter((subitem) => hasModuleAccess((subitem as any).requiredPermissionCodes))
                     .map((subitem) => (
@@ -345,7 +358,12 @@ export function AppSidebar({ className }: SidebarProps) {
                         <Button
                           variant={pathname === subitem.href ? "secondary" : "ghost"}
                           size="sm"
-                          className="w-full justify-start h-8 text-xs text-muted-foreground hover:text-foreground"
+                          className={cn(
+                            "w-full justify-start h-9 text-sm rounded-lg transition-all",
+                            pathname === subitem.href 
+                              ? "text-foreground font-medium shadow-sm" 
+                              : "text-muted-foreground hover:text-foreground font-normal"
+                          )}
                         >
                           {subitem.title}
                         </Button>
@@ -358,27 +376,28 @@ export function AppSidebar({ className }: SidebarProps) {
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-border space-y-3">
+      {/* Footer con mejor diseño */}
+      <div className="px-4 py-4 border-t border-border space-y-3 bg-gradient-to-t from-card/95 to-card">
         {!collapsed && (
-          <div className="text-xs text-muted-foreground">
-            <p>Usuario: Admin</p>
-            <p>Rol: Administrador</p>
-            <p>Versión 1.0.0</p>
+          <div className="text-xs text-muted-foreground space-y-1 px-2 py-2 bg-accent/30 rounded-lg">
+            <p className="font-semibold">Usuario: Admin</p>
+            <p className="font-medium">Rol: Administrador</p>
+            <p className="text-[10px] opacity-70">Versión 1.0.0</p>
           </div>
         )}
 
-        {/* Logout button */}
+        {/* Logout button mejorado */}
         <Button
           variant="ghost"
           className={cn(
-            "w-full justify-start gap-3 h-10 text-destructive hover:text-destructive hover:bg-destructive/10",
+            "w-full justify-start gap-3 h-11 rounded-lg font-medium transition-all",
+            "text-destructive hover:text-destructive hover:bg-destructive/10 hover:shadow-sm",
             collapsed && "justify-center px-2",
           )}
           onClick={handleLogout}
         >
-          <LogOut className="h-4 w-4 flex-shrink-0" />
-          {!collapsed && <span className="text-sm font-medium">Cerrar Sesión</span>}
+          <LogOut className="h-5 w-5 flex-shrink-0" />
+          {!collapsed && <span className="text-sm">Cerrar Sesión</span>}
         </Button>
       </div>
     </div>

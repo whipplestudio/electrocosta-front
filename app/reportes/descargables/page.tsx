@@ -952,141 +952,164 @@ export default function ReportesDescargablesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Reportes Descargables</h1>
-        <p className="text-gray-600">Genera y descarga reportes en múltiples formatos</p>
+    <div className="container mx-auto p-6 space-y-8">
+      {/* Header con mejor jerarquía visual */}
+      <div className="space-y-2">
+        <h1 className="text-4xl font-bold tracking-tight text-gray-900">Reportes Descargables</h1>
+        <p className="text-lg text-gray-600">Genera y descarga reportes financieros en múltiples formatos</p>
       </div>
 
-      {/* Generación de Reportes */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Generar Nuevo Reporte</CardTitle>
-          <CardDescription>Selecciona los tipos de reporte y formato para generar</CardDescription>
+      {/* Generación de Reportes - Card elevada con mejor diseño */}
+      <Card className="shadow-md border-0 bg-white">
+        <CardHeader className="space-y-1 pb-6">
+          <CardTitle className="text-2xl font-semibold">Generar Nuevo Reporte</CardTitle>
+          <CardDescription className="text-base">Selecciona los tipos de reporte y configura las opciones de generación</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Selección de Reportes */}
-          <div>
-            <h4 className="font-medium mb-3">Tipos de Reporte</h4>
+        <CardContent className="space-y-8">
+          {/* Selección de Reportes con mejor diseño */}
+          <div className="space-y-4">
+            <h4 className="text-lg font-semibold text-gray-900">Tipos de Reporte</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {tiposReporte.map((tipo) => (
-                <div key={tipo.id} className="flex items-center space-x-3 p-3 border rounded-lg">
+                <div 
+                  key={tipo.id} 
+                  className={`flex items-start space-x-4 p-4 rounded-xl border-2 transition-all cursor-pointer hover:shadow-md ${
+                    tiposSeleccionados.includes(tipo.id) 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                  onClick={() => toggleTipoReporte(tipo.id)}
+                >
                   <Checkbox 
                     id={tipo.id} 
                     checked={tiposSeleccionados.includes(tipo.id)} 
-                    onCheckedChange={() => toggleTipoReporte(tipo.id)} 
+                    onCheckedChange={() => toggleTipoReporte(tipo.id)}
+                    className="mt-1"
                   />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{tipo.icono}</span>
-                      <label htmlFor={tipo.id} className="font-medium cursor-pointer">
-                        {tipo.nombre}
-                      </label>
-                    </div>
-                    <p className="text-sm text-gray-600">{tipo.descripcion}</p>
+                  <div className="flex-1 min-w-0">
+                    <label htmlFor={tipo.id} className="block font-semibold text-gray-900 cursor-pointer mb-1">
+                      {tipo.nombre}
+                    </label>
+                    <p className="text-sm text-gray-600 leading-relaxed">{tipo.descripcion}</p>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Configuración */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Formato</label>
-              <Select value={formatoSeleccionado} onValueChange={setFormatoSeleccionado}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="excel">Excel (.xlsx)</SelectItem>
-                  <SelectItem value="csv">CSV (.csv)</SelectItem>
-                  <SelectItem value="pdf">PDF (.pdf)</SelectItem>
-                  <SelectItem value="todos">Todos los formatos</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Configuración con mejor espaciado y diseño */}
+          <div className="space-y-4">
+            <h4 className="text-lg font-semibold text-gray-900">Configuración</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-700">Formato</label>
+                <Select value={formatoSeleccionado} onValueChange={setFormatoSeleccionado}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="excel">Excel (.xlsx)</SelectItem>
+                    <SelectItem value="csv">CSV (.csv)</SelectItem>
+                    <SelectItem value="pdf">PDF (.pdf)</SelectItem>
+                    <SelectItem value="todos">Todos los formatos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">Período</label>
-              <Select value={periodoSeleccionado} onValueChange={setPeriodoSeleccionado}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="mes-actual">Mes Actual</SelectItem>
-                  <SelectItem value="mes-anterior">Mes Anterior</SelectItem>
-                  <SelectItem value="trimestre">Trimestre</SelectItem>
-                  <SelectItem value="año">Año Completo</SelectItem>
-                  <SelectItem value="personalizado">Personalizado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-700">Período</label>
+                <Select value={periodoSeleccionado} onValueChange={setPeriodoSeleccionado}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mes-actual">Mes Actual</SelectItem>
+                    <SelectItem value="mes-anterior">Mes Anterior</SelectItem>
+                    <SelectItem value="trimestre">Trimestre</SelectItem>
+                    <SelectItem value="año">Año Completo</SelectItem>
+                    <SelectItem value="personalizado">Personalizado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">Incluir Gráficos</label>
-              <Select value={incluirGraficos} onValueChange={setIncluirGraficos}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="si">Sí, incluir gráficos</SelectItem>
-                  <SelectItem value="no">Solo datos</SelectItem>
-                  <SelectItem value="separado">Archivo separado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-700">Incluir Gráficos</label>
+                <Select value={incluirGraficos} onValueChange={setIncluirGraficos}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="si">Sí, incluir gráficos</SelectItem>
+                    <SelectItem value="no">Solo datos</SelectItem>
+                    <SelectItem value="separado">Archivo separado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">Proyecto</label>
-              <Select value={proyectoSeleccionado} onValueChange={setProyectoSeleccionado}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos los Proyectos</SelectItem>
-                  {proyectos.map((proyecto) => (
-                    <SelectItem key={proyecto.id} value={proyecto.id}>
-                      {proyecto.nombreProyecto || proyecto.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-700">Proyecto</label>
+                <Select value={proyectoSeleccionado} onValueChange={setProyectoSeleccionado}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos los Proyectos</SelectItem>
+                    {proyectos.map((proyecto) => (
+                      <SelectItem key={proyecto.id} value={proyecto.id}>
+                        {proyecto.nombreProyecto || proyecto.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
-          {/* Botón de Generación y Progreso */}
-          <div className="space-y-4">
-            <Button onClick={handleGenerarReporte} disabled={generando} className="bg-blue-600 hover:bg-blue-700">
-              <Download className="h-4 w-4 mr-2" />
-              {generando ? "Generando..." : "Generar Reporte"}
+          {/* Botón de Generación y Progreso con mejor diseño */}
+          <div className="space-y-4 pt-4 border-t">
+            <Button 
+              onClick={handleGenerarReporte} 
+              disabled={generando || tiposSeleccionados.length === 0} 
+              size="lg"
+              className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-6 text-base shadow-lg hover:shadow-xl transition-all"
+            >
+              <Download className="h-5 w-5 mr-2" />
+              {generando ? "Generando Reportes..." : "Generar y Descargar"}
             </Button>
 
             {generando && (
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Generando reporte...</span>
-                  <span>{progreso}%</span>
+              <div className="space-y-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex justify-between text-sm font-medium">
+                  <span className="text-blue-900">Generando reporte...</span>
+                  <span className="text-blue-700">{progreso}%</span>
                 </div>
-                <Progress value={progreso} className="w-full" />
+                <Progress value={progreso} className="w-full h-2" />
               </div>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Reportes Programados */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Reportes Programados</CardTitle>
-          <CardDescription>Configura reportes automáticos que se generen periódicamente</CardDescription>
+      {/* Reportes Programados con mejor diseño */}
+      <Card className="shadow-md border-0 bg-white">
+        <CardHeader className="space-y-1 pb-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <CardTitle className="text-2xl font-semibold">Reportes Programados</CardTitle>
+              <CardDescription className="text-base">Configura reportes automáticos que se generen periódicamente</CardDescription>
+            </div>
+            <Button 
+              variant="default" 
+              className="bg-blue-600 hover:bg-blue-700 shadow-md"
+              onClick={() => setMostrarModalProgramado(true)}
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Nuevo Programado
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <Button variant="outline" className="mb-4 bg-transparent" onClick={() => setMostrarModalProgramado(true)}>
-              <Settings className="h-4 w-4 mr-2" />
-              Nuevo Reporte Programado
-            </Button>
 
             <Table>
               <TableHeader>
@@ -1147,11 +1170,11 @@ export default function ReportesDescargablesPage() {
         </CardContent>
       </Card>
 
-      {/* Reportes Generados */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Reportes Disponibles para Descarga</CardTitle>
-          <CardDescription>Historial de reportes generados y disponibles para descarga</CardDescription>
+      {/* Reportes Generados con mejor diseño */}
+      <Card className="shadow-md border-0 bg-white">
+        <CardHeader className="space-y-1 pb-6">
+          <CardTitle className="text-2xl font-semibold">Reportes Disponibles</CardTitle>
+          <CardDescription className="text-base">Historial de reportes generados listos para descargar o visualizar</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -1188,40 +1211,40 @@ export default function ReportesDescargablesPage() {
                           <Button 
                             size="sm" 
                             variant="outline"
-                            className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300 font-medium"
                             onClick={() => handleVisualizarReporte(reporte.id)}
                             title="Ver reporte en pantalla"
                           >
-                            <Eye className="h-4 w-4 mr-1" />
+                            <Eye className="h-4 w-4 mr-1.5" />
                             Ver
                           </Button>
                           <Button 
                             size="sm" 
-                            className="bg-green-600 hover:bg-green-700"
+                            className="bg-green-600 hover:bg-green-700 text-white font-medium shadow-sm"
                             onClick={() => handleDescargarReporte(reporte.id)}
                             disabled={descargandoReporteId === reporte.id}
                             title="Descargar reporte"
                           >
                             {descargandoReporteId === reporte.id ? (
                               <>
-                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
                                 Descargando...
                               </>
                             ) : (
                               <>
-                                <Download className="h-4 w-4 mr-1" />
+                                <Download className="h-4 w-4 mr-1.5" />
                                 Descargar
                               </>
                             )}
                           </Button>
                         </>
                       ) : reporte.estado === "procesando" ? (
-                        <Button size="sm" variant="outline" disabled>
-                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        <Button size="sm" variant="outline" disabled className="opacity-60">
+                          <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
                           Procesando...
                         </Button>
                       ) : (
-                        <Button size="sm" variant="outline" disabled>
+                        <Button size="sm" variant="outline" disabled className="opacity-50">
                           No disponible
                         </Button>
                       )}
@@ -1450,6 +1473,7 @@ export default function ReportesDescargablesPage() {
       </Dialog>
 
       {/* Modal para Visualizar Reporte */}
+      {/* Modal de Visualización con Material Design 3 */}
       <Dialog open={mostrarModalVisualizacion} onOpenChange={(open) => {
         setMostrarModalVisualizacion(open)
         if (!open) {
@@ -1458,29 +1482,42 @@ export default function ReportesDescargablesPage() {
           setCargandoVisualizacion(false)
         }
       }}>
-        <DialogContent className="sm:max-w-[900px] max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle>
+        <DialogContent className="sm:max-w-[1000px] max-h-[90vh] flex flex-col gap-0 p-0">
+          {/* Header con mejor diseño */}
+          <DialogHeader className="px-6 pt-6 pb-4 border-b bg-gradient-to-r from-blue-50 to-white">
+            <DialogTitle className="text-2xl font-semibold text-gray-900">
               {reporteVisualizando?.nombre || 'Visualización de Reporte'}
             </DialogTitle>
-            <DialogDescription>
-              {reporteVisualizando?.fechaGeneracion && `Generado el ${reporteVisualizando.fechaGeneracion}`}
+            <DialogDescription className="text-base text-gray-600 mt-1">
+              {reporteVisualizando?.fechaGeneracion && (
+                <span className="inline-flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
+                  Generado el {reporteVisualizando.fechaGeneracion}
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
           
-          <div className="py-4">
-            {renderizarDatosReporte()}
+          {/* Contenido con scroll optimizado */}
+          <div className="flex-1 overflow-y-auto px-6 py-6 bg-gray-50">
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              {renderizarDatosReporte()}
+            </div>
           </div>
 
-          <DialogFooter>
+          {/* Footer con botones mejorados */}
+          <DialogFooter className="px-6 py-4 border-t bg-white gap-3">
             <Button 
               variant="outline" 
+              size="lg"
+              className="font-medium"
               onClick={() => setMostrarModalVisualizacion(false)}
             >
               Cerrar
             </Button>
             <Button 
-              className="bg-green-600 hover:bg-green-700"
+              size="lg"
+              className="bg-green-600 hover:bg-green-700 text-white font-semibold shadow-md hover:shadow-lg transition-all"
               onClick={() => {
                 if (reporteVisualizando?.id) {
                   handleDescargarReporte(reporteVisualizando.id)
@@ -1490,12 +1527,12 @@ export default function ReportesDescargablesPage() {
             >
               {descargandoReporteId === reporteVisualizando?.id ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                   Descargando...
                 </>
               ) : (
                 <>
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="h-5 w-5 mr-2" />
                   Descargar Excel
                 </>
               )}

@@ -29,14 +29,15 @@ export default function RecuperarPasswordPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-4">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="space-y-4 text-center">
-          <div className="mx-auto w-16 h-16 bg-primary rounded-2xl flex items-center justify-center">
-            <DollarSign className="h-10 w-10 text-primary-foreground" />
+      <Card className="w-full max-w-md shadow-2xl border-0">
+        {/* Header mejorado con Material Design 3 */}
+        <CardHeader className="space-y-6 text-center pt-8 pb-6">
+          <div className="mx-auto w-20 h-20 bg-primary rounded-3xl flex items-center justify-center shadow-lg transition-transform hover:scale-105">
+            <DollarSign className="h-12 w-12 text-primary-foreground" />
           </div>
-          <div>
-            <CardTitle className="text-2xl font-bold">Recuperar Contraseña</CardTitle>
-            <CardDescription className="text-base mt-2">
+          <div className="space-y-2">
+            <CardTitle className="text-3xl font-bold tracking-tight">Recuperar Contraseña</CardTitle>
+            <CardDescription className="text-base font-medium">
               {emailSent
                 ? "Te hemos enviado un correo con instrucciones"
                 : "Ingresa tu correo para recuperar tu contraseña"}
@@ -46,16 +47,17 @@ export default function RecuperarPasswordPage() {
 
         {!emailSent ? (
           <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-4">
+            {/* Formulario mejorado */}
+            <CardContent className="space-y-6 px-8">
               <div className="space-y-2">
-                <Label htmlFor="email">Correo Electrónico</Label>
+                <Label htmlFor="email" className="text-sm font-semibold">Correo Electrónico</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
                     placeholder="usuario@electrocoasta.com"
-                    className="pl-10"
+                    className="pl-12 h-12 text-base"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -64,14 +66,20 @@ export default function RecuperarPasswordPage() {
               </div>
             </CardContent>
 
-            <CardFooter className="flex flex-col space-y-4">
-              <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+            {/* Footer mejorado */}
+            <CardFooter className="flex flex-col space-y-4 px-8 pb-8 pt-2">
+              <Button 
+                type="submit" 
+                className="w-full h-12 text-base font-semibold bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all" 
+                size="lg" 
+                disabled={isLoading}
+              >
                 {isLoading ? "Enviando..." : "Enviar Instrucciones"}
               </Button>
 
               <Link
                 href="/login"
-                className="flex items-center justify-center gap-2 text-sm text-primary hover:underline"
+                className="flex items-center justify-center gap-2 text-sm text-primary hover:text-primary/80 font-medium transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Volver al inicio de sesión
@@ -79,23 +87,29 @@ export default function RecuperarPasswordPage() {
             </CardFooter>
           </form>
         ) : (
-          <CardContent className="space-y-4">
-            <div className="text-center space-y-4">
-              <div className="w-16 h-16 mx-auto bg-secondary/20 rounded-full flex items-center justify-center">
-                <Mail className="h-8 w-8 text-secondary" />
+          <CardContent className="space-y-6 px-8 pb-8">
+            <div className="text-center space-y-5">
+              <div className="w-20 h-20 mx-auto bg-green-100 rounded-full flex items-center justify-center shadow-md">
+                <Mail className="h-10 w-10 text-green-600" />
               </div>
-              <p className="text-sm text-muted-foreground">
-                Hemos enviado un correo a <strong className="text-foreground">{email}</strong> con las instrucciones
-                para restablecer tu contraseña.
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Si no recibes el correo en unos minutos, revisa tu carpeta de spam.
-              </p>
+              <div className="space-y-3">
+                <p className="text-base text-muted-foreground leading-relaxed">
+                  Hemos enviado un correo a <strong className="text-foreground font-semibold">{email}</strong> con las instrucciones
+                  para restablecer tu contraseña.
+                </p>
+                <p className="text-sm text-muted-foreground bg-muted/30 p-3 rounded-lg">
+                  Si no recibes el correo en unos minutos, revisa tu carpeta de spam.
+                </p>
+              </div>
             </div>
 
-            <div className="pt-4">
+            <div className="pt-2">
               <Link href="/login">
-                <Button variant="outline" className="w-full bg-transparent">
+                <Button 
+                  variant="outline" 
+                  className="w-full h-12 font-medium hover:bg-accent transition-all"
+                  size="lg"
+                >
                   Volver al inicio de sesión
                 </Button>
               </Link>

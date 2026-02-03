@@ -174,7 +174,7 @@ const menuItems = [
     title: "Reportes",
     icon: Download,
     href: "/reportes/descargables",
-    requiredPermissionCodes: ["reportes.descargables.ver", "reportes.estado_resultados.ver"],
+    requiredPermissionCodes: ["reportes.descargables.ver"],
     submenu: [
       { 
         title: "Descargables", 
@@ -185,11 +185,6 @@ const menuItems = [
         title: "Personalizados", 
         href: "/reportes/personalizados",
         requiredPermissionCodes: ["reportes.personalizados.ver"]
-      },
-      { 
-        title: "Estado de Resultados", 
-        href: "/reportes/estado-resultados",
-        requiredPermissionCodes: ["reportes.estado_resultados.ver"]
       },
     ],
   },

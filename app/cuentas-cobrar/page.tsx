@@ -36,11 +36,13 @@ import {
 } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
-import { toast } from "sonner"
+import { useToast } from "@/hooks/use-toast"
 import { useAccountsReceivable } from "@/hooks/use-accounts-receivable"
 import { AccountReceivable, AccountReceivableStatus } from "@/types/accounts-receivable"
 import { clientsService, type Client } from "@/services/clients.service"
 import { categoriesService, type Category } from "@/services/categories.service"
+import { projectsService, type Project } from "@/services/projects.service"
+import apiClient from "@/lib/api-client"
 import { RouteProtection } from "@/components/route-protection"
 
 // Helper para mapear estados del backend al frontend
@@ -70,6 +72,7 @@ export default function CuentasCobrarPage() {
 }
 
 function CuentasCobrarPageContent() {
+  const { toast } = useToast()
   const {
     accounts,
     dashboard,
@@ -98,14 +101,17 @@ function CuentasCobrarPageContent() {
   })
   const [isFilterExpanded, setIsFilterExpanded] = useState(true)
   
-  // Estados para clientes y categorías
+  // Estados para clientes, categorías y proyectos
   const [clients, setClients] = useState<Client[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [projects, setProjects] = useState<any[]>([]) // Guardar proyectos completos
   const [loadingSelects, setLoadingSelects] = useState(false)
+  const [loadingProjects, setLoadingProjects] = useState(false)
   
   // Estados del formulario
   const [formData, setFormData] = useState({
     clientId: '',
+    projectId: '',
     invoiceNumber: '',
     amount: '',
     categoryId: '',
@@ -113,9 +119,37 @@ function CuentasCobrarPageContent() {
     dueDate: undefined as Date | undefined,
     description: '',
   })
+
+  // Cargar proyectos cuando cambie el cliente
+  useEffect(() => {
+    if (formData.clientId) {
+      loadProjectsByClient(formData.clientId)
+    } else {
+      setProjects([])
+    }
+    // Limpiar proyecto seleccionado al cambiar cliente
+    setFormData(prev => ({ ...prev, projectId: '' }))
+  }, [formData.clientId])
+
+  // Auto-completar campos cuando se selecciona un proyecto
+  useEffect(() => {
+    if (formData.projectId && projects.length > 0) {
+      const selectedProject = projects.find(p => p.id === formData.projectId)
+      if (selectedProject) {
+        console.log("Auto-completando con proyecto:", selectedProject)
+        setFormData(prev => ({
+          ...prev,
+          amount: selectedProject.presupuestoTotal ? String(selectedProject.presupuestoTotal) : prev.amount,
+          issueDate: selectedProject.fechaInicio ? new Date(selectedProject.fechaInicio) : prev.issueDate,
+          dueDate: selectedProject.fechaFinEstimada ? new Date(selectedProject.fechaFinEstimada) : prev.dueDate,
+          description: prev.description || selectedProject.nombreProyecto || '',
+        }))
+      }
+    }
+  }, [formData.projectId, projects])
   
 
-  // Cargar clientes y categorías
+  // Cargar clientes y categorías (sin proyectos)
   const loadClientsAndCategories = async () => {
     setLoadingSelects(true)
     try {
@@ -132,15 +166,49 @@ function CuentasCobrarPageContent() {
       
       if (incomeCategories.length === 0 && categoriesData.length > 0) {
         console.warn('⚠️ Hay categorías creadas pero ninguna es de tipo "Ingreso"')
-        toast.warning('No hay categorías de tipo "Ingreso". Crea categorías de ingreso en el módulo de Categorías.')
+        toast({
+          title: "Advertencia",
+          description: "No hay categorías de tipo 'Ingreso'. Crea categorías de ingreso en el módulo de Categorías.",
+        })
       }
       
       setCategories(incomeCategories)
     } catch (error) {
       console.error('Error al cargar clientes y categorías:', error)
-      toast.error('Error al cargar opciones del formulario')
+      toast({
+        title: "Error",
+        description: "Error al cargar opciones del formulario",
+        variant: "destructive",
+      })
     } finally {
       setLoadingSelects(false)
+    }
+  }
+
+  // Cargar proyectos del cliente seleccionado
+  const loadProjectsByClient = async (clientId: string) => {
+    if (!clientId) {
+      setProjects([])
+      return
+    }
+
+    setLoadingProjects(true)
+    try {
+      // Obtener proyectos completos del cliente
+      const response = await apiClient.get<any>('/carga/proyectos/listado', { 
+        params: { clientId } 
+      })
+      const proyectos = response.data.data || response.data || []
+      setProjects(proyectos) // Guardar proyectos completos
+    } catch (error) {
+      console.error('Error al cargar proyectos:', error)
+      toast({
+        title: "Error",
+        description: "Error al cargar proyectos del cliente",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingProjects(false)
     }
   }
 
@@ -207,6 +275,7 @@ function CuentasCobrarPageContent() {
     // Limpiar formulario
     setFormData({
       clientId: '',
+      projectId: '',
       invoiceNumber: '',
       amount: '',
       categoryId: '',
@@ -227,6 +296,7 @@ function CuentasCobrarPageContent() {
     // Pre-llenar formulario con datos existentes
     setFormData({
       clientId: cuenta.clientId,
+      projectId: cuenta.projectId || '',
       invoiceNumber: cuenta.invoiceNumber,
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || '',
@@ -239,46 +309,60 @@ function CuentasCobrarPageContent() {
 
   const handleSubmitForm = async () => {
     // Validaciones básicas
-    if (!formData.clientId || !formData.invoiceNumber || !formData.amount || !formData.issueDate || !formData.dueDate) {
-      toast.error('Por favor completa todos los campos requeridos')
+    console.log("FormData:", formData)
+    
+    // Solo validar campos requeridos (categoryId es opcional)
+    const missingFields = []
+    if (!formData.clientId) missingFields.push("Cliente")
+    if (!formData.invoiceNumber) missingFields.push("Número de Factura")
+    if (!formData.amount) missingFields.push("Monto")
+    if (!formData.issueDate) missingFields.push("Fecha de Emisión")
+    if (!formData.dueDate) missingFields.push("Fecha de Vencimiento")
+    
+    if (missingFields.length > 0) {
+      toast({
+        title: "Campos requeridos faltantes",
+        description: `Por favor completa: ${missingFields.join(", ")}`,
+        variant: "destructive",
+      })
       return
     }
 
-    try {
-      if (selectedCuenta) {
-        // Actualizar cuenta existente con todos los campos editables
-        await updateAccount(selectedCuenta.id, {
-          invoiceNumber: formData.invoiceNumber,
-          amount: parseFloat(formData.amount),
-          categoryId: formData.categoryId || undefined,
-          issueDate: formData.issueDate?.toISOString(),
-          dueDate: formData.dueDate?.toISOString(),
-          description: formData.description || undefined,
-        })
-        toast.success('Cuenta actualizada exitosamente')
-      } else {
-        // Crear nueva cuenta
-        await createAccount({
-          clientId: formData.clientId,
-          invoiceNumber: formData.invoiceNumber,
-          amount: parseFloat(formData.amount),
-          categoryId: formData.categoryId || undefined,
-          issueDate: formData.issueDate?.toISOString() || new Date().toISOString(),
-          dueDate: formData.dueDate?.toISOString() || new Date().toISOString(),
-          description: formData.description || undefined,
-          currency: 'MXN',
-        })
-        toast.success('Cuenta creada exitosamente')
-      }
-      
+    let result = null
+    
+    if (selectedCuenta) {
+      // Actualizar cuenta existente con todos los campos editables
+      result = await updateAccount(selectedCuenta.id, {
+        invoiceNumber: formData.invoiceNumber,
+        amount: parseFloat(formData.amount),
+        projectId: formData.projectId || undefined,
+        categoryId: formData.categoryId || undefined,
+        issueDate: formData.issueDate?.toISOString(),
+        dueDate: formData.dueDate?.toISOString(),
+        description: formData.description || undefined,
+      })
+    } else {
+      // Crear nueva cuenta
+      result = await createAccount({
+        clientId: formData.clientId,
+        projectId: formData.projectId || undefined,
+        invoiceNumber: formData.invoiceNumber,
+        amount: parseFloat(formData.amount),
+        categoryId: formData.categoryId || undefined,
+        issueDate: formData.issueDate?.toISOString() || new Date().toISOString(),
+        dueDate: formData.dueDate?.toISOString() || new Date().toISOString(),
+        description: formData.description || undefined,
+        currency: 'MXN',
+      })
+    }
+    
+    // Solo cerrar el diálogo y recargar si la operación fue exitosa
+    if (result) {
       setIsDialogOpen(false)
       setSelectedCuenta(null)
       // Recargar datos
       await handleApplyFilters()
       await fetchDashboard()
-    } catch (error) {
-      console.error('Error al guardar cuenta:', error)
-      toast.error('Error al guardar la cuenta')
     }
   }
 
@@ -289,13 +373,20 @@ function CuentasCobrarPageContent() {
 
     try {
       await deleteAccount(cuentaId)
-      toast.success('Cuenta eliminada exitosamente')
+      toast({
+        title: "Éxito",
+        description: "Cuenta eliminada exitosamente",
+      })
       // Recargar datos
       await handleApplyFilters()
       await fetchDashboard()
     } catch (error) {
       console.error('Error al eliminar cuenta:', error)
-      toast.error('Error al eliminar la cuenta')
+      toast({
+        title: "Error",
+        description: "Error al eliminar la cuenta",
+        variant: "destructive",
+      })
     }
   }
 
@@ -607,6 +698,7 @@ function CuentasCobrarPageContent() {
           setSelectedCuenta(null)
           setFormData({
             clientId: '',
+            projectId: '',
             invoiceNumber: '',
             amount: '',
             categoryId: '',
@@ -656,6 +748,52 @@ function CuentasCobrarPageContent() {
               {selectedCuenta && (
                 <p className="text-xs text-muted-foreground">
                   No se puede cambiar el cliente al editar
+                </p>
+              )}
+            </div>
+            
+            {/* Proyecto */}
+            <div className="space-y-2">
+              <Label>Proyecto (Opcional)</Label>
+              <Select
+                value={formData.projectId}
+                onValueChange={(value) => setFormData({ ...formData, projectId: value })}
+                disabled={!formData.clientId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={
+                    !formData.clientId 
+                      ? "Primero selecciona un cliente" 
+                      : "Seleccionar proyecto"
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  {loadingProjects ? (
+                    <SelectItem value="loading" disabled>
+                      Cargando proyectos...
+                    </SelectItem>
+                  ) : !formData.clientId ? (
+                    <SelectItem value="no-client" disabled>
+                      Selecciona un cliente primero
+                    </SelectItem>
+                  ) : projects.length === 0 ? (
+                    <SelectItem value="empty" disabled>
+                      Este cliente no tiene proyectos
+                    </SelectItem>
+                  ) : (
+                    <>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.codigoProyecto} - {project.nombreProyecto}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+              {!formData.clientId && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Selecciona un cliente para ver sus proyectos
                 </p>
               )}
             </div>

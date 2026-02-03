@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { toast } from 'sonner';
+import { useToast } from '@/hooks/use-toast';
 import {
   AccountReceivable,
   CreateAccountReceivableDto,
@@ -13,6 +13,7 @@ import {
 import { accountsReceivableService } from '@/services/accounts-receivable.service';
 
 export const useAccountsReceivable = () => {
+  const { toast } = useToast();
   const [accounts, setAccounts] = useState<AccountReceivable[]>([]);
   const [currentAccount, setCurrentAccount] = useState<AccountReceivable | null>(null);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
@@ -43,7 +44,11 @@ export const useAccountsReceivable = () => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al cargar cuentas';
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -59,7 +64,11 @@ export const useAccountsReceivable = () => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al cargar cuenta';
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
       return null;
     } finally {
       setIsLoading(false);
@@ -72,12 +81,19 @@ export const useAccountsReceivable = () => {
     try {
       const newAccount = await accountsReceivableService.create(data);
       setAccounts((prev) => [newAccount, ...prev]);
-      toast.success('Cuenta por cobrar creada exitosamente');
+      toast({
+        title: 'Éxito',
+        description: 'Cuenta por cobrar creada exitosamente',
+      });
       return newAccount;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al crear cuenta';
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
       return null;
     } finally {
       setIsLoading(false);
@@ -96,12 +112,19 @@ export const useAccountsReceivable = () => {
         if (currentAccount?.id === id) {
           setCurrentAccount(updatedAccount);
         }
-        toast.success('Cuenta actualizada exitosamente');
+        toast({
+          title: 'Éxito',
+          description: 'Cuenta actualizada exitosamente',
+        });
         return updatedAccount;
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Error al actualizar cuenta';
         setError(errorMessage);
-        toast.error(errorMessage);
+        toast({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
         return null;
       } finally {
         setIsLoading(false);
@@ -119,12 +142,19 @@ export const useAccountsReceivable = () => {
       if (currentAccount?.id === id) {
         setCurrentAccount(null);
       }
-      toast.success('Cuenta eliminada exitosamente');
+      toast({
+        title: 'Éxito',
+        description: 'Cuenta eliminada exitosamente',
+      });
       return true;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al eliminar cuenta';
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
       return false;
     } finally {
       setIsLoading(false);
@@ -144,7 +174,11 @@ export const useAccountsReceivable = () => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al cargar cuentas vencidas';
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
       return [];
     } finally {
       setIsLoading(false);
@@ -161,7 +195,11 @@ export const useAccountsReceivable = () => {
       const errorMessage =
         err instanceof Error ? err.message : 'Error al cargar próximas a vencer';
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
       return [];
     } finally {
       setIsLoading(false);
@@ -178,7 +216,11 @@ export const useAccountsReceivable = () => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al cargar dashboard';
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
       return null;
     } finally {
       setIsLoading(false);
@@ -196,7 +238,11 @@ export const useAccountsReceivable = () => {
       const errorMessage =
         err instanceof Error ? err.message : 'Error al cargar reporte de antigüedad';
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
       return null;
     } finally {
       setIsLoading(false);
@@ -213,7 +259,11 @@ export const useAccountsReceivable = () => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al cargar analíticas';
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
       return null;
     } finally {
       setIsLoading(false);

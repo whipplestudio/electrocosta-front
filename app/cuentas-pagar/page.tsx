@@ -18,12 +18,14 @@ import { toast } from "sonner"
 import { accountsPayableService } from "@/services/accounts-payable.service"
 import { suppliersService, type Supplier } from "@/services/suppliers.service"
 import { categoriesService, type Category } from "@/services/categories.service"
+import { projectsService, type Project } from "@/services/projects.service"
 import type { AccountPayable, AccountPayableStatus, CreateAccountPayableDto, UpdateAccountPayableDto } from "@/types/accounts-payable"
 
 export default function CuentasPagarPage() {
   const [accounts, setAccounts] = useState<AccountPayable[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [projects, setProjects] = useState<Pick<Project, 'id' | 'name' | 'code'>[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingSelects, setLoadingSelects] = useState(false)
   const [applyingFilters, setApplyingFilters] = useState(false)
@@ -40,6 +42,7 @@ export default function CuentasPagarPage() {
   const [formData, setFormData] = useState({
     supplierId: "",
     supplierName: "",
+    projectId: "",
     invoiceNumber: "",
     amount: "",
     categoryId: "",
@@ -102,9 +105,10 @@ export default function CuentasPagarPage() {
     try {
       setLoadingSelects(true)
       
-      const [suppliersResp, categoriesResp] = await Promise.all([
+      const [suppliersResp, categoriesResp, projectsData] = await Promise.all([
         suppliersService.getAll({ page: 1, limit: 100 }),
         categoriesService.getAll({ page: 1, limit: 100 }),
+        projectsService.listAll(),
       ]);
       
       setSuppliers(suppliersResp.data)
@@ -120,6 +124,7 @@ export default function CuentasPagarPage() {
       }
       
       setCategories(expenseCategories)
+      setProjects(projectsData)
     } catch (error) {
       console.error("Error al cargar opciones:", error)
       toast.error("Error al cargar opciones del formulario")
@@ -145,6 +150,7 @@ export default function CuentasPagarPage() {
     setFormData({
       supplierId: "",
       supplierName: "",
+      projectId: "",
       invoiceNumber: "",
       amount: "",
       categoryId: "",
@@ -160,6 +166,7 @@ export default function CuentasPagarPage() {
     setFormData({
       supplierId: cuenta.supplierId || "",
       supplierName: cuenta.supplier?.name || cuenta.supplierName || "",
+      projectId: cuenta.projectId || "",
       invoiceNumber: cuenta.invoiceNumber,
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || "",
@@ -184,6 +191,7 @@ export default function CuentasPagarPage() {
         await accountsPayableService.update(selectedAccount.id, {
           invoiceNumber: formData.invoiceNumber,
           amount: parseFloat(formData.amount),
+          projectId: formData.projectId || undefined,
           categoryId: formData.categoryId || undefined,
           issueDate: formData.issueDate?.toISOString(),
           dueDate: formData.dueDate?.toISOString(),
@@ -193,6 +201,7 @@ export default function CuentasPagarPage() {
       } else {
         await accountsPayableService.create({
           supplierName: formData.supplierName,
+          projectId: formData.projectId || undefined,
           invoiceNumber: formData.invoiceNumber,
           amount: parseFloat(formData.amount),
           categoryId: formData.categoryId || undefined,
@@ -543,6 +552,26 @@ export default function CuentasPagarPage() {
                 placeholder="Nombre del proveedor"
                 disabled={!!selectedAccount}
               />
+            </div>
+            <div className="grid gap-2">
+              <Label>Proyecto (Opcional)</Label>
+              <Select value={formData.projectId} onValueChange={(v) => setFormData({ ...formData, projectId: v })} disabled={loadingSelects}>
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingSelects ? "Cargando..." : projects.length === 0 ? "No hay proyectos" : "Selecciona proyecto (opcional)"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground">No hay proyectos disponibles</div>
+                  ) : (
+                    <>
+                      <SelectItem value="none">Sin proyecto</SelectItem>
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.code} - {p.name}</SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label>Número de Factura *</Label>

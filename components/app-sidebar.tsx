@@ -15,6 +15,7 @@ import {
   LogOut,
   Users,
   Tag,
+  Building2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -71,6 +72,13 @@ const menuItems = [
     icon: Tag,
     href: "/categorias",
     requiredPermissionCodes: ["categorias.categorias.ver"],
+    submenu: [],
+  },
+  {
+    title: "Áreas",
+    icon: Building2,
+    href: "/areas",
+    requiredPermissionCodes: ["areas.ver"],
     submenu: [],
   },
   {
@@ -138,7 +146,7 @@ const menuItems = [
     title: "Área de Carga",
     icon: Upload,
     href: "/carga-informacion",
-    requiredPermissionCodes: ["carga_informacion.ventas.ver", "carga_informacion.gastos.ver", "carga_informacion.proyectos.ver"],
+    requiredPermissionCodes: ["carga_informacion.ventas.ver", "carga_informacion.gastos.ver", "carga_informacion.proyectos.ver", "proyectos.estado_resultados.ver"],
     submenu: [
       { 
         title: "Ventas", 
@@ -154,6 +162,11 @@ const menuItems = [
         title: "Proyectos", 
         href: "/carga-informacion/proyectos",
         requiredPermissionCodes: ["carga_informacion.proyectos.ver"]
+      },
+      { 
+        title: "Estado de Resultados por Proyecto", 
+        href: "/proyectos/estado-resultados",
+        requiredPermissionCodes: ["proyectos.estado_resultados.ver"]
       },
     ],
   },

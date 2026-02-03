@@ -34,11 +34,29 @@ export interface ClientFilterParams {
   limit?: number;
 }
 
+export interface ClientSimple {
+  id: string;
+  name: string;
+  taxId: string;
+  email?: string | null;
+  phone?: string | null;
+}
+
 export const clientsService = {
   async listAll(): Promise<Pick<Client, 'id' | 'name'>[]> {
     try {
       // Endpoint optimizado para selects - sin paginación, solo id y name
       const response = await apiClient.get<Pick<Client, 'id' | 'name'>[]>('/clients/all');
+      return response.data;
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
+
+  async getSimpleList(): Promise<ClientSimple[]> {
+    try {
+      // Endpoint optimizado para selector de proyectos - incluye taxId, email, phone
+      const response = await apiClient.get<ClientSimple[]>('/clients/simple/list');
       return response.data;
     } catch (error) {
       throw new Error(handleApiError(error));

@@ -7,8 +7,7 @@ import apiClient from '@/lib/api-client'
 export interface CrearProyectoData {
   codigoProyecto: string
   nombreProyecto: string
-  clienteNombre: string
-  clienteRuc?: string
+  clientId?: string
   fechaInicio: string
   fechaFinEstimada: string
   presupuestoTotal: number

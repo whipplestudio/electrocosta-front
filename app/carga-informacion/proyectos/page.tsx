@@ -17,10 +17,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Upload, Download, Plus, Search, FileText, Calendar, Loader2, Eye, Edit, AlertCircle } from "lucide-react"
+import { Upload, Download, Plus, Search, FileText, Calendar, Loader2, Eye, Edit, AlertCircle, Check, ChevronsUpDown } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { Label } from "@/components/ui/label"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { cn } from "@/lib/utils"
 import { projectsUploadService, type CrearProyectoData } from "@/services/projects-upload.service"
+import { clientsService, type ClientSimple } from "@/services/clients.service"
+import { areasService, type AreaSimple } from "@/services/areas.service"
 
 export default function ProyectosPage() {
   const { toast } = useToast()
@@ -40,6 +45,18 @@ export default function ProyectosPage() {
   const [loadingUsuarios, setLoadingUsuarios] = useState(false)
   const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   
+  // Estados para clientes
+  const [clientes, setClientes] = useState<ClientSimple[]>([])
+  const [loadingClientes, setLoadingClientes] = useState(false)
+  const [openClientePopover, setOpenClientePopover] = useState(false)
+  const [openClientePopoverEdit, setOpenClientePopoverEdit] = useState(false)
+  
+  // Estados para áreas
+  const [areas, setAreas] = useState<AreaSimple[]>([])
+  const [loadingAreas, setLoadingAreas] = useState(false)
+  const [openAreaPopover, setOpenAreaPopover] = useState(false)
+  const [openAreaPopoverEdit, setOpenAreaPopoverEdit] = useState(false)
+  
   // Estados para carga masiva
   const [archivo, setArchivo] = useState<File | null>(null)
   const [uploadResponse, setUploadResponse] = useState<any>(null)
@@ -51,8 +68,7 @@ export default function ProyectosPage() {
   const [nuevoProyecto, setNuevoProyecto] = useState({
     codigoProyecto: '',
     nombreProyecto: '',
-    clienteNombre: '',
-    clienteRuc: '',
+    clientId: '',
     fechaInicio: new Date().toISOString().split('T')[0],
     fechaFinEstimada: '',
     presupuestoTotal: '',
@@ -111,10 +127,48 @@ export default function ProyectosPage() {
     }
   }, [])
 
+  // Cargar clientes
+  const cargarClientes = useCallback(async () => {
+    try {
+      setLoadingClientes(true)
+      const data = await clientsService.getSimpleList()
+      setClientes(data)
+    } catch (error) {
+      console.error('Error al cargar clientes:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudieron cargar los clientes"
+      })
+    } finally {
+      setLoadingClientes(false)
+    }
+  }, [toast])
+
+  // Cargar áreas
+  const cargarAreas = useCallback(async () => {
+    try {
+      setLoadingAreas(true)
+      const data = await areasService.getSimpleList()
+      setAreas(data)
+    } catch (error) {
+      console.error('Error al cargar áreas:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudieron cargar las áreas"
+      })
+    } finally {
+      setLoadingAreas(false)
+    }
+  }, [toast])
+
   useEffect(() => {
     cargarProyectos()
     cargarUsuarios()
-  }, [cargarProyectos, cargarUsuarios])
+    cargarClientes()
+    cargarAreas()
+  }, [cargarProyectos, cargarUsuarios, cargarClientes, cargarAreas])
 
   // Función para crear proyecto manual
   const crearNuevoProyecto = async () => {
@@ -122,35 +176,32 @@ export default function ProyectosPage() {
       setLoading(true)
       
       // Validación básica
-      if (!nuevoProyecto.nombreProyecto || !nuevoProyecto.clienteNombre || !nuevoProyecto.presupuestoTotal) {
+      if (!nuevoProyecto.nombreProyecto || !nuevoProyecto.presupuestoTotal || !nuevoProyecto.areaId) {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Por favor completa todos los campos requeridos"
+          description: "Por favor completa todos los campos requeridos (nombre, presupuesto y área)"
         })
         return
       }
 
-      const data: any = {
+      const data: CrearProyectoData = {
         codigoProyecto: nuevoProyecto.codigoProyecto,
         nombreProyecto: nuevoProyecto.nombreProyecto,
-        clienteNombre: nuevoProyecto.clienteNombre,
+        clientId: nuevoProyecto.clientId || undefined,
         fechaInicio: nuevoProyecto.fechaInicio,
+        fechaFinEstimada: nuevoProyecto.fechaFinEstimada,
         presupuestoTotal: parseFloat(nuevoProyecto.presupuestoTotal),
+        presupuestoMateriales: parseFloat(nuevoProyecto.presupuestoMateriales) || 0,
+        presupuestoManoObra: parseFloat(nuevoProyecto.presupuestoManoObra) || 0,
+        presupuestoOtros: parseFloat(nuevoProyecto.presupuestoOtros) || 0,
         responsableEmail: nuevoProyecto.responsableEmail,
+        areaId: nuevoProyecto.areaId,
         estado: nuevoProyecto.estado,
         prioridad: nuevoProyecto.prioridad,
+        descripcion: nuevoProyecto.descripcion,
+        observaciones: nuevoProyecto.observaciones,
       }
-
-      // Solo agregar campos opcionales si tienen valor
-      if (nuevoProyecto.clienteRuc) data.clienteRuc = nuevoProyecto.clienteRuc
-      if (nuevoProyecto.fechaFinEstimada) data.fechaFinEstimada = nuevoProyecto.fechaFinEstimada
-      if (nuevoProyecto.presupuestoMateriales) data.presupuestoMateriales = parseFloat(nuevoProyecto.presupuestoMateriales)
-      if (nuevoProyecto.presupuestoManoObra) data.presupuestoManoObra = parseFloat(nuevoProyecto.presupuestoManoObra)
-      if (nuevoProyecto.presupuestoOtros) data.presupuestoOtros = parseFloat(nuevoProyecto.presupuestoOtros)
-      if (nuevoProyecto.areaId) data.areaId = nuevoProyecto.areaId
-      if (nuevoProyecto.descripcion) data.descripcion = nuevoProyecto.descripcion
-      if (nuevoProyecto.observaciones) data.observaciones = nuevoProyecto.observaciones
 
       await projectsUploadService.crearProyecto(data)
       
@@ -163,8 +214,7 @@ export default function ProyectosPage() {
       setNuevoProyecto({
         codigoProyecto: '',
         nombreProyecto: '',
-        clienteNombre: '',
-        clienteRuc: '',
+        clientId: '',
         fechaInicio: new Date().toISOString().split('T')[0],
         fechaFinEstimada: '',
         presupuestoTotal: '',
@@ -329,8 +379,7 @@ export default function ProyectosPage() {
         id: proyecto.id,
         codigoProyecto: proyecto.codigoProyecto || '',
         nombreProyecto: proyecto.nombreProyecto || '',
-        clienteNombre: proyecto.cliente?.name || '',
-        clienteRuc: proyecto.cliente?.taxId || '',
+        clientId: proyecto.clientId || proyecto.cliente?.id || '',
         fechaInicio: proyecto.fechaInicio ? new Date(proyecto.fechaInicio).toISOString().split('T')[0] : '',
         fechaFinEstimada: proyecto.fechaFinEstimada ? new Date(proyecto.fechaFinEstimada).toISOString().split('T')[0] : '',
         presupuestoTotal: proyecto.presupuestoTotal?.toString() || '',
@@ -364,26 +413,23 @@ export default function ProyectosPage() {
     try {
       setLoading(true)
 
-      const data: any = {
+      const data: CrearProyectoData = {
         codigoProyecto: proyectoParaEditar.codigoProyecto,
         nombreProyecto: proyectoParaEditar.nombreProyecto,
-        clienteNombre: proyectoParaEditar.clienteNombre,
+        clientId: proyectoParaEditar.clientId || undefined,
         fechaInicio: proyectoParaEditar.fechaInicio,
+        fechaFinEstimada: proyectoParaEditar.fechaFinEstimada,
         presupuestoTotal: parseFloat(proyectoParaEditar.presupuestoTotal),
+        presupuestoMateriales: parseFloat(proyectoParaEditar.presupuestoMateriales) || 0,
+        presupuestoManoObra: parseFloat(proyectoParaEditar.presupuestoManoObra) || 0,
+        presupuestoOtros: parseFloat(proyectoParaEditar.presupuestoOtros) || 0,
         responsableEmail: proyectoParaEditar.responsableEmail,
+        areaId: proyectoParaEditar.areaId,
         estado: proyectoParaEditar.estado,
         prioridad: proyectoParaEditar.prioridad,
+        descripcion: proyectoParaEditar.descripcion,
+        observaciones: proyectoParaEditar.observaciones,
       }
-
-      // Solo agregar campos opcionales si tienen valor
-      if (proyectoParaEditar.clienteRuc) data.clienteRuc = proyectoParaEditar.clienteRuc
-      if (proyectoParaEditar.fechaFinEstimada) data.fechaFinEstimada = proyectoParaEditar.fechaFinEstimada
-      if (proyectoParaEditar.presupuestoMateriales) data.presupuestoMateriales = parseFloat(proyectoParaEditar.presupuestoMateriales)
-      if (proyectoParaEditar.presupuestoManoObra) data.presupuestoManoObra = parseFloat(proyectoParaEditar.presupuestoManoObra)
-      if (proyectoParaEditar.presupuestoOtros) data.presupuestoOtros = parseFloat(proyectoParaEditar.presupuestoOtros)
-      if (proyectoParaEditar.areaId) data.areaId = proyectoParaEditar.areaId
-      if (proyectoParaEditar.descripcion) data.descripcion = proyectoParaEditar.descripcion
-      if (proyectoParaEditar.observaciones) data.observaciones = proyectoParaEditar.observaciones
 
       await projectsUploadService.actualizarProyecto(proyectoParaEditar.id, data)
       
@@ -450,7 +496,7 @@ export default function ProyectosPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Carga de Proyectos</h1>
@@ -502,23 +548,123 @@ export default function ProyectosPage() {
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Cliente *</Label>
-                    <Input 
-                      placeholder="Nombre del cliente" 
-                      value={nuevoProyecto.clienteNombre}
-                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, clienteNombre: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label>RUC del Cliente</Label>
-                    <Input 
-                      placeholder="20123456789" 
-                      value={nuevoProyecto.clienteRuc}
-                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, clienteRuc: e.target.value})}
-                    />
-                  </div>
+                <div>
+                  <Label>Cliente</Label>
+                  <Popover open={openClientePopover} onOpenChange={setOpenClientePopover}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openClientePopover}
+                        className="w-full justify-between"
+                      >
+                        {nuevoProyecto.clientId
+                          ? clientes.find((c) => c.id === nuevoProyecto.clientId)?.name
+                          : "Seleccionar cliente..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      <Command>
+                        <CommandInput placeholder="Buscar cliente por nombre o RFC..." />
+                        <CommandEmpty>No se encontraron clientes.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="sin-cliente"
+                            onSelect={() => {
+                              setNuevoProyecto({...nuevoProyecto, clientId: ''})
+                              setOpenClientePopover(false)
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                nuevoProyecto.clientId === "" ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            Sin cliente
+                          </CommandItem>
+                          {clientes.map((cliente) => (
+                            <CommandItem
+                              key={cliente.id}
+                              value={`${cliente.name} ${cliente.taxId}`}
+                              onSelect={() => {
+                                setNuevoProyecto({...nuevoProyecto, clientId: cliente.id})
+                                setOpenClientePopover(false)
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  nuevoProyecto.clientId === cliente.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="flex flex-col">
+                                <span className="font-medium">{cliente.name}</span>
+                                <span className="text-xs text-muted-foreground">RFC: {cliente.taxId}</span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Busca y selecciona un cliente existente o déjalo vacío
+                  </p>
+                </div>
+
+                <div>
+                  <Label>Área *</Label>
+                  <Popover open={openAreaPopover} onOpenChange={setOpenAreaPopover}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openAreaPopover}
+                        className="w-full justify-between"
+                      >
+                        {nuevoProyecto.areaId
+                          ? areas.find((a) => a.id === nuevoProyecto.areaId)?.name
+                          : "Seleccionar área..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      <Command>
+                        <CommandInput placeholder="Buscar área..." />
+                        <CommandEmpty>No se encontraron áreas.</CommandEmpty>
+                        <CommandGroup>
+                          {areas.map((area) => (
+                            <CommandItem
+                              key={area.id}
+                              value={area.name}
+                              onSelect={() => {
+                                setNuevoProyecto({...nuevoProyecto, areaId: area.id})
+                                setOpenAreaPopover(false)
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  nuevoProyecto.areaId === area.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="flex flex-col">
+                                <span className="font-medium">{area.name}</span>
+                                {area.description && (
+                                  <span className="text-xs text-muted-foreground">{area.description}</span>
+                                )}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Selecciona el área responsable del proyecto
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -899,6 +1045,7 @@ export default function ProyectosPage() {
                   <TableHead>ID</TableHead>
                   <TableHead>Proyecto</TableHead>
                   <TableHead>Cliente</TableHead>
+                  <TableHead>Área</TableHead>
                   <TableHead>Valor</TableHead>
                   <TableHead>Fechas</TableHead>
                   <TableHead>Avance</TableHead>
@@ -921,6 +1068,11 @@ export default function ProyectosPage() {
                         <div className="font-medium">{proyecto.cliente}</div>
                         <div className="text-sm text-muted-foreground">{proyecto.categoria}</div>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {proyectos.find(p => p.id === proyecto.id)?.area?.name || 'Sin área'}
+                      </Badge>
                     </TableCell>
                     <TableCell className="font-medium">${proyecto.valorContrato.toLocaleString()}</TableCell>
                     <TableCell>
@@ -1107,21 +1259,117 @@ export default function ProyectosPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Cliente *</Label>
-                  <Input 
-                    value={proyectoParaEditar.clienteNombre}
-                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, clienteNombre: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <Label>RUC del Cliente</Label>
-                  <Input 
-                    value={proyectoParaEditar.clienteRuc}
-                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, clienteRuc: e.target.value})}
-                  />
-                </div>
+              <div>
+                <Label>Cliente</Label>
+                <Popover open={openClientePopoverEdit} onOpenChange={setOpenClientePopoverEdit}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openClientePopoverEdit}
+                      className="w-full justify-between"
+                    >
+                      {proyectoParaEditar.clientId
+                        ? clientes.find((c) => c.id === proyectoParaEditar.clientId)?.name
+                        : "Seleccionar cliente..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Buscar cliente por nombre o RFC..." />
+                      <CommandEmpty>No se encontraron clientes.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="sin-cliente"
+                          onSelect={() => {
+                            setProyectoParaEditar({...proyectoParaEditar, clientId: ''})
+                            setOpenClientePopoverEdit(false)
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              proyectoParaEditar.clientId === "" ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          Sin cliente
+                        </CommandItem>
+                        {clientes.map((cliente) => (
+                          <CommandItem
+                            key={cliente.id}
+                            value={`${cliente.name} ${cliente.taxId}`}
+                            onSelect={() => {
+                              setProyectoParaEditar({...proyectoParaEditar, clientId: cliente.id})
+                              setOpenClientePopoverEdit(false)
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                proyectoParaEditar.clientId === cliente.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span className="font-medium">{cliente.name}</span>
+                              <span className="text-xs text-muted-foreground">RFC: {cliente.taxId}</span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div>
+                <Label>Área *</Label>
+                <Popover open={openAreaPopoverEdit} onOpenChange={setOpenAreaPopoverEdit}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openAreaPopoverEdit}
+                      className="w-full justify-between"
+                    >
+                      {proyectoParaEditar.areaId
+                        ? areas.find((a) => a.id === proyectoParaEditar.areaId)?.name
+                        : "Seleccionar área..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Buscar área..." />
+                      <CommandEmpty>No se encontraron áreas.</CommandEmpty>
+                      <CommandGroup>
+                        {areas.map((area) => (
+                          <CommandItem
+                            key={area.id}
+                            value={area.name}
+                            onSelect={() => {
+                              setProyectoParaEditar({...proyectoParaEditar, areaId: area.id})
+                              setOpenAreaPopoverEdit(false)
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                proyectoParaEditar.areaId === area.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span className="font-medium">{area.name}</span>
+                              {area.description && (
+                                <span className="text-xs text-muted-foreground">{area.description}</span>
+                              )}
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

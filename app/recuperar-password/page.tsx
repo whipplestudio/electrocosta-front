@@ -56,7 +56,7 @@ export default function RecuperarPasswordPage() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="usuario@electrocoasta.com"
+                    placeholder="usuario@demo.com"
                     className="pl-12 h-12 text-base"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}

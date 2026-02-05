@@ -12,7 +12,7 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
-  title: "ERP Financiero - Electro Costa",
+  title: "ERP Financiero - Demo",
   description: "Dashboard de Cuentas por Pagar y Cobrar",
   generator: "v0.app",
 }

@@ -41,7 +41,7 @@ export function DocumentViewer({ entidadTipo, entidadId }: DocumentViewerProps) 
     try {
       setLoading(true)
       const response = await fetch(
-        `http://localhost:3001/api/v1/documentos/entidad/${entidadTipo}/${entidadId}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/documentos/entidad/${entidadTipo}/${entidadId}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
@@ -66,7 +66,7 @@ export function DocumentViewer({ entidadTipo, entidadId }: DocumentViewerProps) 
   const handleVisualizarDocumento = async (doc: Documento) => {
     try {
       const response = await fetch(
-        `http://localhost:3001/api/v1/documentos/${doc.id}/url`,
+        `${process.env.NEXT_PUBLIC_API_URL}/documentos/${doc.id}/url`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("accessToken")}`,

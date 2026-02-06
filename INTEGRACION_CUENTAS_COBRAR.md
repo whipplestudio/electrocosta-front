@@ -149,7 +149,7 @@ http://localhost:4000
 
 ### Verificar Backend
 ```bash
-cd ../electrocosta-backend
+cd ../Demo-backend
 npm run start:dev
 ```
 
@@ -163,13 +163,13 @@ npm run start:dev
 
 ### 1. **Iniciar Backend**
 ```bash
-cd electrocosta-backend
+cd Demo-backend
 npm run start:dev
 ```
 
 ### 2. **Iniciar Frontend**
 ```bash
-cd electrocosta-frontend
+cd Demo-frontend
 npm run dev
 ```
 
@@ -180,7 +180,7 @@ http://localhost:3000/cuentas-cobrar
 
 ### 4. **Login (si es necesario)**
 ```
-Email: admin@electrocosta.com
+Email: admin@Demo.com
 Password: Admin123!
 ```
 
@@ -299,7 +299,7 @@ export default function CuentasCobrarPage() {
 
 ## 📚 Documentación Adicional
 
-- **Backend API**: `/electrocosta-backend/docs/CUENTAS_POR_COBRAR_API_COMPLETA.json`
+- **Backend API**: `/Demo-backend/docs/CUENTAS_POR_COBRAR_API_COMPLETA.json`
 - **Tipos TypeScript**: `/types/accounts-receivable.ts`
 - **Servicios**: `/services/accounts-receivable.service.ts`
 

@@ -81,7 +81,7 @@ export default function RegistroPage() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="usuario@electrocoasta.com"
+                  placeholder="usuario@demo.com"
                   className="pl-10"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -97,7 +97,7 @@ export default function RegistroPage() {
                 <Input
                   id="empresa"
                   type="text"
-                  placeholder="Electro Costa"
+                  placeholder="Demo"
                   className="pl-10"
                   value={formData.empresa}
                   onChange={(e) => setFormData({ ...formData, empresa: e.target.value })}

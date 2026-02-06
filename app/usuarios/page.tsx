@@ -443,7 +443,7 @@ function UsuariosPageContent() {
               <Input 
                 id="email" 
                 type="email" 
-                placeholder="usuario@electrocosta.com" 
+                placeholder="usuario@Demo.com" 
                 className="h-11"
                 value={formData.email || ""} 
                 onChange={(e) => setFormData({...formData, email: e.target.value})} 

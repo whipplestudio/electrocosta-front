@@ -1,7 +1,7 @@
 {
   "project": {
     "name": "electro-costa-erp-backend",
-    "description": "Backend API para el sistema ERP Financiero de Electro Costa",
+    "description": "Backend API para el sistema ERP Financiero de Demo",
     "framework": "NestJS",
     "version": "1.0.0",
     "nodeVersion": ">=18.0.0",
@@ -17,7 +17,7 @@
     },
     "swagger": {
       "enabled": true,
-      "title": "Electro Costa ERP API",
+      "title": "Demo ERP API",
       "description": "API documentation for financial ERP system",
       "version": "1.0",
       "path": "api/docs"
@@ -2639,7 +2639,7 @@
     },
     {
       "name": "welcome",
-      "subject": "Bienvenido a Electro Costa ERP",
+      "subject": "Bienvenido a Demo ERP",
       "description": "Email de bienvenida para nuevos usuarios"
     }
   ],

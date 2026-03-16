@@ -3,7 +3,7 @@ import type { Metadata } from "next"
 import { DM_Sans } from "next/font/google"
 import "./globals.css"
 import { ConditionalLayout } from "@/components/conditional-layout"
-import { Toaster } from "@/components/ui/toaster"
+import { Toaster } from "sonner"
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -26,7 +26,20 @@ export default function RootLayout({
     <html lang="es" className={`${dmSans.variable} antialiased`}>
       <body className="font-sans">
         <ConditionalLayout>{children}</ConditionalLayout>
-        <Toaster />
+        <Toaster 
+          position="top-center"
+          toastOptions={{
+            style: {
+              background: 'hsl(var(--background))',
+              color: 'hsl(var(--foreground))',
+              border: '1px solid hsl(var(--border))',
+              borderRadius: 'calc(var(--radius) - 2px)',
+            },
+            classNames: {
+              error: 'bg-destructive text-destructive-foreground border-destructive',
+            },
+          }}
+        />
       </body>
     </html>
   )

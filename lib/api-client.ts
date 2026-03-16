@@ -81,8 +81,16 @@ export default apiClient;
 // Helper para manejar errores de API
 export const handleApiError = (error: unknown): string => {
   if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError<{ message: string; statusCode: number }>;
-    return axiosError.response?.data?.message || axiosError.message || 'Error desconocido';
+    const axiosError = error as AxiosError<{ message: string; error: string; statusCode: number }>;
+    
+    // Priorizar el campo 'message' del backend, que contiene el error específico
+    const backendMessage = axiosError.response?.data?.message;
+    if (backendMessage) {
+      return backendMessage;
+    }
+    
+    // Fallback a otros mensajes de error
+    return axiosError.response?.data?.error || axiosError.message || 'Error desconocido';
   }
   return 'Error inesperado';
 };

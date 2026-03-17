@@ -66,11 +66,11 @@ export default function ProyectosPage() {
   // Estados para formulario manual
   const [openDialog, setOpenDialog] = useState(false)
   const [nuevoProyecto, setNuevoProyecto] = useState({
-    codigoProyecto: '',
     nombreProyecto: '',
     clientId: '',
     fechaInicio: new Date().toISOString().split('T')[0],
     fechaFinEstimada: '',
+    valorVenta: '',
     presupuestoTotal: '',
     presupuestoMateriales: '',
     presupuestoManoObra: '',
@@ -170,27 +170,73 @@ export default function ProyectosPage() {
     cargarAreas()
   }, [cargarProyectos, cargarUsuarios, cargarClientes, cargarAreas])
 
+  // Formatear número con separadores de miles
+  const formatNumber = (value: string): string => {
+    const num = value.replace(/,/g, '')
+    if (!num || isNaN(Number(num))) return ''
+    return Number(num).toLocaleString('en-US')
+  }
+
+  // Remover formato para obtener el valor numérico
+  const unformatNumber = (value: string): string => {
+    return value.replace(/,/g, '')
+  }
+
+  const handlePresupuestoChange = (field: string, value: string) => {
+    const unformatted = unformatNumber(value)
+    setNuevoProyecto((prev) => {
+      const updated = { ...prev, [field]: unformatted }
+      
+      // Si se modificó alguno de los 3 campos de desglose, calcular el total automáticamente
+      if (field === 'presupuestoMateriales' || field === 'presupuestoManoObra' || field === 'presupuestoOtros') {
+        const materiales = parseFloat(field === 'presupuestoMateriales' ? unformatted : updated.presupuestoMateriales) || 0
+        const manoObra = parseFloat(field === 'presupuestoManoObra' ? unformatted : updated.presupuestoManoObra) || 0
+        const otros = parseFloat(field === 'presupuestoOtros' ? unformatted : updated.presupuestoOtros) || 0
+        updated.presupuestoTotal = (materiales + manoObra + otros).toString()
+      }
+      
+      return updated
+    })
+  }
+
+  const handlePresupuestoEditarChange = (field: string, value: string) => {
+    const unformatted = unformatNumber(value)
+    setProyectoParaEditar((prev: any) => {
+      const updated = { ...prev, [field]: unformatted }
+      
+      // Si se modificó alguno de los 3 campos de desglose, calcular el total automáticamente
+      if (field === 'presupuestoMateriales' || field === 'presupuestoManoObra' || field === 'presupuestoOtros') {
+        const materiales = parseFloat(field === 'presupuestoMateriales' ? unformatted : updated.presupuestoMateriales) || 0
+        const manoObra = parseFloat(field === 'presupuestoManoObra' ? unformatted : updated.presupuestoManoObra) || 0
+        const otros = parseFloat(field === 'presupuestoOtros' ? unformatted : updated.presupuestoOtros) || 0
+        updated.presupuestoTotal = (materiales + manoObra + otros).toString()
+      }
+      
+      return updated
+    })
+  }
+
   // Función para crear proyecto manual
   const crearNuevoProyecto = async () => {
     try {
       setLoading(true)
       
       // Validación básica
-      if (!nuevoProyecto.nombreProyecto || !nuevoProyecto.presupuestoTotal || !nuevoProyecto.areaId) {
+      if (!nuevoProyecto.nombreProyecto || !nuevoProyecto.valorVenta || !nuevoProyecto.presupuestoTotal || !nuevoProyecto.areaId) {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Por favor completa todos los campos requeridos (nombre, presupuesto y área)"
+          description: "Por favor completa todos los campos requeridos (nombre, valor de venta, presupuesto y área)"
         })
         return
       }
 
       const data: CrearProyectoData = {
-        codigoProyecto: nuevoProyecto.codigoProyecto,
         nombreProyecto: nuevoProyecto.nombreProyecto,
         clientId: nuevoProyecto.clientId || undefined,
         fechaInicio: nuevoProyecto.fechaInicio,
         fechaFinEstimada: nuevoProyecto.fechaFinEstimada,
+        valorVenta: parseFloat(nuevoProyecto.valorVenta) || 0,
         presupuestoTotal: parseFloat(nuevoProyecto.presupuestoTotal),
         presupuestoMateriales: parseFloat(nuevoProyecto.presupuestoMateriales) || 0,
         presupuestoManoObra: parseFloat(nuevoProyecto.presupuestoManoObra) || 0,
@@ -212,11 +258,11 @@ export default function ProyectosPage() {
 
       // Resetear formulario
       setNuevoProyecto({
-        codigoProyecto: '',
         nombreProyecto: '',
         clientId: '',
         fechaInicio: new Date().toISOString().split('T')[0],
         fechaFinEstimada: '',
+        valorVenta: '',
         presupuestoTotal: '',
         presupuestoMateriales: '',
         presupuestoManoObra: '',
@@ -377,11 +423,11 @@ export default function ProyectosPage() {
       // Mapear datos del backend al formato del formulario
       setProyectoParaEditar({
         id: proyecto.id,
-        codigoProyecto: proyecto.codigoProyecto || '',
         nombreProyecto: proyecto.nombreProyecto || '',
         clientId: proyecto.clientId || proyecto.cliente?.id || '',
         fechaInicio: proyecto.fechaInicio ? new Date(proyecto.fechaInicio).toISOString().split('T')[0] : '',
         fechaFinEstimada: proyecto.fechaFinEstimada ? new Date(proyecto.fechaFinEstimada).toISOString().split('T')[0] : '',
+        valorVenta: proyecto.valorVenta?.toString() || '',
         presupuestoTotal: proyecto.presupuestoTotal?.toString() || '',
         presupuestoMateriales: proyecto.presupuestoMateriales?.toString() || '',
         presupuestoManoObra: proyecto.presupuestoManoObra?.toString() || '',
@@ -414,11 +460,11 @@ export default function ProyectosPage() {
       setLoading(true)
 
       const data: CrearProyectoData = {
-        codigoProyecto: proyectoParaEditar.codigoProyecto,
         nombreProyecto: proyectoParaEditar.nombreProyecto,
         clientId: proyectoParaEditar.clientId || undefined,
         fechaInicio: proyectoParaEditar.fechaInicio,
         fechaFinEstimada: proyectoParaEditar.fechaFinEstimada,
+        valorVenta: parseFloat(proyectoParaEditar.valorVenta) || 0,
         presupuestoTotal: parseFloat(proyectoParaEditar.presupuestoTotal),
         presupuestoMateriales: parseFloat(proyectoParaEditar.presupuestoMateriales) || 0,
         presupuestoManoObra: parseFloat(proyectoParaEditar.presupuestoManoObra) || 0,
@@ -529,23 +575,13 @@ export default function ProyectosPage() {
                 <DialogDescription>Crea un nuevo proyecto en el sistema</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Código del Proyecto *</Label>
-                    <Input 
-                      placeholder="PROJ-2024-001" 
-                      value={nuevoProyecto.codigoProyecto}
-                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, codigoProyecto: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label>Nombre del Proyecto *</Label>
-                    <Input 
-                      placeholder="Nombre del proyecto" 
-                      value={nuevoProyecto.nombreProyecto}
-                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, nombreProyecto: e.target.value})}
-                    />
-                  </div>
+                <div>
+                  <Label>Nombre del Proyecto *</Label>
+                  <Input 
+                    placeholder="Ej: Instalación eléctrica Planta Norte" 
+                    value={nuevoProyecto.nombreProyecto}
+                    onChange={(e) => setNuevoProyecto({...nuevoProyecto, nombreProyecto: e.target.value})}
+                  />
                 </div>
                 
                 <div>
@@ -686,45 +722,67 @@ export default function ProyectosPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-primary">💰 Venta</h3>
                   <div>
-                    <Label>Presupuesto Total *</Label>
+                    <Label>Valor de Venta (Contrato sin IVA) *</Label>
                     <Input 
-                      type="number" 
-                      placeholder="50000.00"
-                      value={nuevoProyecto.presupuestoTotal}
-                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, presupuestoTotal: e.target.value})}
+                      type="text" 
+                      placeholder="Ej: 100,000 (sin IVA)"
+                      value={formatNumber(nuevoProyecto.valorVenta)}
+                      onChange={(e) => handlePresupuestoChange('valorVenta', e.target.value)}
                     />
-                  </div>
-                  <div>
-                    <Label>Presupuesto Materiales *</Label>
-                    <Input 
-                      type="number" 
-                      placeholder="20000.00"
-                      value={nuevoProyecto.presupuestoMateriales}
-                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, presupuestoMateriales: e.target.value})}
-                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Precio de venta al cliente (sin IVA)
+                    </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Presupuesto Mano de Obra *</Label>
-                    <Input 
-                      type="number" 
-                      placeholder="25000.00"
-                      value={nuevoProyecto.presupuestoManoObra}
-                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, presupuestoManoObra: e.target.value})}
-                    />
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-primary">📊 Costos Estimados</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Presupuesto Materiales *</Label>
+                      <Input 
+                        type="text" 
+                        placeholder="Ej: 20,000"
+                        value={formatNumber(nuevoProyecto.presupuestoMateriales)}
+                        onChange={(e) => handlePresupuestoChange('presupuestoMateriales', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label>Presupuesto Mano de Obra *</Label>
+                      <Input 
+                        type="text" 
+                        placeholder="Ej: 25,000"
+                        value={formatNumber(nuevoProyecto.presupuestoManoObra)}
+                        onChange={(e) => handlePresupuestoChange('presupuestoManoObra', e.target.value)}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label>Presupuesto Otros *</Label>
-                    <Input 
-                      type="number" 
-                      placeholder="5000.00"
-                      value={nuevoProyecto.presupuestoOtros}
-                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, presupuestoOtros: e.target.value})}
-                    />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Presupuesto Otros *</Label>
+                      <Input 
+                        type="text" 
+                        placeholder="Ej: 5,000"
+                        value={formatNumber(nuevoProyecto.presupuestoOtros)}
+                        onChange={(e) => handlePresupuestoChange('presupuestoOtros', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label>Presupuesto Total (Calculado)</Label>
+                      <Input 
+                        type="text" 
+                        value={formatNumber(nuevoProyecto.presupuestoTotal)}
+                        readOnly
+                        className="bg-muted font-semibold"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Suma automática de Materiales + Mano de Obra + Otros
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -770,7 +828,7 @@ export default function ProyectosPage() {
                 </div>
 
                 <Textarea 
-                  placeholder="Descripción del proyecto..."
+                  placeholder="Ingrese una descripción detallada del proyecto (opcional)"
                   value={nuevoProyecto.descripcion}
                   onChange={(e) => setNuevoProyecto({...nuevoProyecto, descripcion: e.target.value})}
                 />
@@ -1019,7 +1077,7 @@ export default function ProyectosPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
-                placeholder="Buscar por nombre, cliente o ID..."
+                placeholder="Buscar proyectos por nombre, cliente o ID"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -1042,7 +1100,6 @@ export default function ProyectosPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
                   <TableHead>Proyecto</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Área</TableHead>
@@ -1056,7 +1113,6 @@ export default function ProyectosPage() {
               <TableBody>
                 {filteredProyectos.map((proyecto) => (
                   <TableRow key={proyecto.id}>
-                    <TableCell className="font-medium">{proyecto.id}</TableCell>
                     <TableCell>
                       <div>
                         <div className="font-medium">{proyecto.nombre}</div>
@@ -1087,7 +1143,7 @@ export default function ProyectosPage() {
                         <div className="w-16 bg-gray-200 rounded-full h-2">
                           <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${proyecto.avance}%` }}></div>
                         </div>
-                        <span className="text-sm">{proyecto.avance}%</span>
+                        <span className="text-sm">{proyecto.avance.toFixed(2)}%</span>
                       </div>
                     </TableCell>
                     <TableCell>{getStatusBadge(proyecto.estado)}</TableCell>
@@ -1129,10 +1185,6 @@ export default function ProyectosPage() {
           {proyectoSeleccionado && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Código</Label>
-                  <p className="text-sm font-medium">{proyectoSeleccionado.codigoProyecto}</p>
-                </div>
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Estado</Label>
                   <p className="text-sm font-medium">{proyectoSeleccionado.estado}</p>
@@ -1242,21 +1294,12 @@ export default function ProyectosPage() {
           </DialogHeader>
           {proyectoParaEditar && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Código del Proyecto *</Label>
-                  <Input 
-                    value={proyectoParaEditar.codigoProyecto}
-                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, codigoProyecto: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <Label>Nombre del Proyecto *</Label>
-                  <Input 
-                    value={proyectoParaEditar.nombreProyecto}
-                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, nombreProyecto: e.target.value})}
-                  />
-                </div>
+              <div>
+                <Label>Nombre del Proyecto *</Label>
+                <Input 
+                  value={proyectoParaEditar.nombreProyecto}
+                  onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, nombreProyecto: e.target.value})}
+                />
               </div>
 
               <div>
@@ -1391,41 +1434,64 @@ export default function ProyectosPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-primary">💰 Venta</h3>
                 <div>
-                  <Label>Presupuesto Total *</Label>
+                  <Label>Valor de Venta (Contrato sin IVA) *</Label>
                   <Input 
-                    type="number"
-                    value={proyectoParaEditar.presupuestoTotal}
-                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, presupuestoTotal: e.target.value})}
+                    type="text"
+                    placeholder="Ej: 100,000 (sin IVA)"
+                    value={formatNumber(proyectoParaEditar.valorVenta)}
+                    onChange={(e) => handlePresupuestoEditarChange('valorVenta', e.target.value)}
                   />
-                </div>
-                <div>
-                  <Label>Presupuesto Materiales</Label>
-                  <Input 
-                    type="number"
-                    value={proyectoParaEditar.presupuestoMateriales}
-                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, presupuestoMateriales: e.target.value})}
-                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Precio de venta al cliente (sin IVA)
+                  </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Presupuesto Mano de Obra</Label>
-                  <Input 
-                    type="number"
-                    value={proyectoParaEditar.presupuestoManoObra}
-                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, presupuestoManoObra: e.target.value})}
-                  />
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-primary">📊 Costos Estimados</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Presupuesto Materiales</Label>
+                    <Input 
+                      type="text"
+                      value={formatNumber(proyectoParaEditar.presupuestoMateriales)}
+                      onChange={(e) => handlePresupuestoEditarChange('presupuestoMateriales', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Presupuesto Mano de Obra</Label>
+                    <Input 
+                      type="text"
+                      value={formatNumber(proyectoParaEditar.presupuestoManoObra)}
+                      onChange={(e) => handlePresupuestoEditarChange('presupuestoManoObra', e.target.value)}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label>Presupuesto Otros</Label>
-                  <Input 
-                    type="number"
-                    value={proyectoParaEditar.presupuestoOtros}
-                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, presupuestoOtros: e.target.value})}
-                  />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Presupuesto Otros</Label>
+                    <Input 
+                      type="text"
+                      value={formatNumber(proyectoParaEditar.presupuestoOtros)}
+                      onChange={(e) => handlePresupuestoEditarChange('presupuestoOtros', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Presupuesto Total (Calculado)</Label>
+                    <Input 
+                      type="text"
+                      value={formatNumber(proyectoParaEditar.presupuestoTotal)}
+                      readOnly
+                      className="bg-muted font-semibold"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Suma automática de Materiales + Mano de Obra + Otros
+                    </p>
+                  </div>
                 </div>
               </div>
 

@@ -79,7 +79,7 @@ function PermisosPageContent() {
     cuentas_pagar: "Cuentas por Pagar",
     reportes: "Reportes",
     dashboard: "Dashboard",
-    carga_informacion: "Área de Carga",
+    carga_informacion: "Proyectos",
     clientes: "Clientes",
   }
 
@@ -94,8 +94,6 @@ function PermisosPageContent() {
     aprobacion: "Aprobación",
     reportes: "Reportes",
     detallados: "Reportes Detallados",
-    descargables: "Reportes Descargables",
-    personalizados: "Reportes Personalizados",
     general: "Dashboard General",
     financiero: "Dashboard Financiero",
     modulo: "Acceso al Módulo",

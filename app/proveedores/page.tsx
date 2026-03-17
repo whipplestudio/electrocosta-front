@@ -227,7 +227,7 @@ export default function ProveedoresPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
-                <TableHead>RFC/Tax ID</TableHead>
+                <TableHead>RFC</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Teléfono</TableHead>
                 <TableHead>Contacto</TableHead>
@@ -310,11 +310,11 @@ export default function ProveedoresPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>RFC/Tax ID *</Label>
+                <Label>RFC *</Label>
                 <Input
                   value={formData.taxId}
                   onChange={(e) => setFormData({ ...formData, taxId: e.target.value })}
-                  placeholder="RFC o Tax ID"
+                  placeholder="RFC del proveedor"
                 />
               </div>
               <div className="grid gap-2">

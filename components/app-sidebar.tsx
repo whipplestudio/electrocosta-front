@@ -16,6 +16,7 @@ import {
   Users,
   Tag,
   Building2,
+  LayoutDashboard,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -25,7 +26,22 @@ interface SidebarProps {
   className?: string
 }
 
-const menuItems = [
+interface MenuItem {
+  title: string
+  icon: any
+  href: string
+  requiredPermissionCodes?: string[]
+  submenu?: MenuItem[]
+}
+
+const menuItems: MenuItem[] = [
+  {
+    title: "Dashboard",
+    icon: LayoutDashboard,
+    href: "/dashboard",
+    requiredPermissionCodes: ["dashboard.general.ver"],
+    submenu: [],
+  },
   {
     title: "Usuarios y Roles",
     icon: Shield,
@@ -143,50 +159,11 @@ const menuItems = [
     ],
   },
   {
-    title: "Área de Carga",
-    icon: Upload,
-    href: "/carga-informacion",
-    requiredPermissionCodes: ["carga_informacion.ventas.ver", "carga_informacion.gastos.ver", "carga_informacion.proyectos.ver", "proyectos.estado_resultados.ver"],
-    submenu: [
-      { 
-        title: "Ventas", 
-        href: "/carga-informacion/ventas",
-        requiredPermissionCodes: ["carga_informacion.ventas.ver"]
-      },
-      { 
-        title: "Gastos", 
-        href: "/carga-informacion/gastos",
-        requiredPermissionCodes: ["carga_informacion.gastos.ver"]
-      },
-      { 
-        title: "Proyectos", 
-        href: "/carga-informacion/proyectos",
-        requiredPermissionCodes: ["carga_informacion.proyectos.ver"]
-      },
-      { 
-        title: "Estado de Resultados por Proyecto", 
-        href: "/proyectos/estado-resultados",
-        requiredPermissionCodes: ["proyectos.estado_resultados.ver"]
-      },
-    ],
-  },
-  {
-    title: "Reportes",
-    icon: Download,
-    href: "/reportes/descargables",
-    requiredPermissionCodes: ["reportes.descargables.ver"],
-    submenu: [
-      { 
-        title: "Descargables", 
-        href: "/reportes/descargables",
-        requiredPermissionCodes: ["reportes.descargables.ver"]
-      },
-      { 
-        title: "Personalizados", 
-        href: "/reportes/personalizados",
-        requiredPermissionCodes: ["reportes.personalizados.ver"]
-      },
-    ],
+    title: "Proyectos",
+    icon: Building2,
+    href: "/proyectos",
+    requiredPermissionCodes: ["carga_informacion.proyectos.ver"],
+    submenu: [],
   },
 ]
 

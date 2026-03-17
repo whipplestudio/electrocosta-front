@@ -31,8 +31,22 @@ export default function CategoriasPage() {
     name: '',
     description: '',
     type: 'expense',
-    color: '#3B82F6',
+    color: '#EF4444', // Rojo por defecto (expense)
+    macroClasificacion: undefined,
   });
+
+  // Función para obtener color según tipo
+  const getColorByType = (type: CategoryType): string => {
+    return type === 'income' ? '#3B82F6' : '#EF4444'; // Azul para ingresos, Rojo para egresos
+  };
+
+  // Auto-asignar color cuando cambia el tipo
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      color: getColorByType(prev.type)
+    }));
+  }, [formData.type]);
 
   // Cargar categorías
   useEffect(() => {
@@ -144,7 +158,8 @@ export default function CategoriasPage() {
       name: category.name,
       description: category.description || '',
       type: category.type,
-      color: category.color || '#3B82F6',
+      color: category.color || getColorByType(category.type),
+      macroClasificacion: category.macroClasificacion,
     });
     setIsEditModalOpen(true);
   };
@@ -159,7 +174,8 @@ export default function CategoriasPage() {
       name: '',
       description: '',
       type: 'expense',
-      color: '#3B82F6',
+      color: '#EF4444', // Rojo por defecto (expense)
+      macroClasificacion: undefined,
     });
   };
 
@@ -350,17 +366,43 @@ export default function CategoriasPage() {
                 </SelectContent>
               </Select>
             </div>
+            {formData.type === 'expense' && (
+              <div className="grid gap-2">
+                <Label htmlFor="macroClasificacion">Clasificación por defecto para Dashboard</Label>
+                <Select 
+                  value={formData.macroClasificacion || 'none'} 
+                  onValueChange={(value) => setFormData({ ...formData, macroClasificacion: value === 'none' ? undefined : value as any })}
+                >
+                  <SelectTrigger id="macroClasificacion">
+                    <SelectValue placeholder="Selecciona clasificación (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin clasificación</SelectItem>
+                    <SelectItem value="MATERIALES">💎 Materiales</SelectItem>
+                    <SelectItem value="MANO_DE_OBRA">👷 Mano de Obra</SelectItem>
+                    <SelectItem value="OTROS">📦 Otros Gastos</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Esta clasificación se usará por defecto al crear cuentas por pagar con esta categoría
+                </p>
+              </div>
+            )}
             <div className="grid gap-2">
-              <Label htmlFor="color">Color</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="color"
-                  type="color"
-                  value={formData.color}
-                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                  className="w-20 h-10 cursor-pointer"
+              <Label htmlFor="color-preview">Color de la categoría</Label>
+              <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/50">
+                <div 
+                  className="w-12 h-12 rounded-md border-2 border-border shadow-sm" 
+                  style={{ backgroundColor: formData.color }}
                 />
-                <Input value={formData.color} onChange={(e) => setFormData({ ...formData, color: e.target.value })} placeholder="#3B82F6" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">
+                    {formData.type === 'income' ? '🔵 Azul - Ingresos' : '🔴 Rojo - Egresos'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    El color se asigna automáticamente según el tipo
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -420,17 +462,43 @@ export default function CategoriasPage() {
                 </SelectContent>
               </Select>
             </div>
+            {formData.type === 'expense' && (
+              <div className="grid gap-2">
+                <Label htmlFor="edit-macroClasificacion">Clasificación por defecto para Dashboard</Label>
+                <Select 
+                  value={formData.macroClasificacion || 'none'} 
+                  onValueChange={(value) => setFormData({ ...formData, macroClasificacion: value === 'none' ? undefined : value as any })}
+                >
+                  <SelectTrigger id="edit-macroClasificacion">
+                    <SelectValue placeholder="Selecciona clasificación (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin clasificación</SelectItem>
+                    <SelectItem value="MATERIALES">💎 Materiales</SelectItem>
+                    <SelectItem value="MANO_DE_OBRA">👷 Mano de Obra</SelectItem>
+                    <SelectItem value="OTROS">📦 Otros Gastos</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Esta clasificación se usará por defecto al crear cuentas por pagar con esta categoría
+                </p>
+              </div>
+            )}
             <div className="grid gap-2">
-              <Label htmlFor="edit-color">Color</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="edit-color"
-                  type="color"
-                  value={formData.color}
-                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                  className="w-20 h-10 cursor-pointer"
+              <Label htmlFor="edit-color-preview">Color de la categoría</Label>
+              <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/50">
+                <div 
+                  className="w-12 h-12 rounded-md border-2 border-border shadow-sm" 
+                  style={{ backgroundColor: formData.color }}
                 />
-                <Input value={formData.color} onChange={(e) => setFormData({ ...formData, color: e.target.value })} placeholder="#3B82F6" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">
+                    {formData.type === 'income' ? '🔵 Azul - Ingresos' : '🔴 Rojo - Egresos'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    El color se asigna automáticamente según el tipo
+                  </p>
+                </div>
               </div>
             </div>
           </div>

@@ -44,8 +44,6 @@ export default function AplicacionPagosCuentasPagar() {
   const [submitting, setSubmitting] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [paymentsToday, setPaymentsToday] = useState(0)
-  const [generarGasto, setGenerarGasto] = useState(false)
-  const [categoriaGasto, setCategoriaGasto] = useState('operativo')
 
   // Form state
   const [formData, setFormData] = useState({
@@ -92,6 +90,23 @@ export default function AplicacionPagosCuentasPagar() {
     loadData()
   }, [loadData])
 
+  // Formatear número con separadores de miles
+  const formatNumber = (value: string): string => {
+    const num = value.replace(/,/g, '')
+    if (!num || isNaN(Number(num))) return ''
+    return Number(num).toLocaleString('en-US')
+  }
+
+  // Remover formato para obtener el valor numérico
+  const unformatNumber = (value: string): string => {
+    return value.replace(/,/g, '')
+  }
+
+  const handleAmountChange = (value: string) => {
+    const unformatted = unformatNumber(value)
+    setFormData((prev) => ({ ...prev, amount: parseFloat(unformatted) || 0 }))
+  }
+
   // Registrar pago
   const handleRegisterPayment = async () => {
     console.log('handleRegisterPayment iniciado')
@@ -122,21 +137,14 @@ export default function AplicacionPagosCuentasPagar() {
       setSubmitting(true)
       console.log('Iniciando proceso de registro...')
       
-      // Registrar el pago (el backend creará el gasto si generarGasto es true)
+      // Registrar el pago
       console.log('Registrando pago...')
       const paymentData: any = {
         amount: formData.amount,
         paymentMethod: formData.paymentMethod,
         paymentDate: formData.paymentDate,
         reference: formData.reference,
-        notes: formData.notes || undefined,
-      }
-
-      // Si se debe generar gasto, agregar los datos adicionales
-      if (generarGasto) {
-        paymentData.generarGasto = true
-        paymentData.categoriaGasto = categoriaGasto
-        console.log('Se generará gasto con categoría:', categoriaGasto)
+        notes: formData.notes,
       }
 
       console.log('Payment data:', paymentData)
@@ -182,8 +190,6 @@ export default function AplicacionPagosCuentasPagar() {
       notes: '',
     })
     setSelectedAccount(null)
-    setGenerarGasto(false)
-    setCategoriaGasto('operativo')
   }
 
   const openRegisterDialog = (account: AccountPayable) => {
@@ -219,7 +225,7 @@ export default function AplicacionPagosCuentasPagar() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="container mx-auto space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Aplicación de Pagos</h1>
@@ -391,11 +397,10 @@ export default function AplicacionPagosCuentasPagar() {
                   <Label htmlFor="amount">Monto del Pago *</Label>
                   <Input
                     id="amount"
-                    type="number"
-                    step="0.01"
-                    value={formData.amount || ''}
-                    onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
-                    placeholder="0.00"
+                    type="text"
+                    value={formatNumber(String(formData.amount || ''))}
+                    onChange={(e) => handleAmountChange(e.target.value)}
+                    placeholder="0"
                   />
                 </div>
 
@@ -450,55 +455,6 @@ export default function AplicacionPagosCuentasPagar() {
                 </div>
               </div>
 
-              {/* Checkbox para generar gasto */}
-              <div className="space-y-4 pt-4 border-t">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="generar-gasto"
-                    checked={generarGasto}
-                    onCheckedChange={(checked) => setGenerarGasto(checked as boolean)}
-                  />
-                  <Label
-                    htmlFor="generar-gasto"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                  >
-                    📄 Generar comprobante de gasto automáticamente
-                  </Label>
-                </div>
-
-                {/* Campos adicionales para el gasto */}
-                {generarGasto && (
-                  <div className="bg-blue-50 p-4 rounded-lg space-y-4">
-                    <p className="text-sm text-blue-700">
-                      ℹ️ Se creará un gasto con los datos del pago. Solo especifica la categoría:
-                    </p>
-                    
-                    <div className="space-y-2">
-                      <Label>Categoría del Gasto</Label>
-                      <Select value={categoriaGasto} onValueChange={setCategoriaGasto}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="operativo">Operativo</SelectItem>
-                          <SelectItem value="administrativo">Administrativo</SelectItem>
-                          <SelectItem value="ventas">Ventas</SelectItem>
-                          <SelectItem value="financiero">Financiero</SelectItem>
-                          <SelectItem value="otros">Otros</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="text-xs text-blue-600 space-y-1">
-                      <p>• Fecha: Se usará la fecha del pago ({formData.paymentDate})</p>
-                      <p>• Concepto: Se usará la referencia del pago</p>
-                      <p>• Monto: Se usará el monto del pago (${formData.amount})</p>
-                      <p>• Método de pago: Se usará el método del pago ({paymentMethodLabels[formData.paymentMethod]})</p>
-                      <p>• Proveedor: {selectedAccount?.supplier?.name || (selectedAccount as any).supplierName || 'N/A'}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           )}
 

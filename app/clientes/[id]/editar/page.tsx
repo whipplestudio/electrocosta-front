@@ -79,6 +79,23 @@ export default function EditarClientePage() {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
+  // Formatear número con separadores de miles
+  const formatNumber = (value: string): string => {
+    const num = value.replace(/,/g, '')
+    if (!num || isNaN(Number(num))) return ''
+    return Number(num).toLocaleString('en-US')
+  }
+
+  // Remover formato para obtener el valor numérico
+  const unformatNumber = (value: string): string => {
+    return value.replace(/,/g, '')
+  }
+
+  const handleLimiteCreditoChange = (value: string) => {
+    const unformatted = unformatNumber(value)
+    setFormData((prev) => ({ ...prev, limiteCredito: unformatted }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -282,10 +299,10 @@ export default function EditarClientePage() {
                 <Label htmlFor="limiteCredito">Límite de Crédito</Label>
                 <Input
                   id="limiteCredito"
-                  type="number"
-                  value={formData.limiteCredito}
-                  onChange={(e) => handleInputChange("limiteCredito", e.target.value)}
-                  placeholder="0.00"
+                  type="text"
+                  value={formatNumber(formData.limiteCredito)}
+                  onChange={(e) => handleLimiteCreditoChange(e.target.value)}
+                  placeholder="0"
                 />
               </div>
               <div className="space-y-2">

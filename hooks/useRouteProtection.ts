@@ -101,14 +101,9 @@ const ROUTE_PERMISSIONS: RoutePermissionMap[] = [
     name: 'Reportes Detallados',
   },
   {
-    path: '/reportes/descargables',
-    requiredPermissions: ['reportes.descargables.ver'],
-    name: 'Reportes Descargables',
-  },
-  {
-    path: '/reportes/personalizados',
-    requiredPermissions: ['reportes.personalizados.ver'],
-    name: 'Reportes Personalizados',
+    path: '/dashboard',
+    requiredPermissions: ['dashboard.general.ver'],
+    name: 'Dashboard',
   },
 ]
 

@@ -81,6 +81,23 @@ function AplicacionPagosContent() {
     loadData()
   }, [loadData])
 
+  // Formatear número con separadores de miles
+  const formatNumber = (value: string): string => {
+    const num = value.replace(/,/g, '')
+    if (!num || isNaN(Number(num))) return ''
+    return Number(num).toLocaleString('en-US')
+  }
+
+  // Remover formato para obtener el valor numérico
+  const unformatNumber = (value: string): string => {
+    return value.replace(/,/g, '')
+  }
+
+  const handleAmountChange = (value: string) => {
+    const unformatted = unformatNumber(value)
+    setFormData((prev) => ({ ...prev, amount: parseFloat(unformatted) || 0 }))
+  }
+
   // Registrar pago
   const handleRegisterPayment = async () => {
     if (!selectedAccount) return
@@ -175,7 +192,7 @@ function AplicacionPagosContent() {
   }
 
   return (
-    <div className="flex-1 space-y-6 p-6">
+    <div className="container mx-auto flex-1 space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Aplicación de Pagos</h2>
@@ -225,7 +242,7 @@ function AplicacionPagosContent() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${accounts.length > 0 ? (totalPending / accounts.length).toFixed(0).toLocaleString() : '0'}
+              ${accounts.length > 0 ? Math.round(totalPending / accounts.length).toLocaleString() : '0'}
             </div>
             <p className="text-xs text-muted-foreground">Por factura</p>
           </CardContent>
@@ -362,11 +379,10 @@ function AplicacionPagosContent() {
                 <Label htmlFor="monto">Monto Recibido *</Label>
                 <Input 
                   id="monto" 
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00" 
-                  value={formData.amount || ''}
-                  onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
+                  type="text"
+                  placeholder="0" 
+                  value={formatNumber(String(formData.amount || ''))}
+                  onChange={(e) => handleAmountChange(e.target.value)}
                 />
               </div>
               <div className="space-y-2">

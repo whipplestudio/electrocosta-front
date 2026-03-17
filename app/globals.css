@@ -120,4 +120,34 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Mejorar visibilidad de placeholders */
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-muted-foreground/40 italic;
+  }
+  
+  input:focus::placeholder,
+  textarea:focus::placeholder {
+    @apply text-muted-foreground/30;
+  }
+  
+  /* Asegurar que el texto real sea más oscuro */
+  input,
+  textarea,
+  select {
+    @apply text-foreground;
+  }
+  
+  /* Mejorar espaciado entre labels e inputs */
+  label {
+    @apply mb-2.5 inline-block font-medium text-sm;
+  }
+  
+  /* Espaciado adicional para contenedores de campos de formulario */
+  .space-y-4 > div,
+  .space-y-3 > div,
+  .space-y-2 > div {
+    @apply mt-1;
+  }
 }

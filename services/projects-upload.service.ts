@@ -5,11 +5,11 @@ import apiClient from '@/lib/api-client'
 // ============================================================================
 
 export interface CrearProyectoData {
-  codigoProyecto: string
   nombreProyecto: string
   clientId?: string
   fechaInicio: string
   fechaFinEstimada: string
+  valorVenta: number
   presupuestoTotal: number
   presupuestoMateriales: number
   presupuestoManoObra: number

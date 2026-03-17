@@ -7,6 +7,7 @@ export interface Category {
   name: string;
   description?: string;
   type: CategoryType;
+  macroClasificacion?: 'MATERIALES' | 'MANO_DE_OBRA' | 'OTROS';
   color?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -16,6 +17,7 @@ export interface CreateCategoryDto {
   name: string;
   description?: string;
   type: CategoryType;
+  macroClasificacion?: 'MATERIALES' | 'MANO_DE_OBRA' | 'OTROS';
   color?: string;
 }
 
@@ -23,6 +25,7 @@ export interface UpdateCategoryDto {
   name?: string;
   description?: string;
   type?: CategoryType;
+  macroClasificacion?: 'MATERIALES' | 'MANO_DE_OBRA' | 'OTROS';
   color?: string;
 }
 

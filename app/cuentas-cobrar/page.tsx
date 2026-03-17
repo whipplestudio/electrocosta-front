@@ -147,7 +147,23 @@ function CuentasCobrarPageContent() {
       }
     }
   }, [formData.projectId, projects])
-  
+
+  // Formatear número con separadores de miles
+  const formatNumber = (value: string): string => {
+    const num = value.replace(/,/g, '')
+    if (!num || isNaN(Number(num))) return ''
+    return Number(num).toLocaleString('en-US')
+  }
+
+  // Remover formato para obtener el valor numérico
+  const unformatNumber = (value: string): string => {
+    return value.replace(/,/g, '')
+  }
+
+  const handleAmountChange = (value: string) => {
+    const unformatted = unformatNumber(value)
+    setFormData((prev) => ({ ...prev, amount: unformatted }))
+  }
 
   // Cargar clientes y categorías (sin proyectos)
   const loadClientsAndCategories = async () => {
@@ -784,7 +800,7 @@ function CuentasCobrarPageContent() {
                     <>
                       {projects.map((project) => (
                         <SelectItem key={project.id} value={project.id}>
-                          {project.codigoProyecto} - {project.nombreProyecto}
+                          {project.nombreProyecto}
                         </SelectItem>
                       ))}
                     </>
@@ -800,7 +816,7 @@ function CuentasCobrarPageContent() {
             
             {/* Número de Factura */}
             <div className="space-y-2">
-              <Label htmlFor="factura">Número de Factura *</Label>
+              <Label htmlFor="factura">Número de Factura</Label>
               <Input 
                 id="factura" 
                 placeholder="FAC-2024-XXX"
@@ -813,10 +829,10 @@ function CuentasCobrarPageContent() {
               <Label htmlFor="monto">Monto Total *</Label>
               <Input 
                 id="monto" 
-                type="number" 
+                type="text" 
                 placeholder="0"
-                value={formData.amount}
-                onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                value={formatNumber(formData.amount)}
+                onChange={(e) => handleAmountChange(e.target.value)}
               />
             </div>
             

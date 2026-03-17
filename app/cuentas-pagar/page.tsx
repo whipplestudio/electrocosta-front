@@ -46,6 +46,7 @@ export default function CuentasPagarPage() {
     invoiceNumber: "",
     amount: "",
     categoryId: "",
+    macroClasificacion: "" as "" | "MATERIALES" | "MANO_DE_OBRA" | "OTROS",
     issueDate: undefined as Date | undefined,
     dueDate: undefined as Date | undefined,
     description: "",
@@ -139,11 +140,41 @@ export default function CuentasPagarPage() {
     loadSuppliersAndCategories()
   }, [fetchAccounts, fetchDashboard])
 
+  // Auto-completar macroClasificacion cuando se selecciona una categoría
+  useEffect(() => {
+    if (formData.categoryId && categories.length > 0) {
+      const selectedCategory = categories.find(c => c.id === formData.categoryId)
+      if (selectedCategory && (selectedCategory as any).macroClasificacion) {
+        setFormData(prev => ({
+          ...prev,
+          macroClasificacion: (selectedCategory as any).macroClasificacion
+        }))
+      }
+    }
+  }, [formData.categoryId, categories])
+
   // Calcular pendientes de aprobación cuando las cuentas cambien
   useEffect(() => {
     const pendientes = accounts.filter(a => a.approvalStatus === 'pending').length
     setDashboardData(prev => ({ ...prev, pendientesAprobacion: pendientes }))
   }, [accounts])
+
+  // Formatear número con separadores de miles
+  const formatNumber = (value: string): string => {
+    const num = value.replace(/,/g, '')
+    if (!num || isNaN(Number(num))) return ''
+    return Number(num).toLocaleString('en-US')
+  }
+
+  // Remover formato para obtener el valor numérico
+  const unformatNumber = (value: string): string => {
+    return value.replace(/,/g, '')
+  }
+
+  const handleAmountChange = (value: string) => {
+    const unformatted = unformatNumber(value)
+    setFormData((prev) => ({ ...prev, amount: unformatted }))
+  }
 
   const handleNuevaCuenta = () => {
     setSelectedAccount(null)
@@ -154,6 +185,7 @@ export default function CuentasPagarPage() {
       invoiceNumber: "",
       amount: "",
       categoryId: "",
+      macroClasificacion: "",
       issueDate: new Date(),
       dueDate: undefined,
       description: "",
@@ -170,6 +202,7 @@ export default function CuentasPagarPage() {
       invoiceNumber: cuenta.invoiceNumber,
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || "",
+      macroClasificacion: (cuenta as any).macroClasificacion || "",
       issueDate: new Date(cuenta.issueDate),
       dueDate: new Date(cuenta.dueDate),
       description: cuenta.description || "",
@@ -178,7 +211,7 @@ export default function CuentasPagarPage() {
   }
 
   const handleSubmitForm = async () => {
-    if (!formData.supplierName || !formData.invoiceNumber || !formData.amount || !formData.issueDate || !formData.dueDate) {
+    if (!formData.supplierName || !formData.amount || !formData.issueDate || !formData.dueDate) {
       toast.error("Por favor completa todos los campos requeridos")
       return
     }
@@ -205,6 +238,7 @@ export default function CuentasPagarPage() {
           invoiceNumber: formData.invoiceNumber,
           amount: parseFloat(formData.amount),
           categoryId: formData.categoryId || undefined,
+          macroClasificacion: formData.macroClasificacion || undefined,
           issueDate: formData.issueDate?.toISOString() || new Date().toISOString(),
           dueDate: formData.dueDate?.toISOString() || new Date().toISOString(),
           description: formData.description || undefined,
@@ -574,7 +608,7 @@ export default function CuentasPagarPage() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>Número de Factura *</Label>
+              <Label>Número de Factura</Label>
               <Input
                 value={formData.invoiceNumber}
                 onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })}
@@ -583,9 +617,9 @@ export default function CuentasPagarPage() {
             <div className="grid gap-2">
               <Label>Monto *</Label>
               <Input
-                type="number"
-                value={formData.amount}
-                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                type="text"
+                value={formatNumber(formData.amount)}
+                onChange={(e) => handleAmountChange(e.target.value)}
               />
             </div>
             <div className="grid gap-2">
@@ -604,6 +638,25 @@ export default function CuentasPagarPage() {
                   )}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Clasificación Financiera *</Label>
+              <Select 
+                value={formData.macroClasificacion} 
+                onValueChange={(v) => setFormData({ ...formData, macroClasificacion: v as "" | "MATERIALES" | "MANO_DE_OBRA" | "OTROS" })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona clasificación" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="MATERIALES">💎 Materiales</SelectItem>
+                  <SelectItem value="MANO_DE_OBRA">👷 Mano de Obra</SelectItem>
+                  <SelectItem value="OTROS">📦 Otros Gastos</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Esta clasificación determina cómo se agrupa el gasto en el Dashboard financiero
+              </p>
             </div>
             <div className="grid gap-2">
               <Label>Fecha de Emisión *</Label>

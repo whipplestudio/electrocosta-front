@@ -55,6 +55,15 @@ export default function ProgramacionPagosPage() {
     requiresApproval: true,
   })
 
+  // Estado de errores de validación
+  const [errors, setErrors] = useState<{
+    accountPayableId?: string
+    scheduledAmount?: string
+    scheduledDate?: string
+    bankAccount?: string
+    checkNumber?: string
+  }>({})
+
   // Cargar datos
   const loadData = useCallback(async () => {
     try {
@@ -97,57 +106,69 @@ export default function ProgramacionPagosPage() {
     loadData()
   }, [loadData])
 
-  // Programar pago
-  const handleSchedulePayment = async () => {
-    // Validaciones ANTES del try/catch
+  // Formatear número con separadores de miles
+  const formatNumber = (value: string): string => {
+    const num = value.replace(/,/g, '')
+    if (!num || isNaN(Number(num))) return ''
+    return Number(num).toLocaleString('en-US')
+  }
+
+  // Remover formato para obtener el valor numérico
+  const unformatNumber = (value: string): string => {
+    return value.replace(/,/g, '')
+  }
+
+  const handleAmountChange = (value: string) => {
+    const unformatted = unformatNumber(value)
+    setFormData((prev) => ({ ...prev, scheduledAmount: parseFloat(unformatted) || 0 }))
+    // Limpiar error de monto
+    setErrors(prev => ({ ...prev, scheduledAmount: undefined }))
+  }
+
+  // Validar formulario
+  const validateForm = (): boolean => {
+    const newErrors: typeof errors = {}
+
     if (!formData.accountPayableId) {
-      console.log('No se seleccionó una cuenta por pagar')
-      toast({
-        variant: "destructive",
-        title: "Error de validación",
-        description: "Debes seleccionar una cuenta por pagar"
-      })
-      return
+      newErrors.accountPayableId = 'Debes seleccionar una cuenta por pagar'
     }
 
     if (!formData.scheduledAmount || formData.scheduledAmount <= 0) {
-      console.log('El monto debe ser mayor a cero')
-      toast({
-        variant: "destructive",
-        title: "Error de validación",
-        description: "El monto debe ser mayor a cero"
-      })
-      return
+      newErrors.scheduledAmount = 'El monto debe ser mayor a cero'
     }
 
     if (!formData.scheduledDate) {
-      console.log('No se seleccionó una fecha para el pago')
-      toast({
-        variant: "destructive",
-        title: "Error de validación",
-        description: "Debes seleccionar una fecha para el pago"
-      })
-      return
+      newErrors.scheduledDate = 'Debes seleccionar una fecha para el pago'
     }
 
     // Validaciones según método de pago
     if (formData.paymentMethod === 'transfer' && !formData.bankAccount?.trim()) {
-      console.log('La cuenta bancaria es requerida para transferencias')
-      toast({
-        variant: "destructive",
-        title: "Error de validación",
-        description: "La cuenta bancaria es requerida para transferencias"
-      })
-      return
+      newErrors.bankAccount = 'La cuenta bancaria es requerida para transferencias'
     }
 
     if (formData.paymentMethod === 'check' && !formData.checkNumber?.trim()) {
-      console.log('El número de cheque es requerido')
+      newErrors.checkNumber = 'El número de cheque es requerido'
+    }
+
+    setErrors(newErrors)
+
+    // Si hay errores, mostrar toast
+    if (Object.keys(newErrors).length > 0) {
       toast({
         variant: "destructive",
         title: "Error de validación",
-        description: "El número de cheque es requerido"
+        description: "Por favor completa todos los campos requeridos correctamente"
       })
+      return false
+    }
+
+    return true
+  }
+
+  // Programar pago
+  const handleSchedulePayment = async () => {
+    // Validar formulario
+    if (!validateForm()) {
       return
     }
 
@@ -224,11 +245,12 @@ export default function ProgramacionPagosPage() {
       notes: '',
       requiresApproval: true,
     })
+    setErrors({})
   }
 
   // Seleccionar cuenta y prellenar datos
   const handleSelectAccount = (accountId: string) => {
-    const account = availableAccounts.find(a => a.id === accountId)
+    const account = availableAccounts.find(acc => acc.id === accountId)
     if (account) {
       setFormData({
         ...formData,
@@ -236,6 +258,8 @@ export default function ProgramacionPagosPage() {
         scheduledAmount: Number(account.amount),
         reference: account.invoiceNumber,
       })
+      // Limpiar error de cuenta
+      setErrors(prev => ({ ...prev, accountPayableId: undefined }))
     }
   }
 
@@ -278,7 +302,7 @@ export default function ProgramacionPagosPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Programación de Pagos</h1>
@@ -472,7 +496,7 @@ export default function ProgramacionPagosPage() {
                 value={formData.accountPayableId}
                 onValueChange={handleSelectAccount}
               >
-                <SelectTrigger>
+                <SelectTrigger className={errors.accountPayableId ? "border-red-500" : ""}>
                   <SelectValue placeholder="Seleccionar cuenta" />
                 </SelectTrigger>
                 <SelectContent>
@@ -483,26 +507,39 @@ export default function ProgramacionPagosPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {errors.accountPayableId && (
+                <p className="text-sm text-red-500 mt-1">{errors.accountPayableId}</p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Monto *</Label>
                 <Input 
-                  type="number"
-                  step="0.01"
-                  value={formData.scheduledAmount || ''}
-                  onChange={(e) => setFormData({ ...formData, scheduledAmount: parseFloat(e.target.value) || 0 })}
+                  type="text"
+                  value={formatNumber(String(formData.scheduledAmount || ''))}
+                  onChange={(e) => handleAmountChange(e.target.value)}
+                  className={errors.scheduledAmount ? "border-red-500" : ""}
                 />
+                {errors.scheduledAmount && (
+                  <p className="text-sm text-red-500 mt-1">{errors.scheduledAmount}</p>
+                )}
               </div>
               <div>
                 <Label>Fecha de Pago *</Label>
                 <Input 
                   type="date" 
                   value={formData.scheduledDate}
-                  onChange={(e) => setFormData({ ...formData, scheduledDate: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, scheduledDate: e.target.value })
+                    setErrors(prev => ({ ...prev, scheduledDate: undefined }))
+                  }}
                   min={new Date().toISOString().split('T')[0]}
+                  className={errors.scheduledDate ? "border-red-500" : ""}
                 />
+                {errors.scheduledDate && (
+                  <p className="text-sm text-red-500 mt-1">{errors.scheduledDate}</p>
+                )}
               </div>
             </div>
 
@@ -529,9 +566,16 @@ export default function ProgramacionPagosPage() {
                 <Label>Cuenta Bancaria *</Label>
                 <Input 
                   value={formData.bankAccount}
-                  onChange={(e) => setFormData({ ...formData, bankAccount: e.target.value })}
-                  placeholder="1234567890"
+                  onChange={(e) => {
+                    setFormData({ ...formData, bankAccount: e.target.value })
+                    setErrors(prev => ({ ...prev, bankAccount: undefined }))
+                  }}
+                  placeholder="Ej: 1234567890 o CLABE"
+                  className={errors.bankAccount ? "border-red-500" : ""}
                 />
+                {errors.bankAccount && (
+                  <p className="text-sm text-red-500 mt-1">{errors.bankAccount}</p>
+                )}
               </div>
             )}
 
@@ -540,9 +584,16 @@ export default function ProgramacionPagosPage() {
                 <Label>Número de Cheque *</Label>
                 <Input 
                   value={formData.checkNumber}
-                  onChange={(e) => setFormData({ ...formData, checkNumber: e.target.value })}
-                  placeholder="CHK-001"
+                  onChange={(e) => {
+                    setFormData({ ...formData, checkNumber: e.target.value })
+                    setErrors(prev => ({ ...prev, checkNumber: undefined }))
+                  }}
+                  placeholder="Ej: CHK-001 o 123456"
+                  className={errors.checkNumber ? "border-red-500" : ""}
                 />
+                {errors.checkNumber && (
+                  <p className="text-sm text-red-500 mt-1">{errors.checkNumber}</p>
+                )}
               </div>
             )}
 
@@ -551,7 +602,7 @@ export default function ProgramacionPagosPage() {
               <Input 
                 value={formData.reference}
                 onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
-                placeholder="REF-PAY-001"
+                placeholder="Ej: REF-PAY-001 (opcional)"
               />
             </div>
 
@@ -560,7 +611,7 @@ export default function ProgramacionPagosPage() {
               <Textarea 
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Notas adicionales..."
+                placeholder="Ingrese notas o comentarios adicionales (opcional)"
                 rows={3}
               />
             </div>

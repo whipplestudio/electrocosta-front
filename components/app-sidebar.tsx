@@ -91,10 +91,10 @@ const menuItems: MenuItem[] = [
     submenu: [],
   },
   {
-    title: "Áreas",
+    title: "Proyectos",
     icon: Building2,
-    href: "/areas",
-    requiredPermissionCodes: ["areas.ver"],
+    href: "/proyectos",
+    requiredPermissionCodes: ["carga_informacion.proyectos.ver"],
     submenu: [],
   },
   {
@@ -117,11 +117,6 @@ const menuItems: MenuItem[] = [
         title: "Aplicación de Pagos", 
         href: "/cuentas-cobrar/pagos",
         requiredPermissionCodes: ["cuentas_cobrar.pagos.ver"]
-      },
-      { 
-        title: "Reportes", 
-        href: "/cuentas-cobrar/reportes",
-        requiredPermissionCodes: ["cuentas_cobrar.reportes.ver"]
       },
     ],
   },
@@ -151,20 +146,8 @@ const menuItems: MenuItem[] = [
         href: "/cuentas-pagar/pagos",
         requiredPermissionCodes: ["cuentas_pagar.pagos.ver"]
       },
-      { 
-        title: "Reportes", 
-        href: "/cuentas-pagar/reportes",
-        requiredPermissionCodes: ["cuentas_pagar.reportes.ver"]
-      },
     ],
-  },
-  {
-    title: "Proyectos",
-    icon: Building2,
-    href: "/proyectos",
-    requiredPermissionCodes: ["carga_informacion.proyectos.ver"],
-    submenu: [],
-  },
+  }
 ]
 
 export function AppSidebar({ className }: SidebarProps) {

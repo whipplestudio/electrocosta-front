@@ -17,15 +17,26 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Upload, Download, Plus, Search, FileText, Calendar, Loader2, Eye, Edit, AlertCircle, Check, ChevronsUpDown } from "lucide-react"
+import { Upload, Download, Plus, Search, FileText, Calendar as CalendarIcon, Loader2, Eye, Edit, AlertCircle, Check, ChevronsUpDown, Info, CheckCircle2, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Calendar } from "@/components/ui/calendar"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { projectsUploadService, type CrearProyectoData } from "@/services/projects-upload.service"
 import { clientsService, type ClientSimple } from "@/services/clients.service"
 import { areasService, type AreaSimple } from "@/services/areas.service"
+
+// Helper para convertir string YYYY-MM-DD a Date local sin problemas de zona horaria
+const stringToLocalDate = (dateString: string | undefined): Date | undefined => {
+  if (!dateString) return undefined
+  const [year, month, day] = dateString.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
 
 export default function ProyectosPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -43,6 +54,8 @@ export default function ProyectosPage() {
   const [usuarios, setUsuarios] = useState<any[]>([])
   const [loadingUsuarios, setLoadingUsuarios] = useState(false)
   const [downloadingTemplate, setDownloadingTemplate] = useState(false)
+  const [showTemplateInfoDialog, setShowTemplateInfoDialog] = useState(false)
+  const [showBulkUploadDialog, setShowBulkUploadDialog] = useState(false)
   
   // Estados para clientes
   const [clientes, setClientes] = useState<ClientSimple[]>([])
@@ -180,6 +193,38 @@ export default function ProyectosPage() {
     return value.replace(/,/g, '')
   }
 
+  // Función para resetear el formulario
+  const resetFormulario = () => {
+    setNuevoProyecto({
+      id: '',
+      nombreProyecto: '',
+      clientId: '',
+      fechaInicio: new Date().toISOString().split('T')[0],
+      fechaFinEstimada: '',
+      iva: '16',
+      subtotalVenta: '',
+      valorVenta: '',
+      presupuestoTotal: '',
+      presupuestoMateriales: '',
+      presupuestoManoObra: '',
+      presupuestoOtros: '',
+      responsableEmail: '',
+      areaId: '',
+      estado: 'planificacion',
+      prioridad: 'media',
+      descripcion: '',
+      observaciones: ''
+    })
+    setFormErrors({
+      nombreProyecto: '',
+      fechaFinEstimada: '',
+      subtotalVenta: '',
+      presupuestos: '',
+      responsableEmail: ''
+    })
+    setModoFormulario('crear')
+  }
+
   const handlePresupuestoChange = (field: string, value: string) => {
     const unformatted = unformatNumber(value)
     setNuevoProyecto((prev) => {
@@ -297,29 +342,9 @@ export default function ProyectosPage() {
         toast.success('El proyecto se ha creado exitosamente')
       }
 
-      // Resetear formulario
-      setNuevoProyecto({
-        id: '',
-        nombreProyecto: '',
-        clientId: '',
-        fechaInicio: new Date().toISOString().split('T')[0],
-        fechaFinEstimada: '',
-        iva: '16',
-        subtotalVenta: '',
-        valorVenta: '',
-        presupuestoTotal: '',
-        presupuestoMateriales: '',
-        presupuestoManoObra: '',
-        presupuestoOtros: '',
-        responsableEmail: '',
-        areaId: '',
-        estado: 'planificacion',
-        prioridad: 'media',
-        descripcion: '',
-        observaciones: ''
-      })
+      // Resetear formulario y cerrar dialog
+      resetFormulario()
       setOpenDialog(false)
-      setModoFormulario('crear')
       cargarProyectos()
     } catch (error: any) {
       const mensaje = modoFormulario === 'editar' ? 'Error al actualizar proyecto' : 'Error al crear proyecto'
@@ -392,19 +417,60 @@ export default function ProyectosPage() {
   const descargarPlantilla = async () => {
     try {
       setDownloadingTemplate(true)
+      
+      // Mostrar toast de inicio
+      toast.loading('Preparando plantilla Excel...', { id: 'download-template' })
+      
       const blob = await projectsUploadService.descargarPlantilla()
+      
+      // Validar que el blob tenga contenido
+      if (!blob || blob.size === 0) {
+        throw new Error('La plantilla descargada está vacía')
+      }
+      
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = 'plantilla_proyectos.xlsx'
+      
+      // Nombre de archivo con fecha para mejor organización
+      const fecha = new Date().toISOString().split('T')[0]
+      link.download = `plantilla_proyectos_${fecha}.xlsx`
+      
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
       
-      toast.success('La plantilla se ha descargado exitosamente')
-    } catch (error) {
-      toast.error('No se pudo descargar la plantilla')
+      // Actualizar toast a éxito
+      toast.success(
+        <div className="flex flex-col gap-1">
+          <p className="font-semibold">✓ Plantilla descargada exitosamente</p>
+          <p className="text-xs text-muted-foreground">Archivo: plantilla_proyectos_{fecha}.xlsx</p>
+        </div>,
+        { id: 'download-template', duration: 4000 }
+      )
+      
+      // Mostrar diálogo informativo automáticamente la primera vez
+      const hasSeenInfo = localStorage.getItem('hasSeenTemplateInfo')
+      if (!hasSeenInfo) {
+        setTimeout(() => {
+          setShowTemplateInfoDialog(true)
+          localStorage.setItem('hasSeenTemplateInfo', 'true')
+        }, 500)
+      }
+    } catch (error: any) {
+      console.error('Error al descargar plantilla:', error)
+      
+      // Toast de error con más detalles
+      toast.error(
+        <div className="flex flex-col gap-1">
+          <p className="font-semibold">Error al descargar la plantilla</p>
+          <p className="text-xs text-muted-foreground">
+            {error?.message || 'Por favor, intenta nuevamente o contacta a soporte'}
+          </p>
+        </div>,
+        { id: 'download-template', duration: 5000 }
+      )
     } finally {
       setDownloadingTemplate(false)
     }
@@ -435,8 +501,8 @@ export default function ProyectosPage() {
         id: proyecto.id,
         nombreProyecto: proyecto.nombreProyecto || '',
         clientId: proyecto.clientId || proyecto.cliente?.id || '',
-        fechaInicio: proyecto.fechaInicio ? new Date(proyecto.fechaInicio).toISOString().split('T')[0] : '',
-        fechaFinEstimada: proyecto.fechaFinEstimada ? new Date(proyecto.fechaFinEstimada).toISOString().split('T')[0] : '',
+        fechaInicio: proyecto.fechaInicio ? proyecto.fechaInicio.split('T')[0] : '',
+        fechaFinEstimada: proyecto.fechaFinEstimada ? proyecto.fechaFinEstimada.split('T')[0] : '',
         iva: proyecto.iva?.toString() || '16',
         subtotalVenta: proyecto.subtotalVenta?.toString() || '',
         valorVenta: proyecto.valorVenta?.toString() || '',
@@ -512,30 +578,81 @@ export default function ProyectosPage() {
           <p className="text-muted-foreground">Gestión de proyectos y contratos</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={descargarPlantilla} disabled={downloadingTemplate}>
-            {downloadingTemplate ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Descargando...
-              </>
-            ) : (
-              <>
-                <Download className="h-4 w-4 mr-2" />
-                Plantilla Excel
-              </>
-            )}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  onClick={descargarPlantilla} 
+                  disabled={downloadingTemplate}
+                  className="gap-2"
+                >
+                  {downloadingTemplate ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Descargando...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4" />
+                      Plantilla Excel
+                    </>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
+                <div className="space-y-1">
+                  <p className="font-semibold text-white dark:text-slate-900">Plantilla para carga masiva</p>
+                  <p className="text-xs text-slate-200 dark:text-slate-700">
+                    Descarga el archivo Excel con el formato correcto para importar múltiples proyectos a la vez
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => setShowTemplateInfoDialog(true)}
+                  className="h-10 w-10"
+                >
+                  <Info className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Cómo usar la plantilla Excel</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="outline"
+                  onClick={() => setShowBulkUploadDialog(true)}
+                  className="gap-2"
+                >
+                  <Upload className="h-4 w-4" />
+                  Carga Masiva
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
+                <div className="space-y-1">
+                  <p className="font-semibold text-white dark:text-slate-900">Importación masiva de proyectos</p>
+                  <p className="text-xs text-slate-200 dark:text-slate-700">
+                    Sube un archivo Excel con múltiples proyectos a la vez
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Dialog open={openDialog} onOpenChange={(open) => {
             setOpenDialog(open)
             if (!open) {
-              setModoFormulario('crear')
-              setFormErrors({
-                nombreProyecto: '',
-                fechaFinEstimada: '',
-                subtotalVenta: '',
-                presupuestos: '',
-                responsableEmail: ''
-              })
+              resetFormulario()
             }
           }}>
             <DialogTrigger asChild>
@@ -632,22 +749,45 @@ export default function ProyectosPage() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
+                  <div className="grid gap-2">
                     <Label>Fecha Inicio *</Label>
-                    <Input 
-                      type="date" 
-                      value={nuevoProyecto.fechaInicio}
-                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, fechaInicio: e.target.value})}
-                    />
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="justify-start text-left font-normal">
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {nuevoProyecto.fechaInicio ? format(stringToLocalDate(nuevoProyecto.fechaInicio)!, "PPP", { locale: es }) : "Seleccionar"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar 
+                          mode="single" 
+                          selected={stringToLocalDate(nuevoProyecto.fechaInicio)}
+                          defaultMonth={stringToLocalDate(nuevoProyecto.fechaInicio)}
+                          onSelect={(d) => setNuevoProyecto({...nuevoProyecto, fechaInicio: d ? format(d, 'yyyy-MM-dd') : ''})} 
+                          locale={es} 
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
-                  <div>
+                  <div className="grid gap-2">
                     <Label>Fecha Fin Estimada *</Label>
-                    <Input 
-                      type="date" 
-                      value={nuevoProyecto.fechaFinEstimada}
-                      onChange={(e) => setNuevoProyecto({...nuevoProyecto, fechaFinEstimada: e.target.value})}
-                      className={formErrors.fechaFinEstimada ? 'border-red-500' : ''}
-                    />
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className={cn("justify-start text-left font-normal", formErrors.fechaFinEstimada && "border-red-500")}>
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {nuevoProyecto.fechaFinEstimada ? format(stringToLocalDate(nuevoProyecto.fechaFinEstimada)!, "PPP", { locale: es }) : "Seleccionar"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar 
+                          mode="single" 
+                          selected={stringToLocalDate(nuevoProyecto.fechaFinEstimada)}
+                          defaultMonth={stringToLocalDate(nuevoProyecto.fechaFinEstimada)}
+                          onSelect={(d) => setNuevoProyecto({...nuevoProyecto, fechaFinEstimada: d ? format(d, 'yyyy-MM-dd') : ''})} 
+                          locale={es}
+                        />
+                      </PopoverContent>
+                    </Popover>
                     {formErrors.fechaFinEstimada && (
                       <p className="text-sm text-red-500 mt-1">{formErrors.fechaFinEstimada}</p>
                     )}
@@ -782,25 +922,14 @@ export default function ProyectosPage() {
                 </div>
 
                 <div>
-                  <Label>Estado *</Label>
-                  <Select value={nuevoProyecto.estado} onValueChange={(value) => setNuevoProyecto({...nuevoProyecto, estado: value})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="planificacion">Planificación</SelectItem>
-                      <SelectItem value="en_progreso">En Progreso</SelectItem>
-                      <SelectItem value="pausado">Pausado</SelectItem>
-                      <SelectItem value="completado">Completado</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>Descripción</Label>
+                  <Textarea 
+                    placeholder="Ingrese una descripción detallada del proyecto (opcional)"
+                    value={nuevoProyecto.descripcion}
+                    onChange={(e) => setNuevoProyecto({...nuevoProyecto, descripcion: e.target.value})}
+                    rows={4}
+                  />
                 </div>
-
-                <Textarea 
-                  placeholder="Ingrese una descripción detallada del proyecto (opcional)"
-                  value={nuevoProyecto.descripcion}
-                  onChange={(e) => setNuevoProyecto({...nuevoProyecto, descripcion: e.target.value})}
-                />
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpenDialog(false)} disabled={loading}>
@@ -856,15 +985,22 @@ export default function ProyectosPage() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Carga Masiva de Proyectos</CardTitle>
-          <CardDescription>Importa múltiples proyectos desde archivo Excel</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-            <Upload className="mx-auto h-12 w-12 text-gray-400" />
-            <div className="mt-4">
+      {/* Dialog de Carga Masiva - MD3 */}
+      <Dialog open={showBulkUploadDialog} onOpenChange={setShowBulkUploadDialog}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Carga Masiva de Proyectos
+            </DialogTitle>
+            <DialogDescription>
+              Importa múltiples proyectos desde un archivo Excel. Sigue el formato de la plantilla descargable.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Zona de carga de archivo */}
+            <div className="border-2 border-dashed rounded-lg p-6 text-center transition-colors hover:border-primary/50">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -872,101 +1008,171 @@ export default function ProyectosPage() {
                 onChange={handleFileChange}
                 className="hidden"
               />
-              <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-                <FileText className="h-4 w-4 mr-2" />
-                Seleccionar archivo Excel
-              </Button>
-              {archivo && (
-                <p className="mt-2 text-sm font-medium">
-                  Archivo seleccionado: {archivo.name}
+              <div className="space-y-3">
+                <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <FileText className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="mb-2"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Seleccionar archivo
+                  </Button>
+                  {archivo && (
+                    <p className="text-sm font-medium text-green-600 mt-2">
+                      ✓ {archivo.name}
+                    </p>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Formatos: .xlsx, .xls, .csv
                 </p>
-              )}
-              <p className="mt-2 text-sm text-muted-foreground">
-                Arrastra y suelta tu archivo aquí, o haz clic para seleccionar
-              </p>
+              </div>
             </div>
-          </div>
-          
-          {uploadResponse && !validacionResultado && (
-            <div className="flex justify-between items-center p-4 bg-blue-50 rounded-lg">
-              <p className="text-sm">Archivo subido: {uploadResponse.registrosDetectados} registros detectados</p>
-              <Button onClick={validarDatos} disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Validar Datos"}
-              </Button>
-            </div>
-          )}
 
-          {validacionResultado && !importacionResultado && (
-            <div className="space-y-4">
-              <div className="p-4 bg-green-50 rounded-lg">
-                <p className="text-sm font-medium text-green-800">
-                  ✓ {validacionResultado.registrosValidos} registros válidos
-                </p>
-                {validacionResultado.registrosInvalidos > 0 && (
-                  <p className="text-sm text-red-600">
-                    ✗ {validacionResultado.registrosInvalidos} registros con errores
-                  </p>
+            {/* Botón de subir */}
+            {!uploadResponse && archivo && (
+              <Button onClick={subirArchivo} disabled={loading} className="w-full">
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Subiendo...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Subir y Analizar
+                  </>
+                )}
+              </Button>
+            )}
+
+            {/* Archivo subido - pendiente validación */}
+            {uploadResponse && !validacionResultado && (
+              <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-blue-600" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                        Archivo cargado
+                      </p>
+                      <p className="text-xs text-blue-700 dark:text-blue-300">
+                        {uploadResponse.registrosDetectados} registros detectados
+                      </p>
+                    </div>
+                  </div>
+                  <Button onClick={validarDatos} disabled={loading} size="sm">
+                    {loading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Validar"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Resultados de validación */}
+            {validacionResultado && !importacionResultado && (
+              <div className="space-y-3">
+                {/* Resumen */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                    <p className="text-xs text-green-700 dark:text-green-300">Válidos</p>
+                    <p className="text-2xl font-bold text-green-900 dark:text-green-100">
+                      {validacionResultado.registrosValidos}
+                    </p>
+                  </div>
+                  {validacionResultado.registrosInvalidos > 0 && (
+                    <div className="p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
+                      <p className="text-xs text-red-700 dark:text-red-300">Registros con errores</p>
+                      <p className="text-2xl font-bold text-red-900 dark:text-red-100">
+                        {validacionResultado.registrosInvalidos}
+                      </p>
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                        {validacionResultado.errores?.length || 0} errores totales
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Errores detallados */}
+                {validacionResultado.errores && validacionResultado.errores.length > 0 && (
+                  <div className="border border-red-200 dark:border-red-800 rounded-lg p-3 bg-red-50 dark:bg-red-950">
+                    <h4 className="text-sm font-semibold text-red-900 dark:text-red-100 mb-2 flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4" />
+                      Errores de Validación
+                    </h4>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {validacionResultado.errores.map((error: any, index: number) => (
+                        <div key={index} className="p-2 bg-white dark:bg-gray-900 border border-red-200 dark:border-red-800 rounded text-xs">
+                          <p className="font-medium text-red-900 dark:text-red-100">
+                            Fila {error.fila}: {error.campo}
+                          </p>
+                          <p className="text-red-700 dark:text-red-300 mt-1">{error.error}</p>
+                          {error.valor && (
+                            <p className="text-gray-600 dark:text-gray-400 mt-1">Valor: {error.valor}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Advertencias */}
+                {validacionResultado.advertencias && validacionResultado.advertencias.length > 0 && (
+                  <div className="border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 bg-yellow-50 dark:bg-yellow-950">
+                    <h4 className="text-sm font-semibold text-yellow-900 dark:text-yellow-100 mb-2">Advertencias</h4>
+                    <div className="space-y-1">
+                      {validacionResultado.advertencias.map((advertencia: string, index: number) => (
+                        <p key={index} className="text-xs text-yellow-800 dark:text-yellow-200 flex items-start gap-2">
+                          <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                          {advertencia}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
+            )}
 
-              {/* Mostrar errores detallados */}
-              {validacionResultado.errores && validacionResultado.errores.length > 0 && (
-                <Card className="border-red-200 bg-red-50">
-                  <CardHeader>
-                    <CardTitle className="text-red-800 text-base">Errores de Validación</CardTitle>
-                    <CardDescription className="text-red-600">
-                      Corrige los siguientes errores antes de importar
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {validacionResultado.errores.map((error: any, index: number) => (
-                        <div key={index} className="p-3 bg-white border border-red-200 rounded-lg">
-                          <div className="flex items-start gap-2">
-                            <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-red-800">
-                                Fila {error.fila}: {error.campo}
-                              </p>
-                              <p className="text-sm text-red-600 mt-1">
-                                {error.error}
-                              </p>
-                              {error.valor && (
-                                <p className="text-xs text-gray-600 mt-1">
-                                  Valor: {error.valor}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+            {/* Resultado de importación */}
+            {importacionResultado && (
+              <div className="p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  <p className="font-medium text-green-900 dark:text-green-100">
+                    ¡Importación completada!
+                  </p>
+                </div>
+                <p className="text-sm text-green-700 dark:text-green-300 mb-3">
+                  {importacionResultado.registrosImportados} proyectos importados exitosamente
+                </p>
+                <Button 
+                  onClick={() => {
+                    setArchivo(null)
+                    setUploadResponse(null)
+                    setValidacionResultado(null)
+                    setImportacionResultado(null)
+                    if (fileInputRef.current) fileInputRef.current.value = ''
+                    setShowBulkUploadDialog(false)
+                  }} 
+                  variant="outline"
+                  className="w-full"
+                >
+                  Cerrar
+                </Button>
+              </div>
+            )}
+          </div>
 
-              {/* Mostrar advertencias si existen */}
-              {validacionResultado.advertencias && validacionResultado.advertencias.length > 0 && (
-                <Card className="border-yellow-200 bg-yellow-50">
-                  <CardHeader>
-                    <CardTitle className="text-yellow-800 text-base">Advertencias</CardTitle>
-                    <CardDescription className="text-yellow-600">
-                      Información importante sobre el proceso
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {validacionResultado.advertencias.map((advertencia: string, index: number) => (
-                        <div key={index} className="flex items-start gap-2 p-2 bg-white border border-yellow-200 rounded">
-                          <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
-                          <p className="text-sm text-yellow-800">{advertencia}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
+          {/* Footer con acciones */}
+          {validacionResultado && !importacionResultado && (
+            <DialogFooter>
               {validacionResultado.puedeImportar ? (
                 <Button onClick={importarDatos} disabled={loading} className="w-full">
                   {loading ? (
@@ -975,7 +1181,10 @@ export default function ProyectosPage() {
                       Importando...
                     </>
                   ) : (
-                    "Confirmar e Importar"
+                    <>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Confirmar e Importar
+                    </>
                   )}
                 </Button>
               ) : (
@@ -992,36 +1201,10 @@ export default function ProyectosPage() {
                   Corregir y Cargar Nuevo Archivo
                 </Button>
               )}
-            </div>
+            </DialogFooter>
           )}
-
-          {importacionResultado && (
-            <div className="p-4 bg-green-50 rounded-lg">
-              <p className="text-sm font-medium text-green-800">
-                ✓ Importación completada: {importacionResultado.registrosImportados} proyectos importados
-              </p>
-              <Button onClick={() => {
-                setArchivo(null)
-                setUploadResponse(null)
-                setValidacionResultado(null)
-                setImportacionResultado(null)
-                if (fileInputRef.current) fileInputRef.current.value = ''
-              }} className="mt-2" variant="outline">
-                Nueva Carga
-              </Button>
-            </div>
-          )}
-
-          {!uploadResponse && (
-            <div className="flex justify-between items-center">
-              <p className="text-sm text-muted-foreground">Formatos soportados: .xlsx, .xls, .csv</p>
-              <Button onClick={subirArchivo} disabled={!archivo || loading}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Subir Archivo"}
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>
@@ -1090,7 +1273,6 @@ export default function ProyectosPage() {
                     <TableCell className="font-medium">${proyecto.valorContrato.toLocaleString()}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1 text-sm">
-                        <Calendar className="h-3 w-3 text-muted-foreground" />
                         <span>{proyecto.fechaInicio}</span>
                       </div>
                       <div className="text-xs text-muted-foreground">Fin: {proyecto.fechaFin}</div>
@@ -1231,6 +1413,255 @@ export default function ProyectosPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setVerModalOpen(false)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo informativo sobre la plantilla Excel */}
+      <Dialog open={showTemplateInfoDialog} onOpenChange={setShowTemplateInfoDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">  
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <FileText className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <DialogTitle className="text-2xl">Guía de Uso: Plantilla Excel</DialogTitle>
+                <DialogDescription>
+                  Aprende a importar múltiples proyectos de forma rápida y eficiente
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="overflow-y-auto max-h-[calc(90vh-180px)] px-1">
+            <div className="space-y-6 py-4">
+            {/* Paso 1 */}
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sm font-bold text-blue-700 dark:text-blue-300">1</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg mb-2">Descarga la plantilla</h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Haz clic en el botón "Plantilla Excel" para descargar el archivo con el formato correcto. 
+                    La plantilla incluye dos hojas:
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 rounded-lg border bg-card">
+                      <div className="flex items-center gap-2 mb-1">
+                        <FileText className="h-4 w-4 text-green-600" />
+                        <span className="font-medium text-sm">Proyectos</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Hoja principal con datos de ejemplo</p>
+                    </div>
+                    <div className="p-3 rounded-lg border bg-card">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Info className="h-4 w-4 text-blue-600" />
+                        <span className="font-medium text-sm">Instrucciones</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Guía detallada de campos y validaciones</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Paso 2 */}
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="h-8 w-8 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sm font-bold text-purple-700 dark:text-purple-300">2</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg mb-2">Completa los datos</h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Llena la información de tus proyectos siguiendo el formato de ejemplo. Los campos obligatorios son:
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <span>Nombre del proyecto</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <span>RFC del cliente</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <span>Fechas (inicio y fin)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <span>IVA y Subtotal de Venta</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <span>Presupuestos (desglose)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <span>Email del responsable</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Paso 3 */}
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="h-8 w-8 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sm font-bold text-orange-700 dark:text-orange-300">3</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg mb-2">Sube el archivo</h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Arrastra el archivo Excel completado al área de carga o haz clic para seleccionarlo. 
+                    El sistema validará automáticamente los datos antes de importarlos.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Consejos importantes */}
+            <div className="rounded-lg border-2 border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-amber-900 dark:text-amber-100">Consejos importantes</h4>
+                  <ul className="space-y-1.5 text-sm text-amber-800 dark:text-amber-200">
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-600 dark:text-amber-400">•</span>
+                      <span>No modifiques los nombres de las columnas (encabezados)</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-600 dark:text-amber-400">🔍</span>
+                      <span className="font-semibold">Usa el RFC del cliente para identificación precisa y evitar errores de tipeo</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-600 dark:text-amber-400">•</span>
+                      <span>Alternativa: Puedes usar el email del cliente en lugar del RFC</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-600 dark:text-amber-400">•</span>
+                      <span>Usa el formato de fecha YYYY-MM-DD (ej: 2024-12-31)</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-600 dark:text-amber-400">💡</span>
+                      <span className="font-semibold">Las columnas valorVenta y presupuestoTotal tienen fórmulas de Excel que calculan automáticamente en TIEMPO REAL</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-600 dark:text-amber-400">•</span>
+                      <span>valorVenta = subtotalVenta + (subtotalVenta × iva/100). Ej: iva=16, subtotal=100,000 → 116,000</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-600 dark:text-amber-400">•</span>
+                      <span>presupuestoTotal = (materiales + manoObra + otros) + IVA aplicado</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-600 dark:text-amber-400">•</span>
+                      <span>NO modifiques las fórmulas en las columnas valorVenta y presupuestoTotal</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-600 dark:text-amber-400">•</span>
+                      <span>El RFC/email del cliente y el email del responsable deben estar registrados</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-600 dark:text-amber-400">•</span>
+                      <span>El código del proyecto se genera automáticamente al importar</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Ejemplo visual */}
+            <div className="space-y-3">
+              <h4 className="font-semibold flex items-center gap-2">
+                <Eye className="h-4 w-4" />
+                Ejemplo de datos (campos de la plantilla Excel)
+              </h4>
+              <div className="rounded-lg border bg-muted/50 overflow-auto max-h-60" style={{maxWidth: '100%'}}>
+                <table className="w-full text-xs" style={{minWidth: '1200px'}}>
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-2 font-semibold whitespace-nowrap">nombreProyecto</th>
+                      <th className="text-left p-2 font-semibold whitespace-nowrap">clienteRfc</th>
+                      <th className="text-left p-2 font-semibold whitespace-nowrap">fechaInicio</th>
+                      <th className="text-left p-2 font-semibold whitespace-nowrap">fechaFinEstimada</th>
+                      <th className="text-left p-2 font-semibold whitespace-nowrap">iva</th>
+                      <th className="text-left p-2 font-semibold whitespace-nowrap">subtotalVenta</th>
+                      <th className="text-left p-2 font-semibold whitespace-nowrap bg-blue-50 dark:bg-blue-950">valorVenta 💡</th>
+                      <th className="text-left p-2 font-semibold whitespace-nowrap">presupuestoMateriales</th>
+                      <th className="text-left p-2 font-semibold whitespace-nowrap">presupuestoManoObra</th>
+                      <th className="text-left p-2 font-semibold whitespace-nowrap">presupuestoOtros</th>
+                      <th className="text-left p-2 font-semibold whitespace-nowrap bg-blue-50 dark:bg-blue-950">presupuestoTotal 💡</th>
+                      <th className="text-left p-2 font-semibold whitespace-nowrap">responsableEmail</th>
+                      <th className="text-left p-2 font-semibold whitespace-nowrap">descripcion</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b">
+                      <td className="p-2 whitespace-nowrap">Implementación Sistema ERP</td>
+                      <td className="p-2 whitespace-nowrap">20123456789</td>
+                      <td className="p-2 whitespace-nowrap">2024-02-01</td>
+                      <td className="p-2 whitespace-nowrap">2024-06-30</td>
+                      <td className="p-2 whitespace-nowrap">16</td>
+                      <td className="p-2 whitespace-nowrap">100,000</td>
+                      <td className="p-2 whitespace-nowrap bg-blue-50 dark:bg-blue-950 font-medium">116,000</td>
+                      <td className="p-2 whitespace-nowrap">20,000</td>
+                      <td className="p-2 whitespace-nowrap">25,000</td>
+                      <td className="p-2 whitespace-nowrap">5,000</td>
+                      <td className="p-2 whitespace-nowrap bg-blue-50 dark:bg-blue-950 font-medium">58,000</td>
+                      <td className="p-2 whitespace-nowrap">gerente@empresa.com</td>
+                      <td className="p-2">Proyecto estratégico ERP</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 whitespace-nowrap">Instalación Eléctrica Norte</td>
+                      <td className="p-2 whitespace-nowrap">20987654321</td>
+                      <td className="p-2 whitespace-nowrap">2024-03-15</td>
+                      <td className="p-2 whitespace-nowrap">2024-08-30</td>
+                      <td className="p-2 whitespace-nowrap">16</td>
+                      <td className="p-2 whitespace-nowrap">250,000</td>
+                      <td className="p-2 whitespace-nowrap bg-blue-50 dark:bg-blue-950 font-medium">290,000</td>
+                      <td className="p-2 whitespace-nowrap">80,000</td>
+                      <td className="p-2 whitespace-nowrap">60,000</td>
+                      <td className="p-2 whitespace-nowrap">10,000</td>
+                      <td className="p-2 whitespace-nowrap bg-blue-50 dark:bg-blue-950 font-medium">174,000</td>
+                      <td className="p-2 whitespace-nowrap">jefe@empresa.com</td>
+                      <td className="p-2">Sistema eléctrico completo</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <span className="inline-block w-3 h-3 bg-blue-50 dark:bg-blue-950 border rounded"></span>
+                Las columnas resaltadas se calculan automáticamente con fórmulas de Excel
+              </p>
+            </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowTemplateInfoDialog(false)}
+              className="w-full sm:w-auto"
+            >
+              Cerrar
+            </Button>
+            <Button 
+              onClick={() => {
+                setShowTemplateInfoDialog(false)
+                descargarPlantilla()
+              }}
+              className="w-full sm:w-auto gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Descargar Plantilla
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

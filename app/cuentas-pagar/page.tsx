@@ -44,6 +44,8 @@ export default function CuentasPagarPage() {
     supplierName: "",
     projectId: "",
     invoiceNumber: "",
+    iva: "16",
+    subtotal: "",
     amount: "",
     categoryId: "",
     macroClasificacion: "" as "" | "MATERIALES" | "MANO_DE_OBRA" | "OTROS",
@@ -95,7 +97,7 @@ export default function CuentasPagarPage() {
         totalVencido: data.keyMetrics?.totalOverdue || 0,
         cuentasVencidas: data.overdueAccounts?.length || 0,
         proximasVencer: data.keyMetrics?.upcomingThisWeek || 0,
-        pendientesAprobacion: 0, // Se calculará desde las cuentas después
+        pendientesAprobacion: data.keyMetrics?.pendingApproval || 0,
       })
     } catch (error) {
       console.error("Error al cargar dashboard:", error)
@@ -155,12 +157,6 @@ export default function CuentasPagarPage() {
     }
   }, [formData.categoryId, categories, selectedAccount])
 
-  // Calcular pendientes de aprobación cuando las cuentas cambien
-  useEffect(() => {
-    const pendientes = accounts.filter(a => a.approvalStatus === 'pending').length
-    setDashboardData(prev => ({ ...prev, pendientesAprobacion: pendientes }))
-  }, [accounts])
-
   // Formatear número con separadores de miles
   const formatNumber = (value: string): string => {
     const num = value.replace(/,/g, '')
@@ -173,9 +169,22 @@ export default function CuentasPagarPage() {
     return value.replace(/,/g, '')
   }
 
-  const handleAmountChange = (value: string) => {
+  // Manejar cambios en campos de presupuesto con cálculo de IVA
+  const handlePresupuestoChange = (field: string, value: string) => {
     const unformatted = unformatNumber(value)
-    setFormData((prev) => ({ ...prev, amount: unformatted }))
+    setFormData((prev) => {
+      const updated = { ...prev, [field]: unformatted }
+      
+      // Si se modificó subtotal o iva, calcular amount con IVA
+      if (field === 'subtotal' || field === 'iva') {
+        const subtotal = parseFloat(field === 'subtotal' ? unformatted : updated.subtotal) || 0
+        const ivaPercent = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
+        const ivaAmount = subtotal * (ivaPercent / 100)
+        updated.amount = (subtotal + ivaAmount).toString()
+      }
+      
+      return updated
+    })
   }
 
   const handleNuevaCuenta = () => {
@@ -185,6 +194,8 @@ export default function CuentasPagarPage() {
       supplierName: "",
       projectId: "",
       invoiceNumber: "",
+      iva: "16",
+      subtotal: "",
       amount: "",
       categoryId: "",
       macroClasificacion: "",
@@ -203,6 +214,8 @@ export default function CuentasPagarPage() {
       supplierName: cuenta.supplier?.name || cuenta.supplierName || "",
       projectId: cuenta.projectId || "",
       invoiceNumber: cuenta.invoiceNumber,
+      iva: cuenta.iva?.toString() || "16",
+      subtotal: cuenta.subtotal?.toString() || "",
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || "",
       macroClasificacion: cuenta.macroClasificacion || "",
@@ -214,7 +227,7 @@ export default function CuentasPagarPage() {
   }
 
   const handleSubmitForm = async () => {
-    if (!formData.supplierName || !formData.amount || !formData.issueDate || !formData.dueDate) {
+    if (!formData.supplierName || !formData.subtotal || !formData.issueDate || !formData.dueDate) {
       toast.error("Por favor completa todos los campos requeridos")
       return
     }
@@ -227,6 +240,8 @@ export default function CuentasPagarPage() {
         await accountsPayableService.update(selectedAccount.id, {
           supplierName: formData.supplierName,
           invoiceNumber: formData.invoiceNumber,
+          iva: parseFloat(formData.iva) || 16,
+          subtotal: parseFloat(formData.subtotal),
           amount: parseFloat(formData.amount),
           projectId: formData.projectId || undefined,
           categoryId: formData.categoryId || undefined,
@@ -241,6 +256,8 @@ export default function CuentasPagarPage() {
           supplierName: formData.supplierName,
           projectId: formData.projectId || undefined,
           invoiceNumber: formData.invoiceNumber,
+          iva: parseFloat(formData.iva) || 16,
+          subtotal: parseFloat(formData.subtotal),
           amount: parseFloat(formData.amount),
           categoryId: formData.categoryId || undefined,
           macroClasificacion: formData.macroClasificacion || undefined,
@@ -629,17 +646,55 @@ export default function CuentasPagarPage() {
             <div className="grid gap-2">
               <Label>Número de Factura</Label>
               <Input
+                placeholder="FAC-2024-XXX"
                 value={formData.invoiceNumber}
                 onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })}
               />
             </div>
-            <div className="grid gap-2">
-              <Label>Monto *</Label>
-              <Input
-                type="text"
-                value={formatNumber(formData.amount)}
-                onChange={(e) => handleAmountChange(e.target.value)}
-              />
+            {/* Campos de IVA y Monto */}
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-primary">💰 Monto</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="iva">IVA (%) *</Label>
+                  <Input 
+                    id="iva"
+                    type="text" 
+                    placeholder="16"
+                    value={formData.iva}
+                    onChange={(e) => handlePresupuestoChange('iva', e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Porcentaje de IVA
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="subtotal">Subtotal (sin IVA) *</Label>
+                  <Input 
+                    id="subtotal"
+                    type="text" 
+                    placeholder="0"
+                    value={formatNumber(formData.subtotal)}
+                    onChange={(e) => handlePresupuestoChange('subtotal', e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Monto sin IVA
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="amount">Total (con IVA)</Label>
+                  <Input 
+                    id="amount"
+                    type="text" 
+                    value={formatNumber(formData.amount)}
+                    readOnly
+                    className="bg-muted font-semibold text-green-600"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Subtotal + IVA (calculado)
+                  </p>
+                </div>
+              </div>
             </div>
             <div className="grid gap-2">
               <Label>Categoría</Label>

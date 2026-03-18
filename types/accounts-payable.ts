@@ -67,6 +67,8 @@ export interface AccountPayable {
   category?: Category;
   macroClasificacion?: 'MATERIALES' | 'MANO_DE_OBRA' | 'OTROS';
   invoiceNumber: string;
+  iva: number;
+  subtotal: number;
   amount: string;
   paidAmount: string;
   balance: string;
@@ -106,7 +108,9 @@ export interface CreateAccountPayableDto {
   projectId?: string;
   categoryId?: string;
   invoiceNumber: string;
-  amount: number;
+  iva?: number;
+  subtotal: number;
+  amount?: number;
   currency?: string;
   issueDate: string;
   dueDate: string;
@@ -117,6 +121,8 @@ export interface CreateAccountPayableDto {
 export interface UpdateAccountPayableDto {
   supplierName?: string;
   invoiceNumber?: string;
+  iva?: number;
+  subtotal?: number;
   amount?: number;
   projectId?: string;
   categoryId?: string;
@@ -198,6 +204,7 @@ export interface DashboardData {
     criticalOverdue: number;
     upcomingThisWeek: number;
     avgOverdueDays: number;
+    pendingApproval: number;
   };
   agingDistribution: Array<{
     label: string;

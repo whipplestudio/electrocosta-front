@@ -113,6 +113,8 @@ function CuentasCobrarPageContent() {
     clientId: '',
     projectId: '',
     invoiceNumber: '',
+    iva: '16',
+    subtotal: '',
     amount: '',
     categoryId: '',
     issueDate: undefined as Date | undefined,
@@ -162,9 +164,22 @@ function CuentasCobrarPageContent() {
     return value.replace(/,/g, '')
   }
 
-  const handleAmountChange = (value: string) => {
+  // Manejar cambios en campos de presupuesto con cálculo de IVA
+  const handlePresupuestoChange = (field: string, value: string) => {
     const unformatted = unformatNumber(value)
-    setFormData((prev) => ({ ...prev, amount: unformatted }))
+    setFormData((prev) => {
+      const updated = { ...prev, [field]: unformatted }
+      
+      // Si se modificó subtotal o iva, calcular amount con IVA
+      if (field === 'subtotal' || field === 'iva') {
+        const subtotal = parseFloat(field === 'subtotal' ? unformatted : updated.subtotal) || 0
+        const ivaPercent = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
+        const ivaAmount = subtotal * (ivaPercent / 100)
+        updated.amount = (subtotal + ivaAmount).toString()
+      }
+      
+      return updated
+    })
   }
 
   // Cargar clientes y categorías (sin proyectos)
@@ -284,6 +299,8 @@ function CuentasCobrarPageContent() {
       clientId: '',
       projectId: '',
       invoiceNumber: '',
+      iva: '16',
+      subtotal: '',
       amount: '',
       categoryId: '',
       issueDate: undefined,
@@ -305,6 +322,8 @@ function CuentasCobrarPageContent() {
       clientId: cuenta.clientId,
       projectId: cuenta.projectId || '',
       invoiceNumber: cuenta.invoiceNumber,
+      iva: cuenta.iva?.toString() || '16',
+      subtotal: cuenta.subtotal?.toString() || '',
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || '',
       issueDate: new Date(cuenta.issueDate),
@@ -322,7 +341,7 @@ function CuentasCobrarPageContent() {
     const missingFields = []
     if (!formData.clientId) missingFields.push("Cliente")
     if (!formData.invoiceNumber) missingFields.push("Número de Factura")
-    if (!formData.amount) missingFields.push("Monto")
+    if (!formData.subtotal) missingFields.push("Subtotal")
     if (!formData.issueDate) missingFields.push("Fecha de Emisión")
     if (!formData.dueDate) missingFields.push("Fecha de Vencimiento")
     
@@ -338,6 +357,8 @@ function CuentasCobrarPageContent() {
       result = await updateAccount(selectedCuenta.id, {
         clientId: formData.clientId,
         invoiceNumber: formData.invoiceNumber,
+        iva: parseFloat(formData.iva) || 16,
+        subtotal: parseFloat(formData.subtotal),
         amount: parseFloat(formData.amount),
         projectId: formData.projectId || undefined,
         categoryId: formData.categoryId || undefined,
@@ -351,6 +372,8 @@ function CuentasCobrarPageContent() {
         clientId: formData.clientId,
         projectId: formData.projectId || undefined,
         invoiceNumber: formData.invoiceNumber,
+        iva: parseFloat(formData.iva) || 16,
+        subtotal: parseFloat(formData.subtotal),
         amount: parseFloat(formData.amount),
         categoryId: formData.categoryId || undefined,
         issueDate: formData.issueDate?.toISOString() || new Date().toISOString(),
@@ -704,6 +727,8 @@ function CuentasCobrarPageContent() {
             clientId: '',
             projectId: '',
             invoiceNumber: '',
+            iva: '16',
+            subtotal: '',
             amount: '',
             categoryId: '',
             issueDate: undefined,
@@ -816,16 +841,50 @@ function CuentasCobrarPageContent() {
                 onChange={(e) => setFormData({...formData, invoiceNumber: e.target.value})}
               />
             </div>
-            {/* Monto Total */}
+            {/* Campos de IVA y Monto */}
             <div className="space-y-2">
-              <Label htmlFor="monto">Monto Total *</Label>
-              <Input 
-                id="monto" 
-                type="text" 
-                placeholder="0"
-                value={formatNumber(formData.amount)}
-                onChange={(e) => handleAmountChange(e.target.value)}
-              />
+              <h3 className="text-sm font-semibold text-primary">💰 Monto</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="iva">IVA (%) *</Label>
+                  <Input 
+                    id="iva"
+                    type="text" 
+                    placeholder="16"
+                    value={formData.iva}
+                    onChange={(e) => handlePresupuestoChange('iva', e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Porcentaje de IVA
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="subtotal">Subtotal (sin IVA) *</Label>
+                  <Input 
+                    id="subtotal"
+                    type="text" 
+                    placeholder="0"
+                    value={formatNumber(formData.subtotal)}
+                    onChange={(e) => handlePresupuestoChange('subtotal', e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Monto sin IVA
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="amount">Total (con IVA)</Label>
+                  <Input 
+                    id="amount"
+                    type="text" 
+                    value={formatNumber(formData.amount)}
+                    readOnly
+                    className="bg-muted font-semibold text-green-600"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Subtotal + IVA (calculado)
+                  </p>
+                </div>
+              </div>
             </div>
             
             {/* Categoría */}

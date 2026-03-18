@@ -9,11 +9,13 @@ export interface CrearProyectoData {
   clientId?: string
   fechaInicio: string
   fechaFinEstimada: string
+  iva?: number
+  subtotalVenta: number
   valorVenta: number
-  presupuestoTotal: number
   presupuestoMateriales: number
   presupuestoManoObra: number
   presupuestoOtros: number
+  presupuestoTotal: number
   responsableEmail: string
   areaId: string
   estado: string

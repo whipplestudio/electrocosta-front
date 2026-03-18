@@ -18,7 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Upload, Download, Plus, Search, FileText, Calendar, Loader2, Eye, Edit, AlertCircle, Check, ChevronsUpDown } from "lucide-react"
-import { useToast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -28,7 +28,6 @@ import { clientsService, type ClientSimple } from "@/services/clients.service"
 import { areasService, type AreaSimple } from "@/services/areas.service"
 
 export default function ProyectosPage() {
-  const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   // Estados básicos
@@ -65,11 +64,15 @@ export default function ProyectosPage() {
   
   // Estados para formulario manual
   const [openDialog, setOpenDialog] = useState(false)
+  const [modoFormulario, setModoFormulario] = useState<'crear' | 'editar'>('crear')
   const [nuevoProyecto, setNuevoProyecto] = useState({
+    id: '',
     nombreProyecto: '',
     clientId: '',
     fechaInicio: new Date().toISOString().split('T')[0],
     fechaFinEstimada: '',
+    iva: '16',
+    subtotalVenta: '',
     valorVenta: '',
     presupuestoTotal: '',
     presupuestoMateriales: '',
@@ -83,11 +86,18 @@ export default function ProyectosPage() {
     observaciones: ''
   })
 
-  // Estados para Ver y Editar
+  // Estado para Ver proyecto
   const [verModalOpen, setVerModalOpen] = useState(false)
-  const [editarModalOpen, setEditarModalOpen] = useState(false)
   const [proyectoSeleccionado, setProyectoSeleccionado] = useState<any>(null)
-  const [proyectoParaEditar, setProyectoParaEditar] = useState<any>(null)
+
+  // Estados para validación de formulario
+  const [formErrors, setFormErrors] = useState({
+    nombreProyecto: '',
+    fechaFinEstimada: '',
+    subtotalVenta: '',
+    presupuestos: '',
+    responsableEmail: ''
+  })
 
   // Cargar proyectos desde la BD
   const cargarProyectos = useCallback(async () => {
@@ -97,15 +107,11 @@ export default function ProyectosPage() {
       setProyectos(response.data || [])
     } catch (error) {
       console.error('Error al cargar proyectos:', error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "No se pudieron cargar los proyectos"
-      })
+      toast.error('No se pudieron cargar los proyectos')
     } finally {
       setLoadingProyectos(false)
     }
-  }, [toast])
+  }, [])
 
   // Cargar usuarios
   const cargarUsuarios = useCallback(async () => {
@@ -135,15 +141,11 @@ export default function ProyectosPage() {
       setClientes(data)
     } catch (error) {
       console.error('Error al cargar clientes:', error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "No se pudieron cargar los clientes"
-      })
+      toast.error('No se pudieron cargar los clientes')
     } finally {
       setLoadingClientes(false)
     }
-  }, [toast])
+  }, [])
 
   // Cargar áreas
   const cargarAreas = useCallback(async () => {
@@ -153,15 +155,11 @@ export default function ProyectosPage() {
       setAreas(data)
     } catch (error) {
       console.error('Error al cargar áreas:', error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "No se pudieron cargar las áreas"
-      })
+      toast.error('No se pudieron cargar las áreas')
     } finally {
       setLoadingAreas(false)
     }
-  }, [toast])
+  }, [])
 
   useEffect(() => {
     cargarProyectos()
@@ -187,60 +185,100 @@ export default function ProyectosPage() {
     setNuevoProyecto((prev) => {
       const updated = { ...prev, [field]: unformatted }
       
-      // Si se modificó alguno de los 3 campos de desglose, calcular el total automáticamente
-      if (field === 'presupuestoMateriales' || field === 'presupuestoManoObra' || field === 'presupuestoOtros') {
+      const iva = parseFloat(updated.iva) || 0
+      
+      // Si se modificó subtotalVenta o iva, calcular valorVenta con IVA
+      if (field === 'subtotalVenta' || field === 'iva') {
+        const subtotal = parseFloat(field === 'subtotalVenta' ? unformatted : updated.subtotalVenta) || 0
+        const ivaPercent = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
+        const ivaAmount = subtotal * (ivaPercent / 100)
+        updated.valorVenta = (subtotal + ivaAmount).toString()
+      }
+      
+      // Si se modificó alguno de los 3 campos de desglose, calcular el presupuestoTotal con IVA
+      if (field === 'presupuestoMateriales' || field === 'presupuestoManoObra' || field === 'presupuestoOtros' || field === 'iva') {
         const materiales = parseFloat(field === 'presupuestoMateriales' ? unformatted : updated.presupuestoMateriales) || 0
         const manoObra = parseFloat(field === 'presupuestoManoObra' ? unformatted : updated.presupuestoManoObra) || 0
         const otros = parseFloat(field === 'presupuestoOtros' ? unformatted : updated.presupuestoOtros) || 0
-        updated.presupuestoTotal = (materiales + manoObra + otros).toString()
+        const subtotalPresupuesto = materiales + manoObra + otros
+        const ivaPercent = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
+        const ivaAmount = subtotalPresupuesto * (ivaPercent / 100)
+        updated.presupuestoTotal = (subtotalPresupuesto + ivaAmount).toString()
       }
       
       return updated
     })
   }
 
-  const handlePresupuestoEditarChange = (field: string, value: string) => {
-    const unformatted = unformatNumber(value)
-    setProyectoParaEditar((prev: any) => {
-      const updated = { ...prev, [field]: unformatted }
-      
-      // Si se modificó alguno de los 3 campos de desglose, calcular el total automáticamente
-      if (field === 'presupuestoMateriales' || field === 'presupuestoManoObra' || field === 'presupuestoOtros') {
-        const materiales = parseFloat(field === 'presupuestoMateriales' ? unformatted : updated.presupuestoMateriales) || 0
-        const manoObra = parseFloat(field === 'presupuestoManoObra' ? unformatted : updated.presupuestoManoObra) || 0
-        const otros = parseFloat(field === 'presupuestoOtros' ? unformatted : updated.presupuestoOtros) || 0
-        updated.presupuestoTotal = (materiales + manoObra + otros).toString()
-      }
-      
-      return updated
-    })
-  }
-
-  // Función para crear proyecto manual
+  // Función unificada para crear/editar proyecto
   const crearNuevoProyecto = async () => {
     try {
       setLoading(true)
       
+      // Resetear errores
+      const errors = {
+        nombreProyecto: '',
+        fechaFinEstimada: '',
+        subtotalVenta: '',
+        presupuestos: '',
+        responsableEmail: ''
+      }
+
+      let hasErrors = false
+
       // Validación básica
-      if (!nuevoProyecto.nombreProyecto || !nuevoProyecto.valorVenta || !nuevoProyecto.presupuestoTotal) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Por favor completa todos los campos requeridos (nombre, valor de venta y presupuesto)"
-        })
+      if (!nuevoProyecto.nombreProyecto) {
+        errors.nombreProyecto = 'El nombre del proyecto es obligatorio'
+        hasErrors = true
+      }
+
+      if (!nuevoProyecto.fechaFinEstimada) {
+        errors.fechaFinEstimada = 'La fecha fin estimada es obligatoria'
+        hasErrors = true
+      }
+
+      if (!nuevoProyecto.subtotalVenta || parseFloat(nuevoProyecto.subtotalVenta) <= 0) {
+        errors.subtotalVenta = 'El subtotal de venta es obligatorio y debe ser mayor a 0'
+        hasErrors = true
+      }
+
+      if (!nuevoProyecto.presupuestoMateriales && !nuevoProyecto.presupuestoManoObra && !nuevoProyecto.presupuestoOtros) {
+        errors.presupuestos = 'Debes ingresar al menos un presupuesto (Materiales, Mano de Obra u Otros)'
+        hasErrors = true
+      }
+
+      if (!nuevoProyecto.responsableEmail) {
+        errors.responsableEmail = 'Debes seleccionar un responsable del proyecto'
+        hasErrors = true
+      }
+
+      if (hasErrors) {
+        setFormErrors(errors)
+        setLoading(false)
         return
       }
+
+      // Limpiar errores si todo está bien
+      setFormErrors({
+        nombreProyecto: '',
+        fechaFinEstimada: '',
+        subtotalVenta: '',
+        presupuestos: '',
+        responsableEmail: ''
+      })
 
       const data: CrearProyectoData = {
         nombreProyecto: nuevoProyecto.nombreProyecto,
         clientId: nuevoProyecto.clientId || undefined,
         fechaInicio: nuevoProyecto.fechaInicio,
         fechaFinEstimada: nuevoProyecto.fechaFinEstimada,
+        iva: parseFloat(nuevoProyecto.iva) || 16,
+        subtotalVenta: parseFloat(nuevoProyecto.subtotalVenta) || 0,
         valorVenta: parseFloat(nuevoProyecto.valorVenta) || 0,
-        presupuestoTotal: parseFloat(nuevoProyecto.presupuestoTotal),
         presupuestoMateriales: parseFloat(nuevoProyecto.presupuestoMateriales) || 0,
         presupuestoManoObra: parseFloat(nuevoProyecto.presupuestoManoObra) || 0,
         presupuestoOtros: parseFloat(nuevoProyecto.presupuestoOtros) || 0,
+        presupuestoTotal: parseFloat(nuevoProyecto.presupuestoTotal),
         responsableEmail: nuevoProyecto.responsableEmail,
         areaId: nuevoProyecto.areaId,
         estado: nuevoProyecto.estado,
@@ -249,19 +287,25 @@ export default function ProyectosPage() {
         observaciones: nuevoProyecto.observaciones,
       }
 
-      await projectsUploadService.crearProyecto(data)
-      
-      toast({
-        title: "Proyecto creado",
-        description: "El proyecto se ha creado exitosamente"
-      })
+      if (modoFormulario === 'editar') {
+        // Actualizar proyecto existente
+        await projectsUploadService.actualizarProyecto(nuevoProyecto.id, data)
+        toast.success('Los cambios se han guardado exitosamente')
+      } else {
+        // Crear nuevo proyecto
+        await projectsUploadService.crearProyecto(data)
+        toast.success('El proyecto se ha creado exitosamente')
+      }
 
       // Resetear formulario
       setNuevoProyecto({
+        id: '',
         nombreProyecto: '',
         clientId: '',
         fechaInicio: new Date().toISOString().split('T')[0],
         fechaFinEstimada: '',
+        iva: '16',
+        subtotalVenta: '',
         valorVenta: '',
         presupuestoTotal: '',
         presupuestoMateriales: '',
@@ -275,13 +319,11 @@ export default function ProyectosPage() {
         observaciones: ''
       })
       setOpenDialog(false)
+      setModoFormulario('crear')
       cargarProyectos()
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Error al crear proyecto"
-      })
+      const mensaje = modoFormulario === 'editar' ? 'Error al actualizar proyecto' : 'Error al crear proyecto'
+      toast.error(error.message || mensaje)
     } finally {
       setLoading(false)
     }
@@ -305,16 +347,9 @@ export default function ProyectosPage() {
       const response = await projectsUploadService.uploadFile(archivo)
       setUploadResponse(response)
       
-      toast({
-        title: "Archivo subido",
-        description: `${response.registrosDetectados} registros detectados`
-      })
+      toast.success(`${response.registrosDetectados} registros detectados`)
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Error al subir archivo"
-      })
+      toast.error(error.message || 'Error al subir archivo')
     } finally {
       setLoading(false)
     }
@@ -328,16 +363,9 @@ export default function ProyectosPage() {
       const resultado = await projectsUploadService.validarDatos(uploadResponse.uploadId)
       setValidacionResultado(resultado)
       
-      toast({
-        title: "Validación completada",
-        description: `${resultado.registrosValidos} registros válidos, ${resultado.registrosInvalidos} con errores`
-      })
+      toast.success(`${resultado.registrosValidos} registros válidos, ${resultado.registrosInvalidos} con errores`)
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Error al validar datos"
-      })
+      toast.error(error.message || 'Error al validar datos')
     } finally {
       setLoading(false)
     }
@@ -351,18 +379,11 @@ export default function ProyectosPage() {
       const resultado = await projectsUploadService.importarDatos(uploadResponse.uploadId)
       setImportacionResultado(resultado)
       
-      toast({
-        title: "Importación exitosa",
-        description: `${resultado.registrosImportados} proyectos importados`
-      })
+      toast.success(`${resultado.registrosImportados} proyectos importados`)
 
       cargarProyectos()
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Error al importar datos"
-      })
+      toast.error(error.message || 'Error al importar datos')
     } finally {
       setLoading(false)
     }
@@ -381,16 +402,9 @@ export default function ProyectosPage() {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
       
-      toast({
-        title: "Plantilla descargada",
-        description: "La plantilla se ha descargado exitosamente"
-      })
+      toast.success('La plantilla se ha descargado exitosamente')
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "No se pudo descargar la plantilla"
-      })
+      toast.error('No se pudo descargar la plantilla')
     } finally {
       setDownloadingTemplate(false)
     }
@@ -404,11 +418,7 @@ export default function ProyectosPage() {
       setProyectoSeleccionado(proyecto)
       setVerModalOpen(true)
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "No se pudo cargar el proyecto"
-      })
+      toast.error(error.message || 'No se pudo cargar el proyecto')
     } finally {
       setLoading(false)
     }
@@ -420,18 +430,20 @@ export default function ProyectosPage() {
       setLoading(true)
       const proyecto = await projectsUploadService.obtenerProyectoPorId(id)
       
-      // Mapear datos del backend al formato del formulario
-      setProyectoParaEditar({
+      // Mapear datos del backend al formato del formulario unificado
+      setNuevoProyecto({
         id: proyecto.id,
         nombreProyecto: proyecto.nombreProyecto || '',
         clientId: proyecto.clientId || proyecto.cliente?.id || '',
         fechaInicio: proyecto.fechaInicio ? new Date(proyecto.fechaInicio).toISOString().split('T')[0] : '',
         fechaFinEstimada: proyecto.fechaFinEstimada ? new Date(proyecto.fechaFinEstimada).toISOString().split('T')[0] : '',
+        iva: proyecto.iva?.toString() || '16',
+        subtotalVenta: proyecto.subtotalVenta?.toString() || '',
         valorVenta: proyecto.valorVenta?.toString() || '',
-        presupuestoTotal: proyecto.presupuestoTotal?.toString() || '',
         presupuestoMateriales: proyecto.presupuestoMateriales?.toString() || '',
         presupuestoManoObra: proyecto.presupuestoManoObra?.toString() || '',
         presupuestoOtros: proyecto.presupuestoOtros?.toString() || '',
+        presupuestoTotal: proyecto.presupuestoTotal?.toString() || '',
         responsableEmail: proyecto.responsable?.email || '',
         areaId: proyecto.areaId || '',
         estado: proyecto.estado || 'planificacion',
@@ -440,59 +452,10 @@ export default function ProyectosPage() {
         observaciones: proyecto.observaciones || ''
       })
       
-      setEditarModalOpen(true)
+      setModoFormulario('editar')
+      setOpenDialog(true)
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "No se pudo cargar el proyecto"
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Función para guardar cambios del proyecto
-  const guardarCambiosProyecto = async () => {
-    if (!proyectoParaEditar) return
-
-    try {
-      setLoading(true)
-
-      const data: CrearProyectoData = {
-        nombreProyecto: proyectoParaEditar.nombreProyecto,
-        clientId: proyectoParaEditar.clientId || undefined,
-        fechaInicio: proyectoParaEditar.fechaInicio,
-        fechaFinEstimada: proyectoParaEditar.fechaFinEstimada,
-        valorVenta: parseFloat(proyectoParaEditar.valorVenta) || 0,
-        presupuestoTotal: parseFloat(proyectoParaEditar.presupuestoTotal),
-        presupuestoMateriales: parseFloat(proyectoParaEditar.presupuestoMateriales) || 0,
-        presupuestoManoObra: parseFloat(proyectoParaEditar.presupuestoManoObra) || 0,
-        presupuestoOtros: parseFloat(proyectoParaEditar.presupuestoOtros) || 0,
-        responsableEmail: proyectoParaEditar.responsableEmail,
-        areaId: proyectoParaEditar.areaId,
-        estado: proyectoParaEditar.estado,
-        prioridad: proyectoParaEditar.prioridad,
-        descripcion: proyectoParaEditar.descripcion,
-        observaciones: proyectoParaEditar.observaciones,
-      }
-
-      await projectsUploadService.actualizarProyecto(proyectoParaEditar.id, data)
-      
-      toast({
-        title: "Proyecto actualizado",
-        description: "Los cambios se han guardado exitosamente"
-      })
-
-      setEditarModalOpen(false)
-      setProyectoParaEditar(null)
-      cargarProyectos()
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Error al actualizar proyecto"
-      })
+      toast.error(error.message || 'No se pudo cargar el proyecto')
     } finally {
       setLoading(false)
     }
@@ -511,7 +474,6 @@ export default function ProyectosPage() {
             p.estado === 'planificacion' ? 'Planificación' : 
             p.estado === 'completado' ? 'Completado' : 
             p.estado === 'pausado' ? 'Pausado' : 'Otro',
-    avance: Math.random() * 100, // TODO: calcular avance real
     responsable: p.responsable ? `${p.responsable.firstName} ${p.responsable.lastName}` : 'N/A',
     categoria: p.area?.name || 'General',
   }))
@@ -563,7 +525,19 @@ export default function ProyectosPage() {
               </>
             )}
           </Button>
-          <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+          <Dialog open={openDialog} onOpenChange={(open) => {
+            setOpenDialog(open)
+            if (!open) {
+              setModoFormulario('crear')
+              setFormErrors({
+                nombreProyecto: '',
+                fechaFinEstimada: '',
+                subtotalVenta: '',
+                presupuestos: '',
+                responsableEmail: ''
+              })
+            }
+          }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
@@ -572,8 +546,10 @@ export default function ProyectosPage() {
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Registrar Nuevo Proyecto</DialogTitle>
-                <DialogDescription>Crea un nuevo proyecto en el sistema</DialogDescription>
+                <DialogTitle>{modoFormulario === 'editar' ? 'Editar Proyecto' : 'Registrar Nuevo Proyecto'}</DialogTitle>
+                <DialogDescription>
+                  {modoFormulario === 'editar' ? 'Modifica los datos del proyecto' : 'Crea un nuevo proyecto en el sistema'}
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
@@ -582,7 +558,11 @@ export default function ProyectosPage() {
                     placeholder="Ej: Instalación eléctrica Planta Norte" 
                     value={nuevoProyecto.nombreProyecto}
                     onChange={(e) => setNuevoProyecto({...nuevoProyecto, nombreProyecto: e.target.value})}
+                    className={formErrors.nombreProyecto ? 'border-red-500' : ''}
                   />
+                  {formErrors.nombreProyecto && (
+                    <p className="text-sm text-red-500 mt-1">{formErrors.nombreProyecto}</p>
+                  )}
                 </div>
                 
                 <div>
@@ -666,28 +646,66 @@ export default function ProyectosPage() {
                       type="date" 
                       value={nuevoProyecto.fechaFinEstimada}
                       onChange={(e) => setNuevoProyecto({...nuevoProyecto, fechaFinEstimada: e.target.value})}
+                      className={formErrors.fechaFinEstimada ? 'border-red-500' : ''}
                     />
+                    {formErrors.fechaFinEstimada && (
+                      <p className="text-sm text-red-500 mt-1">{formErrors.fechaFinEstimada}</p>
+                    )}
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <h3 className="text-sm font-semibold text-primary">💰 Venta</h3>
-                  <div>
-                    <Label>Valor de Venta (Contrato sin IVA) *</Label>
-                    <Input 
-                      type="text" 
-                      placeholder="Ej: 100,000 (sin IVA)"
-                      value={formatNumber(nuevoProyecto.valorVenta)}
-                      onChange={(e) => handlePresupuestoChange('valorVenta', e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Precio de venta al cliente (sin IVA)
-                    </p>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label>IVA (%) *</Label>
+                      <Input 
+                        type="text" 
+                        placeholder="Ej: 16"
+                        value={nuevoProyecto.iva}
+                        onChange={(e) => handlePresupuestoChange('iva', e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Porcentaje de IVA
+                      </p>
+                    </div>
+                    <div>
+                      <Label>Subtotal de Venta (sin IVA) *</Label>
+                      <Input 
+                        type="text" 
+                        placeholder="Ej: 100,000"
+                        value={formatNumber(nuevoProyecto.subtotalVenta)}
+                        onChange={(e) => handlePresupuestoChange('subtotalVenta', e.target.value)}
+                        className={formErrors.subtotalVenta ? 'border-red-500' : ''}
+                      />
+                      {formErrors.subtotalVenta ? (
+                        <p className="text-sm text-red-500 mt-1">{formErrors.subtotalVenta}</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Precio sin IVA
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <Label>Total de Venta (con IVA)</Label>
+                      <Input 
+                        type="text" 
+                        value={formatNumber(nuevoProyecto.valorVenta)}
+                        readOnly
+                        className="bg-muted font-semibold text-green-600"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Subtotal + IVA (calculado)
+                      </p>
+                    </div>
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <h3 className="text-sm font-semibold text-primary">📊 Costos Estimados</h3>
+                  {formErrors.presupuestos && (
+                    <p className="text-sm text-red-500">{formErrors.presupuestos}</p>
+                  )}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label>Presupuesto Materiales *</Label>
@@ -720,7 +738,7 @@ export default function ProyectosPage() {
                       />
                     </div>
                     <div>
-                      <Label>Presupuesto Total (Calculado)</Label>
+                      <Label>Presupuesto Total (con IVA)</Label>
                       <Input 
                         type="text" 
                         value={formatNumber(nuevoProyecto.presupuestoTotal)}
@@ -728,7 +746,7 @@ export default function ProyectosPage() {
                         className="bg-muted font-semibold"
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        Suma automática de Materiales + Mano de Obra + Otros
+                        Suma de costos + IVA (calculado)
                       </p>
                     </div>
                   </div>
@@ -741,7 +759,7 @@ export default function ProyectosPage() {
                     onValueChange={(value) => setNuevoProyecto({...nuevoProyecto, responsableEmail: value})}
                     disabled={loadingUsuarios}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={formErrors.responsableEmail ? 'border-red-500' : ''}>
                       <SelectValue placeholder={loadingUsuarios ? "Cargando usuarios..." : "Selecciona un responsable"} />
                     </SelectTrigger>
                     <SelectContent>
@@ -758,6 +776,9 @@ export default function ProyectosPage() {
                       )}
                     </SelectContent>
                   </Select>
+                  {formErrors.responsableEmail && (
+                    <p className="text-sm text-red-500 mt-1">{formErrors.responsableEmail}</p>
+                  )}
                 </div>
 
                 <div>
@@ -789,10 +810,10 @@ export default function ProyectosPage() {
                   {loading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creando...
+                      {modoFormulario === 'editar' ? 'Guardando...' : 'Creando...'}
                     </>
                   ) : (
-                    "Crear Proyecto"
+                    modoFormulario === 'editar' ? 'Guardar Cambios' : 'Crear Proyecto'
                   )}
                 </Button>
               </DialogFooter>
@@ -831,19 +852,6 @@ export default function ProyectosPage() {
               {proyectosFormateados.filter((p) => p.estado === "Completado").length}
             </div>
             <p className="text-xs text-muted-foreground">Finalizados</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Avance Promedio</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-600">
-              {proyectosFormateados.length > 0 
-                ? Math.round(proyectosFormateados.reduce((sum, p) => sum + p.avance, 0) / proyectosFormateados.length)
-                : 0}%
-            </div>
-            <p className="text-xs text-muted-foreground">General</p>
           </CardContent>
         </Card>
       </div>
@@ -1054,7 +1062,6 @@ export default function ProyectosPage() {
                   <TableHead>Valor Venta</TableHead>
                   <TableHead>Presupuesto</TableHead>
                   <TableHead>Fechas</TableHead>
-                  <TableHead>Avance</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Acciones</TableHead>
                 </TableRow>
@@ -1087,14 +1094,6 @@ export default function ProyectosPage() {
                         <span>{proyecto.fechaInicio}</span>
                       </div>
                       <div className="text-xs text-muted-foreground">Fin: {proyecto.fechaFin}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 bg-gray-200 rounded-full h-2">
-                          <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${proyecto.avance}%` }}></div>
-                        </div>
-                        <span className="text-sm">{proyecto.avance.toFixed(2)}%</span>
-                      </div>
                     </TableCell>
                     <TableCell>{getStatusBadge(proyecto.estado)}</TableCell>
                     <TableCell>
@@ -1232,272 +1231,6 @@ export default function ProyectosPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setVerModalOpen(false)}>Cerrar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal Editar */}
-      <Dialog open={editarModalOpen} onOpenChange={setEditarModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Editar Proyecto</DialogTitle>
-          </DialogHeader>
-          {proyectoParaEditar && (
-            <div className="space-y-4">
-              <div>
-                <Label>Nombre del Proyecto *</Label>
-                <Input 
-                  value={proyectoParaEditar.nombreProyecto}
-                  onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, nombreProyecto: e.target.value})}
-                />
-              </div>
-
-              <div>
-                <Label>Cliente</Label>
-                <Popover open={openClientePopoverEdit} onOpenChange={setOpenClientePopoverEdit}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openClientePopoverEdit}
-                      className="w-full justify-between"
-                    >
-                      {proyectoParaEditar.clientId
-                        ? clientes.find((c) => c.id === proyectoParaEditar.clientId)?.name
-                        : "Seleccionar cliente..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0">
-                    <Command>
-                      <CommandInput placeholder="Buscar cliente por nombre o RFC..." />
-                      <CommandEmpty>No se encontraron clientes.</CommandEmpty>
-                      <CommandGroup>
-                        <CommandItem
-                          value="sin-cliente"
-                          onSelect={() => {
-                            setProyectoParaEditar({...proyectoParaEditar, clientId: ''})
-                            setOpenClientePopoverEdit(false)
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              proyectoParaEditar.clientId === "" ? "opacity-100" : "opacity-0"
-                            )}
-                          />
-                          Sin cliente
-                        </CommandItem>
-                        {clientes.map((cliente) => (
-                          <CommandItem
-                            key={cliente.id}
-                            value={`${cliente.name} ${cliente.taxId}`}
-                            onSelect={() => {
-                              setProyectoParaEditar({...proyectoParaEditar, clientId: cliente.id})
-                              setOpenClientePopoverEdit(false)
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                proyectoParaEditar.clientId === cliente.id ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            <div className="flex flex-col">
-                              <span className="font-medium">{cliente.name}</span>
-                              <span className="text-xs text-muted-foreground">RFC: {cliente.taxId}</span>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Fecha Inicio *</Label>
-                  <Input 
-                    type="date"
-                    value={proyectoParaEditar.fechaInicio}
-                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, fechaInicio: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <Label>Fecha Fin Estimada</Label>
-                  <Input 
-                    type="date"
-                    value={proyectoParaEditar.fechaFinEstimada}
-                    onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, fechaFinEstimada: e.target.value})}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-primary">💰 Venta</h3>
-                <div>
-                  <Label>Valor de Venta (Contrato sin IVA) *</Label>
-                  <Input 
-                    type="text"
-                    placeholder="Ej: 100,000 (sin IVA)"
-                    value={formatNumber(proyectoParaEditar.valorVenta)}
-                    onChange={(e) => handlePresupuestoEditarChange('valorVenta', e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Precio de venta al cliente (sin IVA)
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-primary">📊 Costos Estimados</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Presupuesto Materiales</Label>
-                    <Input 
-                      type="text"
-                      value={formatNumber(proyectoParaEditar.presupuestoMateriales)}
-                      onChange={(e) => handlePresupuestoEditarChange('presupuestoMateriales', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label>Presupuesto Mano de Obra</Label>
-                    <Input 
-                      type="text"
-                      value={formatNumber(proyectoParaEditar.presupuestoManoObra)}
-                      onChange={(e) => handlePresupuestoEditarChange('presupuestoManoObra', e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Presupuesto Otros</Label>
-                    <Input 
-                      type="text"
-                      value={formatNumber(proyectoParaEditar.presupuestoOtros)}
-                      onChange={(e) => handlePresupuestoEditarChange('presupuestoOtros', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label>Presupuesto Total (Calculado)</Label>
-                    <Input 
-                      type="text"
-                      value={formatNumber(proyectoParaEditar.presupuestoTotal)}
-                      readOnly
-                      className="bg-muted font-semibold"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Suma automática de Materiales + Mano de Obra + Otros
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <Label>Responsable del Proyecto *</Label>
-                <Select 
-                  value={proyectoParaEditar.responsableEmail} 
-                  onValueChange={(value) => setProyectoParaEditar({...proyectoParaEditar, responsableEmail: value})}
-                  disabled={loadingUsuarios}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={loadingUsuarios ? "Cargando usuarios..." : "Selecciona un responsable"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {usuarios.length === 0 ? (
-                      <SelectItem value="sin-usuarios" disabled>
-                        No hay usuarios disponibles
-                      </SelectItem>
-                    ) : (
-                      usuarios.map((usuario) => (
-                        <SelectItem key={usuario.id} value={usuario.email}>
-                          {usuario.fullName} ({usuario.email})
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>Estado *</Label>
-                <Select 
-                  value={proyectoParaEditar.estado} 
-                  onValueChange={(value) => setProyectoParaEditar({...proyectoParaEditar, estado: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="planificacion">Planificación</SelectItem>
-                    <SelectItem value="en_progreso">En Progreso</SelectItem>
-                    <SelectItem value="pausado">Pausado</SelectItem>
-                    <SelectItem value="completado">Completado</SelectItem>
-                    <SelectItem value="cancelado">Cancelado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Prioridad *</Label>
-                  <Select 
-                    value={proyectoParaEditar.prioridad} 
-                    onValueChange={(value) => setProyectoParaEditar({...proyectoParaEditar, prioridad: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="baja">Baja</SelectItem>
-                      <SelectItem value="media">Media</SelectItem>
-                      <SelectItem value="alta">Alta</SelectItem>
-                      <SelectItem value="critica">Crítica</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div>
-                <Label>Descripción</Label>
-                <Textarea 
-                  value={proyectoParaEditar.descripcion}
-                  onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, descripcion: e.target.value})}
-                />
-              </div>
-
-              <div>
-                <Label>Observaciones</Label>
-                <Textarea 
-                  value={proyectoParaEditar.observaciones}
-                  onChange={(e) => setProyectoParaEditar({...proyectoParaEditar, observaciones: e.target.value})}
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setEditarModalOpen(false)}
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
-            <Button 
-              onClick={guardarCambiosProyecto}
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                "Guardar Cambios"
-              )}
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

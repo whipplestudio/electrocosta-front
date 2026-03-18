@@ -109,11 +109,6 @@ const menuItems: MenuItem[] = [
         requiredPermissionCodes: ["cuentas_cobrar.registro.ver"]
       },
       { 
-        title: "Seguimiento", 
-        href: "/cuentas-cobrar/seguimiento",
-        requiredPermissionCodes: ["cuentas_cobrar.seguimiento.ver"]
-      },
-      { 
         title: "Aplicación de Pagos", 
         href: "/cuentas-cobrar/pagos",
         requiredPermissionCodes: ["cuentas_cobrar.pagos.ver"]

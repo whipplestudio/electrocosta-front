@@ -28,6 +28,8 @@ export default function RootLayout({
         <ConditionalLayout>{children}</ConditionalLayout>
         <Toaster 
           position="top-center"
+          richColors
+          className="!z-[99999]"
           toastOptions={{
             style: {
               background: 'hsl(var(--background))',
@@ -35,8 +37,10 @@ export default function RootLayout({
               border: '1px solid hsl(var(--border))',
               borderRadius: 'calc(var(--radius) - 2px)',
             },
+            className: '!z-[99999]',
             classNames: {
               error: 'bg-destructive text-destructive-foreground border-destructive',
+              success: 'bg-green-600 text-white border-green-700',
             },
           }}
         />

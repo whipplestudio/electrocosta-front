@@ -65,6 +65,7 @@ export interface AccountPayable {
   project?: Project;
   categoryId?: string;
   category?: Category;
+  macroClasificacion?: 'MATERIALES' | 'MANO_DE_OBRA' | 'OTROS';
   invoiceNumber: string;
   amount: string;
   paidAmount: string;
@@ -114,10 +115,12 @@ export interface CreateAccountPayableDto {
 }
 
 export interface UpdateAccountPayableDto {
+  supplierName?: string;
   invoiceNumber?: string;
   amount?: number;
   projectId?: string;
   categoryId?: string;
+  macroClasificacion?: 'MATERIALES' | 'MANO_DE_OBRA' | 'OTROS';
   currency?: string;
   issueDate?: string;
   dueDate?: string;

@@ -36,7 +36,7 @@ import {
 } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import { useAccountsReceivable } from "@/hooks/use-accounts-receivable"
 import { AccountReceivable, AccountReceivableStatus } from "@/types/accounts-receivable"
 import { clientsService, type Client } from "@/services/clients.service"
@@ -72,7 +72,6 @@ export default function CuentasCobrarPage() {
 }
 
 function CuentasCobrarPageContent() {
-  const { toast } = useToast()
   const {
     accounts,
     dashboard,
@@ -107,6 +106,7 @@ function CuentasCobrarPageContent() {
   const [projects, setProjects] = useState<any[]>([]) // Guardar proyectos completos
   const [loadingSelects, setLoadingSelects] = useState(false)
   const [loadingProjects, setLoadingProjects] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   
   // Estados del formulario
   const [formData, setFormData] = useState({
@@ -126,14 +126,16 @@ function CuentasCobrarPageContent() {
       loadProjectsByClient(formData.clientId)
     } else {
       setProjects([])
+      // Solo limpiar proyecto si no estamos editando
+      if (!selectedCuenta) {
+        setFormData(prev => ({ ...prev, projectId: '' }))
+      }
     }
-    // Limpiar proyecto seleccionado al cambiar cliente
-    setFormData(prev => ({ ...prev, projectId: '' }))
-  }, [formData.clientId])
+  }, [formData.clientId, selectedCuenta])
 
-  // Auto-completar campos cuando se selecciona un proyecto
+  // Auto-completar campos cuando se selecciona un proyecto (solo al crear, no al editar)
   useEffect(() => {
-    if (formData.projectId && projects.length > 0) {
+    if (formData.projectId && projects.length > 0 && !selectedCuenta) {
       const selectedProject = projects.find(p => p.id === formData.projectId)
       if (selectedProject) {
         console.log("Auto-completando con proyecto:", selectedProject)
@@ -146,7 +148,7 @@ function CuentasCobrarPageContent() {
         }))
       }
     }
-  }, [formData.projectId, projects])
+  }, [formData.projectId, projects, selectedCuenta])
 
   // Formatear número con separadores de miles
   const formatNumber = (value: string): string => {
@@ -182,20 +184,13 @@ function CuentasCobrarPageContent() {
       
       if (incomeCategories.length === 0 && categoriesData.length > 0) {
         console.warn('⚠️ Hay categorías creadas pero ninguna es de tipo "Ingreso"')
-        toast({
-          title: "Advertencia",
-          description: "No hay categorías de tipo 'Ingreso'. Crea categorías de ingreso en el módulo de Categorías.",
-        })
+        toast.warning("No hay categorías de tipo 'Ingreso'. Crea categorías de ingreso en el módulo de Categorías.")
       }
       
       setCategories(incomeCategories)
     } catch (error) {
       console.error('Error al cargar clientes y categorías:', error)
-      toast({
-        title: "Error",
-        description: "Error al cargar opciones del formulario",
-        variant: "destructive",
-      })
+      toast.error("Error al cargar opciones del formulario")
     } finally {
       setLoadingSelects(false)
     }
@@ -218,11 +213,7 @@ function CuentasCobrarPageContent() {
       setProjects(proyectos) // Guardar proyectos completos
     } catch (error) {
       console.error('Error al cargar proyectos:', error)
-      toast({
-        title: "Error",
-        description: "Error al cargar proyectos del cliente",
-        variant: "destructive",
-      })
+      toast.error("Error al cargar proyectos del cliente")
     } finally {
       setLoadingProjects(false)
     }
@@ -336,11 +327,7 @@ function CuentasCobrarPageContent() {
     if (!formData.dueDate) missingFields.push("Fecha de Vencimiento")
     
     if (missingFields.length > 0) {
-      toast({
-        title: "Campos requeridos faltantes",
-        description: `Por favor completa: ${missingFields.join(", ")}`,
-        variant: "destructive",
-      })
+      toast.error(`Campos requeridos faltantes: ${missingFields.join(", ")}`)
       return
     }
 
@@ -349,6 +336,7 @@ function CuentasCobrarPageContent() {
     if (selectedCuenta) {
       // Actualizar cuenta existente con todos los campos editables
       result = await updateAccount(selectedCuenta.id, {
+        clientId: formData.clientId,
         invoiceNumber: formData.invoiceNumber,
         amount: parseFloat(formData.amount),
         projectId: formData.projectId || undefined,
@@ -387,22 +375,16 @@ function CuentasCobrarPageContent() {
       return
     }
 
+    setDeletingId(cuentaId)
     try {
-      await deleteAccount(cuentaId)
-      toast({
-        title: "Éxito",
-        description: "Cuenta eliminada exitosamente",
-      })
-      // Recargar datos
-      await handleApplyFilters()
-      await fetchDashboard()
-    } catch (error) {
-      console.error('Error al eliminar cuenta:', error)
-      toast({
-        title: "Error",
-        description: "Error al eliminar la cuenta",
-        variant: "destructive",
-      })
+      const success = await deleteAccount(cuentaId)
+      if (success) {
+        // Recargar datos
+        await handleApplyFilters()
+        await fetchDashboard()
+      }
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -642,15 +624,11 @@ function CuentasCobrarPageContent() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md text-red-800">
-              {error}
-            </div>
-          )}
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Cliente</TableHead>
+                <TableHead>Proyecto</TableHead>
                 <TableHead>Factura</TableHead>
                 <TableHead>Fecha Emisión</TableHead>
                 <TableHead>Fecha Vencimiento</TableHead>
@@ -664,7 +642,7 @@ function CuentasCobrarPageContent() {
             <TableBody>
               {accounts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     {isLoading ? "Cargando..." : "No se encontraron cuentas por cobrar"}
                   </TableCell>
                 </TableRow>
@@ -672,6 +650,11 @@ function CuentasCobrarPageContent() {
                 accounts.map((cuenta) => (
                   <TableRow key={cuenta.id}>
                     <TableCell className="font-medium">{cuenta.client?.name || 'N/A'}</TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">
+                        {cuenta.project?.nombreProyecto || 'Sin proyecto'}
+                      </span>
+                    </TableCell>
                     <TableCell>{cuenta.invoiceNumber}</TableCell>
                     <TableCell>{format(new Date(cuenta.issueDate), "dd/MM/yyyy")}</TableCell>
                     <TableCell>{format(new Date(cuenta.dueDate), "dd/MM/yyyy")}</TableCell>
@@ -693,9 +676,14 @@ function CuentasCobrarPageContent() {
                           variant="ghost" 
                           size="sm" 
                           onClick={() => handleEliminarCuenta(cuenta.id)}
+                          disabled={deletingId === cuenta.id}
                           className="text-destructive hover:text-destructive"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          {deletingId === cuenta.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                     </TableCell>
@@ -738,7 +726,7 @@ function CuentasCobrarPageContent() {
               <Select 
                 value={formData.clientId}
                 onValueChange={(value) => setFormData({...formData, clientId: value})}
-                disabled={loadingSelects || selectedCuenta !== null}
+                disabled={loadingSelects}
               >
                 <SelectTrigger id="clientId">
                   <SelectValue placeholder="Selecciona un cliente" />
@@ -761,32 +749,36 @@ function CuentasCobrarPageContent() {
                   )}
                 </SelectContent>
               </Select>
-              {selectedCuenta && (
-                <p className="text-xs text-muted-foreground">
-                  No se puede cambiar el cliente al editar
-                </p>
-              )}
             </div>
             
             {/* Proyecto */}
             <div className="space-y-2">
               <Label>Proyecto (Opcional)</Label>
               <Select
-                value={formData.projectId}
+                value={formData.projectId || undefined}
                 onValueChange={(value) => setFormData({ ...formData, projectId: value })}
-                disabled={!formData.clientId}
+                disabled={!formData.clientId || loadingProjects}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={
-                    !formData.clientId 
-                      ? "Primero selecciona un cliente" 
-                      : "Seleccionar proyecto"
-                  } />
+                  {formData.projectId ? (
+                    <SelectValue />
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {loadingProjects
+                        ? "Cargando proyectos..."
+                        : !formData.clientId 
+                        ? "Primero selecciona un cliente" 
+                        : "Seleccionar proyecto"}
+                    </span>
+                  )}
                 </SelectTrigger>
                 <SelectContent>
                   {loadingProjects ? (
                     <SelectItem value="loading" disabled>
-                      Cargando proyectos...
+                      <div className="flex items-center">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Cargando proyectos...
+                      </div>
                     </SelectItem>
                   ) : !formData.clientId ? (
                     <SelectItem value="no-client" disabled>

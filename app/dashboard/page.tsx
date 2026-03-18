@@ -426,6 +426,7 @@ function DashboardContent() {
                   {/* Mano de Obra */}
                   {(() => {
                     const presupuesto = dashboardProyecto.kpis.presupuestoGastos.manoObra
+                    console.log("🚀 ~ DashboardContent ~ presupuesto:", presupuesto)
                     const gastado = dashboardProyecto.kpis.ejecucionReal.manoObraReal
                     const porcentaje = presupuesto > 0 ? (gastado / presupuesto) * 100 : 0
                     const restante = presupuesto - gastado

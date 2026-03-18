@@ -222,11 +222,11 @@ export default function ProyectosPage() {
       setLoading(true)
       
       // Validación básica
-      if (!nuevoProyecto.nombreProyecto || !nuevoProyecto.valorVenta || !nuevoProyecto.presupuestoTotal || !nuevoProyecto.areaId) {
+      if (!nuevoProyecto.nombreProyecto || !nuevoProyecto.valorVenta || !nuevoProyecto.presupuestoTotal) {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Por favor completa todos los campos requeridos (nombre, valor de venta, presupuesto y área)"
+          description: "Por favor completa todos los campos requeridos (nombre, valor de venta y presupuesto)"
         })
         return
       }
@@ -504,6 +504,7 @@ export default function ProyectosPage() {
     nombre: p.nombreProyecto,
     cliente: p.cliente?.name || 'Cliente',
     valorContrato: Number(p.presupuestoTotal) || 0,
+    valorVenta: Number(p.valorVenta) || 0,
     fechaInicio: new Date(p.fechaInicio).toLocaleDateString('es-MX'),
     fechaFin: new Date(p.fechaFinEstimada).toLocaleDateString('es-MX'),
     estado: p.estado === 'en_progreso' ? 'En Progreso' : 
@@ -647,59 +648,6 @@ export default function ProyectosPage() {
                   </Popover>
                   <p className="text-xs text-muted-foreground mt-1">
                     Busca y selecciona un cliente existente o déjalo vacío
-                  </p>
-                </div>
-
-                <div>
-                  <Label>Área *</Label>
-                  <Popover open={openAreaPopover} onOpenChange={setOpenAreaPopover}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={openAreaPopover}
-                        className="w-full justify-between"
-                      >
-                        {nuevoProyecto.areaId
-                          ? areas.find((a) => a.id === nuevoProyecto.areaId)?.name
-                          : "Seleccionar área..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0">
-                      <Command>
-                        <CommandInput placeholder="Buscar área..." />
-                        <CommandEmpty>No se encontraron áreas.</CommandEmpty>
-                        <CommandGroup>
-                          {areas.map((area) => (
-                            <CommandItem
-                              key={area.id}
-                              value={area.name}
-                              onSelect={() => {
-                                setNuevoProyecto({...nuevoProyecto, areaId: area.id})
-                                setOpenAreaPopover(false)
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  nuevoProyecto.areaId === area.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              <div className="flex flex-col">
-                                <span className="font-medium">{area.name}</span>
-                                {area.description && (
-                                  <span className="text-xs text-muted-foreground">{area.description}</span>
-                                )}
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Selecciona el área responsable del proyecto
                   </p>
                 </div>
 
@@ -1103,7 +1051,8 @@ export default function ProyectosPage() {
                   <TableHead>Proyecto</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Área</TableHead>
-                  <TableHead>Valor</TableHead>
+                  <TableHead>Valor Venta</TableHead>
+                  <TableHead>Presupuesto</TableHead>
                   <TableHead>Fechas</TableHead>
                   <TableHead>Avance</TableHead>
                   <TableHead>Estado</TableHead>
@@ -1130,6 +1079,7 @@ export default function ProyectosPage() {
                         {proyectos.find(p => p.id === proyecto.id)?.area?.name || 'Sin área'}
                       </Badge>
                     </TableCell>
+                    <TableCell className="font-medium text-green-600">${proyecto.valorVenta.toLocaleString()}</TableCell>
                     <TableCell className="font-medium">${proyecto.valorContrato.toLocaleString()}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1 text-sm">
@@ -1356,56 +1306,6 @@ export default function ProyectosPage() {
                             <div className="flex flex-col">
                               <span className="font-medium">{cliente.name}</span>
                               <span className="text-xs text-muted-foreground">RFC: {cliente.taxId}</span>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div>
-                <Label>Área *</Label>
-                <Popover open={openAreaPopoverEdit} onOpenChange={setOpenAreaPopoverEdit}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openAreaPopoverEdit}
-                      className="w-full justify-between"
-                    >
-                      {proyectoParaEditar.areaId
-                        ? areas.find((a) => a.id === proyectoParaEditar.areaId)?.name
-                        : "Seleccionar área..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0">
-                    <Command>
-                      <CommandInput placeholder="Buscar área..." />
-                      <CommandEmpty>No se encontraron áreas.</CommandEmpty>
-                      <CommandGroup>
-                        {areas.map((area) => (
-                          <CommandItem
-                            key={area.id}
-                            value={area.name}
-                            onSelect={() => {
-                              setProyectoParaEditar({...proyectoParaEditar, areaId: area.id})
-                              setOpenAreaPopoverEdit(false)
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                proyectoParaEditar.areaId === area.id ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            <div className="flex flex-col">
-                              <span className="font-medium">{area.name}</span>
-                              {area.description && (
-                                <span className="text-xs text-muted-foreground">{area.description}</span>
-                              )}
                             </div>
                           </CommandItem>
                         ))}

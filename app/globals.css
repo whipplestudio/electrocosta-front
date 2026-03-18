@@ -150,4 +150,13 @@
   .space-y-2 > div {
     @apply mt-1;
   }
+  
+  /* Asegurar que los toasts de Sonner aparezcan sobre los diálogos */
+  [data-sonner-toaster] {
+    z-index: 99999 !important;
+  }
+  
+  [data-sonner-toast] {
+    z-index: 99999 !important;
+  }
 }

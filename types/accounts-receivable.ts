@@ -55,6 +55,7 @@ export interface Client {
 export interface Project {
   id: string;
   name: string;
+  nombreProyecto: string;
   code: string;
   description?: string;
   clientId?: string;
@@ -148,6 +149,7 @@ export interface CreateAccountReceivableDto {
 }
 
 export interface UpdateAccountReceivableDto {
+  clientId?: string;
   invoiceNumber?: string;
   amount?: number;
   projectId?: string;

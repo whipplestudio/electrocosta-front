@@ -51,6 +51,7 @@ export default function CuentasPagarPage() {
     dueDate: undefined as Date | undefined,
     description: "",
   })
+  console.log("🚀 ~ CuentasPagarPage ~ formData:", formData)
 
   // Dashboard data
   const [dashboardData, setDashboardData] = useState({
@@ -140,9 +141,10 @@ export default function CuentasPagarPage() {
     loadSuppliersAndCategories()
   }, [fetchAccounts, fetchDashboard])
 
-  // Auto-completar macroClasificacion cuando se selecciona una categoría
+  // Auto-completar macroClasificacion cuando se selecciona una categoría (solo al crear, no al editar)
   useEffect(() => {
-    if (formData.categoryId && categories.length > 0) {
+    // Solo auto-completar si NO estamos editando una cuenta existente
+    if (!selectedAccount && formData.categoryId && categories.length > 0) {
       const selectedCategory = categories.find(c => c.id === formData.categoryId)
       if (selectedCategory && (selectedCategory as any).macroClasificacion) {
         setFormData(prev => ({
@@ -151,7 +153,7 @@ export default function CuentasPagarPage() {
         }))
       }
     }
-  }, [formData.categoryId, categories])
+  }, [formData.categoryId, categories, selectedAccount])
 
   // Calcular pendientes de aprobación cuando las cuentas cambien
   useEffect(() => {
@@ -194,6 +196,7 @@ export default function CuentasPagarPage() {
   }
 
   const handleEditarCuenta = (cuenta: AccountPayable) => {
+    console.log("🚀 ~ handleEditarCuenta ~ cuenta:", cuenta)
     setSelectedAccount(cuenta)
     setFormData({
       supplierId: cuenta.supplierId || "",
@@ -202,7 +205,7 @@ export default function CuentasPagarPage() {
       invoiceNumber: cuenta.invoiceNumber,
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || "",
-      macroClasificacion: (cuenta as any).macroClasificacion || "",
+      macroClasificacion: cuenta.macroClasificacion || "",
       issueDate: new Date(cuenta.issueDate),
       dueDate: new Date(cuenta.dueDate),
       description: cuenta.description || "",
@@ -222,10 +225,12 @@ export default function CuentasPagarPage() {
       setSavingAccount(true)
       if (selectedAccount) {
         await accountsPayableService.update(selectedAccount.id, {
+          supplierName: formData.supplierName,
           invoiceNumber: formData.invoiceNumber,
           amount: parseFloat(formData.amount),
           projectId: formData.projectId || undefined,
           categoryId: formData.categoryId || undefined,
+          macroClasificacion: formData.macroClasificacion || undefined,
           issueDate: formData.issueDate?.toISOString(),
           dueDate: formData.dueDate?.toISOString(),
           description: formData.description || undefined,
@@ -499,7 +504,9 @@ export default function CuentasPagarPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Proveedor</TableHead>
+                <TableHead>Proyecto</TableHead>
                 <TableHead>Factura</TableHead>
+                <TableHead>Clasificación</TableHead>
                 <TableHead>Monto</TableHead>
                 <TableHead>Vencimiento</TableHead>
                 <TableHead>Estado</TableHead>
@@ -510,17 +517,30 @@ export default function CuentasPagarPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center">Cargando...</TableCell>
+                  <TableCell colSpan={9} className="text-center">Cargando...</TableCell>
                 </TableRow>
               ) : accounts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center">No hay cuentas por pagar</TableCell>
+                  <TableCell colSpan={9} className="text-center">No hay cuentas por pagar</TableCell>
                 </TableRow>
               ) : (
                 accounts.map((cuenta) => (
                   <TableRow key={cuenta.id}>
                     <TableCell>{cuenta.supplier?.name || cuenta.supplierName || 'N/A'}</TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">
+                        {cuenta.project?.nombreProyecto || 'Sin proyecto'}
+                      </span>
+                    </TableCell>
                     <TableCell>{cuenta.invoiceNumber}</TableCell>
+                    <TableCell>
+                      <span className="text-xs">
+                        {cuenta.macroClasificacion === 'MATERIALES' && '💎 Materiales'}
+                        {cuenta.macroClasificacion === 'MANO_DE_OBRA' && '👷 Mano de Obra'}
+                        {cuenta.macroClasificacion === 'OTROS' && '📦 Otros'}
+                        {!cuenta.macroClasificacion && <span className="text-muted-foreground">Sin clasificar</span>}
+                      </span>
+                    </TableCell>
                     <TableCell>${parseFloat(cuenta.amount).toLocaleString()}</TableCell>
                     <TableCell>{format(new Date(cuenta.dueDate), "dd MMM yyyy", { locale: es })}</TableCell>
                     <TableCell>{getEstadoBadge(cuenta.status)}</TableCell>
@@ -584,7 +604,6 @@ export default function CuentasPagarPage() {
                 value={formData.supplierName}
                 onChange={(e) => setFormData({ ...formData, supplierName: e.target.value })}
                 placeholder="Nombre del proveedor"
-                disabled={!!selectedAccount}
               />
             </div>
             <div className="grid gap-2">

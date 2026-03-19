@@ -11,11 +11,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Plus, Edit, Trash2, CalendarIcon, TrendingDown, AlertCircle, Clock, CheckCircle, XCircle, Loader2 } from "lucide-react"
+import { Plus, Edit, Trash2, CalendarIcon, TrendingDown, AlertCircle, Clock, CheckCircle, XCircle, Loader2, Upload, FileDown } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { toast } from "sonner"
 import { accountsPayableService } from "@/services/accounts-payable.service"
+import { accountsPayableUploadService } from "@/services/accounts-payable-upload.service"
+import type { UploadResponse, ValidacionResultado, ImportacionResultado } from "@/services/accounts-payable-upload.service"
+import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
 import { suppliersService, type Supplier } from "@/services/suppliers.service"
 import { categoriesService, type Category } from "@/services/categories.service"
 import { projectsService, type Project } from "@/services/projects.service"
@@ -63,6 +66,14 @@ export default function CuentasPagarPage() {
     proximasVencer: 0,
     pendientesAprobacion: 0,
   })
+
+  // Estados para carga masiva
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false)
+  const [bulkUploadFile, setBulkUploadFile] = useState<File | null>(null)
+  const [uploadResponse, setUploadResponse] = useState<UploadResponse | null>(null)
+  const [validacionResultado, setValidacionResultado] = useState<ValidacionResultado | null>(null)
+  const [importacionResultado, setImportacionResultado] = useState<ImportacionResultado | null>(null)
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false)
 
   const fetchAccounts = useCallback(async (filterParams?: any) => {
     try {
@@ -348,6 +359,104 @@ export default function CuentasPagarPage() {
     }
   }
 
+  // Funciones de carga masiva
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setBulkUploadFile(e.target.files[0])
+      setUploadResponse(null)
+      setValidacionResultado(null)
+      setImportacionResultado(null)
+    }
+  }
+
+  const handleUpload = async () => {
+    if (!bulkUploadFile) return
+    try {
+      setLoading(true)
+      const response = await accountsPayableUploadService.subirArchivo(bulkUploadFile)
+      setUploadResponse(response)
+      toast.success(`${response.registrosDetectados} registros detectados`)
+    } catch (error: any) {
+      toast.error(error.message || 'Error al subir archivo')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleValidate = async () => {
+    if (!uploadResponse) return
+    try {
+      setLoading(true)
+      const resultado = await accountsPayableUploadService.validarDatos(uploadResponse.uploadId)
+      setValidacionResultado(resultado)
+      toast.success(`${resultado.registrosValidos} registros válidos, ${resultado.registrosInvalidos} con errores`)
+    } catch (error: any) {
+      toast.error(error.message || 'Error al validar datos')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleImport = async () => {
+    if (!uploadResponse) return
+    try {
+      setLoading(true)
+      const resultado = await accountsPayableUploadService.importarDatos(uploadResponse.uploadId)
+      setImportacionResultado(resultado)
+      toast.success(`${resultado.registrosImportados} cuentas por pagar importadas`)
+      fetchAccounts(filters)
+      fetchDashboard()
+    } catch (error: any) {
+      toast.error(error.message || 'Error al importar datos')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDownloadTemplate = async () => {
+    setDownloadingTemplate(true)
+    try {
+      const blob = await accountsPayableUploadService.descargarPlantilla()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'plantilla_cuentas_pagar.xlsx'
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast.success('Plantilla descargada')
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Error al descargar plantilla')
+    } finally {
+      setDownloadingTemplate(false)
+    }
+  }
+
+  const handleResetBulkUpload = () => {
+    setBulkUploadFile(null)
+    setUploadResponse(null)
+    setValidacionResultado(null)
+    setImportacionResultado(null)
+  }
+
+  const handleCloseBulkUpload = (open: boolean) => {
+    // Si está cerrando el modal y hay archivo cargado o datos en proceso
+    if (!open && (bulkUploadFile || uploadResponse || validacionResultado || importacionResultado)) {
+      const confirmar = window.confirm(
+        '¿Estás seguro de que quieres cerrar? Se perderá el progreso actual.'
+      )
+      
+      if (confirmar) {
+        handleResetBulkUpload()
+        setBulkUploadOpen(false)
+      }
+    } else {
+      // Si está abriendo o no hay datos, abrir/cerrar normalmente
+      setBulkUploadOpen(open)
+    }
+  }
+
   const activeFiltersCount = [
     filters.status !== "all",
     filters.approvalStatus !== "all",
@@ -387,9 +496,32 @@ export default function CuentasPagarPage() {
           <h1 className="text-3xl font-bold tracking-tight">Cuentas por Pagar</h1>
           <p className="text-muted-foreground">Gestiona las facturas y pagos a proveedores</p>
         </div>
-        <Button onClick={handleNuevaCuenta}>
-          <Plus className="mr-2 h-4 w-4" /> Nueva Cuenta
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={handleDownloadTemplate}
+            disabled={downloadingTemplate}
+            className="gap-2"
+          >
+            {downloadingTemplate ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Descargando...
+              </>
+            ) : (
+              <>
+                <FileDown className="h-4 w-4" />
+                Plantilla Excel
+              </>
+            )}
+          </Button>
+          <Button variant="outline" onClick={() => setBulkUploadOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" /> Carga Masiva
+          </Button>
+          <Button onClick={handleNuevaCuenta}>
+            <Plus className="mr-2 h-4 w-4" /> Nueva Cuenta
+          </Button>
+        </div>
       </div>
 
       {/* Dashboard Cards */}
@@ -783,6 +915,24 @@ export default function CuentasPagarPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Diálogo de Carga Masiva */}
+      <BulkUploadDialog
+        open={bulkUploadOpen}
+        onOpenChange={handleCloseBulkUpload}
+        title="Carga Masiva de Cuentas por Pagar"
+        description="Sube un archivo Excel con múltiples cuentas por pagar para importarlas en el sistema"
+        archivo={bulkUploadFile}
+        onFileChange={handleFileChange}
+        uploadResponse={uploadResponse}
+        validacionResultado={validacionResultado}
+        importacionResultado={importacionResultado}
+        onUpload={handleUpload}
+        onValidate={handleValidate}
+        onImport={handleImport}
+        onReset={handleResetBulkUpload}
+        loading={loading}
+      />
     </div>
   )
 }

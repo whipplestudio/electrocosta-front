@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   CalendarIcon,
   Plus,
@@ -33,6 +34,11 @@ import {
   ChevronDown,
   Trash2,
   Users,
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  XCircle,
+  Info,
 } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -42,8 +48,10 @@ import { AccountReceivable, AccountReceivableStatus } from "@/types/accounts-rec
 import { clientsService, type Client } from "@/services/clients.service"
 import { categoriesService, type Category } from "@/services/categories.service"
 import { projectsService, type Project } from "@/services/projects.service"
+import { accountsReceivableUploadService } from "@/services/accounts-receivable-upload.service"
 import apiClient from "@/lib/api-client"
 import { RouteProtection } from "@/components/route-protection"
+import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
 
 // Helper para mapear estados del backend al frontend
 const mapEstado = (status: AccountReceivableStatus): string => {
@@ -107,6 +115,15 @@ function CuentasCobrarPageContent() {
   const [loadingSelects, setLoadingSelects] = useState(false)
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  
+  // Estados para carga masiva
+  const [showBulkUploadDialog, setShowBulkUploadDialog] = useState(false)
+  const [archivo, setArchivo] = useState<File | null>(null)
+  const [uploadResponse, setUploadResponse] = useState<any>(null)
+  const [validacionResultado, setValidacionResultado] = useState<any>(null)
+  const [importacionResultado, setImportacionResultado] = useState<any>(null)
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false)
+  const [loading, setLoading] = useState(false)
   
   // Estados del formulario
   const [formData, setFormData] = useState({
@@ -411,6 +428,106 @@ function CuentasCobrarPageContent() {
     }
   }
 
+  // Funciones para carga masiva
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setArchivo(e.target.files[0])
+      setUploadResponse(null)
+      setValidacionResultado(null)
+      setImportacionResultado(null)
+    }
+  }
+
+  const handleUploadFile = async () => {
+    if (!archivo) {
+      toast.error('Por favor selecciona un archivo')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const response = await accountsReceivableUploadService.subirArchivo(archivo)
+      setUploadResponse(response)
+      toast.success(`Archivo cargado: ${response.registrosDetectados} registros detectados`)
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Error al subir el archivo')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleValidate = async () => {
+    if (!uploadResponse) {
+      toast.error('Primero debes subir un archivo')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const resultado = await accountsReceivableUploadService.validarDatos(uploadResponse.uploadId)
+      setValidacionResultado(resultado)
+      
+      if (resultado.puedeImportar) {
+        toast.success(`Validación completada: ${resultado.registrosValidos} registros válidos`)
+      } else {
+        toast.warning(`Validación completada con errores: ${resultado.registrosInvalidos} registros inválidos`)
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Error al validar los datos')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleImport = async () => {
+    if (!validacionResultado || !validacionResultado.puedeImportar) {
+      toast.error('Los datos deben estar validados antes de importar')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const resultado = await accountsReceivableUploadService.importarDatos(uploadResponse.uploadId)
+      setImportacionResultado(resultado)
+      toast.success(`Importación completada: ${resultado.registrosImportados} cuentas importadas`)
+      
+      // Recargar datos
+      await handleApplyFilters()
+      await fetchDashboard()
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Error al importar los datos')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDownloadTemplate = async () => {
+    setDownloadingTemplate(true)
+    try {
+      const blob = await accountsReceivableUploadService.descargarPlantilla()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'plantilla_cuentas_cobrar.xlsx'
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast.success('Plantilla descargada exitosamente')
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Error al descargar la plantilla')
+    } finally {
+      setDownloadingTemplate(false)
+    }
+  }
+
+  const handleResetBulkUpload = () => {
+    setArchivo(null)
+    setUploadResponse(null)
+    setValidacionResultado(null)
+    setImportacionResultado(null)
+  }
+
   // Mostrar loading state
   if (isLoading && accounts.length === 0) {
     return (
@@ -428,10 +545,66 @@ function CuentasCobrarPageContent() {
           <h1 className="text-3xl font-bold">Cuentas por Cobrar</h1>
           <p className="text-muted-foreground">Gestiona las cuentas pendientes de cobro</p>
         </div>
-        <Button onClick={handleNuevaCuenta}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nueva Cuenta
-        </Button>
+        <div className="flex gap-3">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  onClick={handleDownloadTemplate}
+                  disabled={downloadingTemplate}
+                  className="gap-2"
+                >
+                  {downloadingTemplate ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Descargando...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4" />
+                      Plantilla Excel
+                    </>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
+                <div className="space-y-1">
+                  <p className="font-semibold text-white dark:text-slate-900">Plantilla para carga masiva</p>
+                  <p className="text-xs text-slate-200 dark:text-slate-700">
+                    Descarga el archivo Excel con el formato correcto para importar múltiples cuentas por cobrar a la vez
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="outline"
+                  onClick={() => setShowBulkUploadDialog(true)}
+                  className="gap-2"
+                >
+                  <Upload className="h-4 w-4" />
+                  Carga Masiva
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
+                <div className="space-y-1">
+                  <p className="font-semibold text-white dark:text-slate-900">Importación masiva de cuentas por cobrar</p>
+                  <p className="text-xs text-slate-200 dark:text-slate-700">
+                    Sube un archivo Excel con múltiples cuentas por cobrar a la vez
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <Button onClick={handleNuevaCuenta}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nueva Cuenta
+          </Button>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -1174,6 +1347,24 @@ function CuentasCobrarPageContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de Carga Masiva */}
+      <BulkUploadDialog
+        open={showBulkUploadDialog}
+        onOpenChange={setShowBulkUploadDialog}
+        title="Carga Masiva de Cuentas por Cobrar"
+        description="Importa múltiples cuentas por cobrar desde un archivo Excel. Sigue el formato de la plantilla descargable."
+        archivo={archivo}
+        uploadResponse={uploadResponse}
+        validacionResultado={validacionResultado}
+        importacionResultado={importacionResultado}
+        loading={loading}
+        onFileChange={handleFileChange}
+        onUpload={handleUploadFile}
+        onValidate={handleValidate}
+        onImport={handleImport}
+        onReset={handleResetBulkUpload}
+      />
     </div>
   )
 }

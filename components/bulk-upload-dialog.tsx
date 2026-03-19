@@ -45,8 +45,25 @@ export function BulkUploadDialog({
     onOpenChange(false)
   }
 
+  const handleOpenChange = (newOpen: boolean) => {
+    // Si está cerrando el modal y hay archivo cargado o datos en proceso
+    if (!newOpen && (archivo || uploadResponse || validacionResultado || importacionResultado)) {
+      const confirmar = window.confirm(
+        '¿Estás seguro de que quieres cerrar? Se perderá el progreso actual.'
+      )
+      
+      if (confirmar) {
+        onReset()
+        onOpenChange(false)
+      }
+    } else {
+      // Si está abriendo o no hay datos, abrir/cerrar normalmente
+      onOpenChange(newOpen)
+    }
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Plus, Edit, Trash2, CalendarIcon, TrendingDown, AlertCircle, Clock, CheckCircle, XCircle, Loader2, Upload, FileDown } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -440,23 +441,6 @@ export default function CuentasPagarPage() {
     setImportacionResultado(null)
   }
 
-  const handleCloseBulkUpload = (open: boolean) => {
-    // Si está cerrando el modal y hay archivo cargado o datos en proceso
-    if (!open && (bulkUploadFile || uploadResponse || validacionResultado || importacionResultado)) {
-      const confirmar = window.confirm(
-        '¿Estás seguro de que quieres cerrar? Se perderá el progreso actual.'
-      )
-      
-      if (confirmar) {
-        handleResetBulkUpload()
-        setBulkUploadOpen(false)
-      }
-    } else {
-      // Si está abriendo o no hay datos, abrir/cerrar normalmente
-      setBulkUploadOpen(open)
-    }
-  }
-
   const activeFiltersCount = [
     filters.status !== "all",
     filters.approvalStatus !== "all",
@@ -497,27 +481,55 @@ export default function CuentasPagarPage() {
           <p className="text-muted-foreground">Gestiona las facturas y pagos a proveedores</p>
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            onClick={handleDownloadTemplate}
-            disabled={downloadingTemplate}
-            className="gap-2"
-          >
-            {downloadingTemplate ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Descargando...
-              </>
-            ) : (
-              <>
-                <FileDown className="h-4 w-4" />
-                Plantilla Excel
-              </>
-            )}
-          </Button>
-          <Button variant="outline" onClick={() => setBulkUploadOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" /> Carga Masiva
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  onClick={handleDownloadTemplate}
+                  disabled={downloadingTemplate}
+                  className="gap-2"
+                >
+                  {downloadingTemplate ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Descargando...
+                    </>
+                  ) : (
+                    <>
+                      <FileDown className="h-4 w-4" />
+                      Plantilla Excel
+                    </>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
+                <div className="space-y-1">
+                  <p className="font-semibold text-white dark:text-slate-900">Plantilla para carga masiva</p>
+                  <p className="text-xs text-slate-200 dark:text-slate-700">
+                    Descarga el archivo Excel con el formato correcto para importar múltiples cuentas por pagar a la vez
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" onClick={() => setBulkUploadOpen(true)}>
+                  <Upload className="mr-2 h-4 w-4" /> Carga Masiva
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
+                <div className="space-y-1">
+                  <p className="font-semibold text-white dark:text-slate-900">Importación masiva de cuentas por pagar</p>
+                  <p className="text-xs text-slate-200 dark:text-slate-700">
+                    Sube un archivo Excel con múltiples cuentas por pagar a la vez
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Button onClick={handleNuevaCuenta}>
             <Plus className="mr-2 h-4 w-4" /> Nueva Cuenta
           </Button>
@@ -919,7 +931,7 @@ export default function CuentasPagarPage() {
       {/* Diálogo de Carga Masiva */}
       <BulkUploadDialog
         open={bulkUploadOpen}
-        onOpenChange={handleCloseBulkUpload}
+        onOpenChange={setBulkUploadOpen}
         title="Carga Masiva de Cuentas por Pagar"
         description="Sube un archivo Excel con múltiples cuentas por pagar para importarlas en el sistema"
         archivo={bulkUploadFile}

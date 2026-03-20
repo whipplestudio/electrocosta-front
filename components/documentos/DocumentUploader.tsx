@@ -80,7 +80,7 @@ export function DocumentUploader({
       if (entidadId) formData.append("entidadId", entidadId)
       formData.append("esPublico", "false")
 
-      const response = await fetch("https://electrocosta-api-328521246433.us-west4.run.app/api/v1/documentos/upload", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/documentos/upload`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("accessToken")}`,

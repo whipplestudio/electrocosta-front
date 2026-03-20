@@ -131,7 +131,7 @@ export default function ProyectosPage() {
   const cargarUsuarios = useCallback(async () => {
     try {
       setLoadingUsuarios(true)
-      const response = await fetch('http://localhost:3001/api/v1/users/simple/list', {
+      const response = await fetch('https://electrocosta-api-328521246433.us-west4.run.app/api/v1/users/simple/list', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }

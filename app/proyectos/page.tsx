@@ -131,7 +131,7 @@ export default function ProyectosPage() {
   const cargarUsuarios = useCallback(async () => {
     try {
       setLoadingUsuarios(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/users/simple/list`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/simple/list`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }

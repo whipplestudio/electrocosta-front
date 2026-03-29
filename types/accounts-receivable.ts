@@ -189,10 +189,20 @@ export interface CreateFollowUpDto {
 // ============================================
 
 export interface AccountReceivableFilterDto {
+  search?: string;
   clientId?: string;
+  projectId?: string;
+  categoryId?: string;
   status?: AccountReceivableStatus;
+  invoiceNumber?: string;
   dateFrom?: string;
   dateTo?: string;
+  dueDateFrom?: string;
+  dueDateTo?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  minBalance?: number;
+  maxBalance?: number;
   page?: number;
   limit?: number;
 }
@@ -214,6 +224,7 @@ export interface DashboardData {
     totalReceivable: string | number;
     totalOverdue: string | number;
     totalUpcoming: string | number;
+    totalPaid: string | number;
     totalAccounts: number;
     overdueAccounts: number;
     upcomingAccounts: number;

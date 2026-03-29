@@ -16,6 +16,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -101,12 +109,24 @@ function CuentasCobrarPageContent() {
   
   // Estados para filtros
   const [filters, setFilters] = useState({
+    search: "",
     clientId: "all",
+    projectId: "all",
+    categoryId: "all",
     status: "all" as AccountReceivableStatus | "all",
+    invoiceNumber: "",
     dateFrom: undefined as Date | undefined,
     dateTo: undefined as Date | undefined,
+    dueDateFrom: undefined as Date | undefined,
+    dueDateTo: undefined as Date | undefined,
+    minAmount: "",
+    maxAmount: "",
+    minBalance: "",
+    maxBalance: "",
   })
   const [isFilterExpanded, setIsFilterExpanded] = useState(true)
+  const [filterProjects, setFilterProjects] = useState<any[]>([])
+  const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false)
   
   // Estados para clientes, categorías y proyectos
   const [clients, setClients] = useState<Client[]>([])
@@ -251,6 +271,39 @@ function CuentasCobrarPageContent() {
     }
   }
 
+  // Cargar proyectos cuando cambie el cliente en filtros
+  useEffect(() => {
+    if (filters.clientId && filters.clientId !== "all") {
+      loadProjectsForFilter(filters.clientId)
+    } else {
+      loadAllProjectsForFilter()
+    }
+  }, [filters.clientId])
+
+  // Cargar proyectos para filtros (filtrados por cliente si se proporciona)
+  const loadProjectsForFilter = async (clientId: string) => {
+    try {
+      const response = await apiClient.get<any>('/carga/proyectos/listado', { 
+        params: { clientId } 
+      })
+      const proyectos = response.data.data || response.data || []
+      setFilterProjects(proyectos)
+    } catch (error) {
+      console.error('Error al cargar proyectos para filtros:', error)
+    }
+  }
+
+  // Cargar todos los proyectos sin filtro de cliente
+  const loadAllProjectsForFilter = async () => {
+    try {
+      const response = await apiClient.get<any>('/carga/proyectos/listado')
+      const proyectos = response.data.data || response.data || []
+      setFilterProjects(proyectos)
+    } catch (error) {
+      console.error('Error al cargar todos los proyectos:', error)
+    }
+  }
+
   // Cargar datos al montar el componente
   useEffect(() => {
     handleApplyFilters()
@@ -262,23 +315,46 @@ function CuentasCobrarPageContent() {
   const handleApplyFilters = async () => {
     const filterDto: any = {}
     
+    if (filters.search) filterDto.search = filters.search
     if (filters.clientId && filters.clientId !== "all") filterDto.clientId = filters.clientId
+    if (filters.projectId && filters.projectId !== "all") filterDto.projectId = filters.projectId
+    if (filters.categoryId && filters.categoryId !== "all") filterDto.categoryId = filters.categoryId
     if (filters.status && filters.status !== "all") filterDto.status = filters.status
+    if (filters.invoiceNumber) filterDto.invoiceNumber = filters.invoiceNumber
     if (filters.dateFrom) filterDto.dateFrom = filters.dateFrom.toISOString()
     if (filters.dateTo) filterDto.dateTo = filters.dateTo.toISOString()
+    if (filters.dueDateFrom) filterDto.dueDateFrom = filters.dueDateFrom.toISOString()
+    if (filters.dueDateTo) filterDto.dueDateTo = filters.dueDateTo.toISOString()
+    if (filters.minAmount) filterDto.minAmount = parseFloat(filters.minAmount)
+    if (filters.maxAmount) filterDto.maxAmount = parseFloat(filters.maxAmount)
+    if (filters.minBalance) filterDto.minBalance = parseFloat(filters.minBalance)
+    if (filters.maxBalance) filterDto.maxBalance = parseFloat(filters.maxBalance)
     
     await fetchAccounts(filterDto)
+    await fetchDashboard()
   }
 
   // Limpiar filtros
   const handleClearFilters = async () => {
     setFilters({
+      search: "",
       clientId: "all",
+      projectId: "all",
+      categoryId: "all",
       status: "all",
+      invoiceNumber: "",
       dateFrom: undefined,
       dateTo: undefined,
+      dueDateFrom: undefined,
+      dueDateTo: undefined,
+      minAmount: "",
+      maxAmount: "",
+      minBalance: "",
+      maxBalance: "",
     })
+    setFilterProjects([])
     await fetchAccounts()
+    await fetchDashboard()
   }
 
   // Cálculos basados en los datos del backend
@@ -608,206 +684,430 @@ function CuentasCobrarPageContent() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total por Cobrar</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${dashboard?.totalPending?.toLocaleString() || 0}</div>
-            <p className="text-xs text-muted-foreground">{accounts.length} cuentas activas</p>
+            <div className="text-2xl font-bold">${Number(dashboard?.summary?.totalReceivable || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">{dashboard?.summary?.totalAccounts || 0} cuentas</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cuentas Vencidas</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Cobrado</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.overdueCount || 0}</div>
-            <p className="text-xs text-muted-foreground">Requieren atención inmediata</p>
+            <div className="text-2xl font-bold text-green-600">${Number(dashboard?.summary?.totalPaid || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Monto cobrado</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Vencidas</CardTitle>
+            <AlertCircle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">${Number(dashboard?.summary?.totalOverdue || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">{dashboard?.summary?.overdueAccounts || 0} cuentas</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Próximas a Vencer</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <Clock className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{proximasVencer}</div>
-            <p className="text-xs text-muted-foreground">En los próximos 7 días</p>
+            <div className="text-2xl font-bold text-yellow-600">${Number(dashboard?.summary?.totalUpcoming || 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">{dashboard?.summary?.upcomingAccounts || 0} cuentas</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Facturas</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+            <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{accounts.length}</div>
-            <p className="text-xs text-muted-foreground">Emitidas este mes</p>
+            <div className="text-2xl font-bold">{dashboard?.summary?.totalAccounts || 0}</div>
+            <p className="text-xs text-muted-foreground">Facturas emitidas</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filtros Mejorados */}
-      <Card>
-        <CardHeader className="cursor-pointer" onClick={() => setIsFilterExpanded(!isFilterExpanded)}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Filter className="h-5 w-5" />
-              <CardTitle>Filtros de Búsqueda</CardTitle>
-              {(filters.clientId !== "all" || filters.status !== "all" || filters.dateFrom || filters.dateTo) && (
-                <Badge variant="secondary" className="ml-2">
-                  {[filters.clientId !== "all" ? filters.clientId : null, filters.status !== "all" ? filters.status : null, filters.dateFrom, filters.dateTo].filter(Boolean).length} activos
-                </Badge>
-              )}
-            </div>
-            <ChevronDown className={`h-5 w-5 transition-transform ${isFilterExpanded ? 'rotate-180' : ''}`} />
+      {/* Barra de Filtros Compacta */}
+      <div className="bg-card border rounded-lg p-4 space-y-3">
+        {/* Fila 1: Filtros Rápidos + Botón Avanzados */}
+        <div className="flex flex-wrap items-end gap-3">
+          {/* Búsqueda */}
+          <div className="flex-1 min-w-[250px]">
+            <Input
+              placeholder="🔍 Buscar cliente, factura o descripción..."
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              className="h-10"
+            />
           </div>
-        </CardHeader>
-        {isFilterExpanded && (
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Filtro por Cliente */}
-              <div className="space-y-2">
-                <Label htmlFor="clientFilter">Cliente</Label>
-                <Select 
-                  value={filters.clientId} 
-                  onValueChange={(value) => setFilters({ ...filters, clientId: value })}
-                >
-                  <SelectTrigger id="clientFilter">
-                    <SelectValue placeholder="Todos los clientes" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los clientes</SelectItem>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              {/* Filtro por Estado */}
-              <div className="space-y-2">
-                <Label htmlFor="statusFilter">Estado</Label>
-                <Select 
-                  value={filters.status} 
-                  onValueChange={(value) => setFilters({ ...filters, status: value as AccountReceivableStatus | "all" })}
-                >
-                  <SelectTrigger id="statusFilter">
-                    <SelectValue placeholder="Todos los estados" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los estados</SelectItem>
-                    <SelectItem value={AccountReceivableStatus.PENDING}>
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-yellow-500" />
-                        Pendiente
-                      </div>
-                    </SelectItem>
-                    <SelectItem value={AccountReceivableStatus.PARTIAL}>
-                      <div className="flex items-center gap-2">
-                        <TrendingUp className="h-4 w-4 text-blue-500" />
-                        Parcial
-                      </div>
-                    </SelectItem>
-                    <SelectItem value={AccountReceivableStatus.PAID}>
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                        Pagado
-                      </div>
-                    </SelectItem>
-                    <SelectItem value={AccountReceivableStatus.OVERDUE}>
-                      <div className="flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 text-red-500" />
-                        Vencido
-                      </div>
-                    </SelectItem>
-                    <SelectItem value={AccountReceivableStatus.CANCELLED}>
-                      <div className="flex items-center gap-2">
-                        <Trash2 className="h-4 w-4 text-gray-500" />
-                        Cancelado
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              {/* Filtro por Fecha Desde */}
-              <div className="space-y-2">
-                <Label>Fecha Desde</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
+
+          {/* Cliente */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Cliente</Label>
+            <Select 
+              value={filters.clientId} 
+              onValueChange={(value) => setFilters({ ...filters, clientId: value })}
+            >
+              <SelectTrigger className="w-[180px] h-10">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {clients.map((client) => (
+                  <SelectItem key={client.id} value={client.id}>
+                    {client.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Estado */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Estado</Label>
+            <Select 
+              value={filters.status} 
+              onValueChange={(value) => setFilters({ ...filters, status: value as AccountReceivableStatus | "all" })}
+            >
+              <SelectTrigger className="w-[150px] h-10">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value={AccountReceivableStatus.PENDING}>Pendiente</SelectItem>
+                <SelectItem value={AccountReceivableStatus.PARTIAL}>Parcial</SelectItem>
+                <SelectItem value={AccountReceivableStatus.PAID}>Pagado</SelectItem>
+                <SelectItem value={AccountReceivableStatus.OVERDUE}>Vencido</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Botones de Acción */}
+          <div className="flex items-center gap-2 ml-auto">
+            <Sheet open={isAdvancedFiltersOpen} onOpenChange={setIsAdvancedFiltersOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm" className="h-10">
+                  <Filter className="h-4 w-4 mr-2" />
+                  Más Filtros
+                  {(() => {
+                    const count = [
+                      filters.projectId !== "all",
+                      filters.categoryId !== "all",
+                      filters.invoiceNumber,
+                      filters.dateFrom,
+                      filters.dueDateFrom,
+                      filters.minAmount,
+                      filters.minBalance,
+                    ].filter(Boolean).length
+                    return count > 0 && <Badge variant="secondary" className="ml-2">{count}</Badge>
+                  })()}
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="w-[400px] sm:max-w-[400px] overflow-y-auto">
+                <SheetHeader className="px-6 pt-6">
+                  <SheetTitle className="text-xl">Filtros Avanzados</SheetTitle>
+                  <SheetDescription className="text-sm">
+                    Configura filtros adicionales
+                  </SheetDescription>
+                </SheetHeader>
+                
+                <div className="space-y-5 mt-6 px-6 pb-6">
+                  {/* Proyecto */}
+                  <div className="space-y-2.5">
+                    <Label htmlFor="advProjectFilter" className="text-sm font-medium">
+                      Proyecto
+                      {filters.clientId !== "all" && (
+                        <span className="text-xs text-muted-foreground ml-2">(del cliente seleccionado)</span>
+                      )}
+                    </Label>
+                    <Select 
+                      value={filters.projectId} 
+                      onValueChange={(value) => setFilters({ ...filters, projectId: value })}
+                    >
+                      <SelectTrigger id="advProjectFilter" className="h-10">
+                        <SelectValue placeholder="Todos los proyectos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos los proyectos</SelectItem>
+                        {filterProjects.map((project) => (
+                          <SelectItem key={project.id} value={project.id}>
+                            {project.nombreProyecto || project.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Categoría */}
+                  <div className="space-y-2.5">
+                    <Label htmlFor="advCategoryFilter" className="text-sm font-medium">Categoría</Label>
+                    <Select 
+                      value={filters.categoryId} 
+                      onValueChange={(value) => setFilters({ ...filters, categoryId: value })}
+                    >
+                      <SelectTrigger id="advCategoryFilter" className="h-10">
+                        <SelectValue placeholder="Todas las categorías" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas las categorías</SelectItem>
+                        {categories.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Folio de Factura */}
+                  <div className="space-y-2.5">
+                    <Label htmlFor="advInvoiceFilter" className="text-sm font-medium">Folio de Factura</Label>
+                    <Input
+                      id="advInvoiceFilter"
+                      placeholder="Ej: FAC-001"
+                      value={filters.invoiceNumber}
+                      onChange={(e) => setFilters({ ...filters, invoiceNumber: e.target.value })}
+                      className="h-10"
+                    />
+                  </div>
+
+                  {/* Fechas de Emisión */}
+                  <div className="space-y-2.5">
+                    <Label className="text-sm font-medium">Fecha de Emisión</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="h-10 justify-start text-left text-sm">
+                            <CalendarIcon className="h-4 w-4 mr-2" />
+                            {filters.dateFrom ? format(filters.dateFrom, "dd/MM/yy", { locale: es }) : "Desde"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar 
+                            mode="single" 
+                            selected={filters.dateFrom} 
+                            onSelect={(date) => setFilters({ ...filters, dateFrom: date })}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="h-10 justify-start text-left text-sm">
+                            <CalendarIcon className="h-4 w-4 mr-2" />
+                            {filters.dateTo ? format(filters.dateTo, "dd/MM/yy", { locale: es }) : "Hasta"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar 
+                            mode="single" 
+                            selected={filters.dateTo} 
+                            onSelect={(date) => setFilters({ ...filters, dateTo: date })}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+
+                  {/* Fechas de Vencimiento */}
+                  <div className="space-y-2.5">
+                    <Label className="text-sm font-medium">Fecha de Vencimiento</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="h-10 justify-start text-left text-sm">
+                            <CalendarIcon className="h-4 w-4 mr-2" />
+                            {filters.dueDateFrom ? format(filters.dueDateFrom, "dd/MM/yy", { locale: es }) : "Desde"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar 
+                            mode="single" 
+                            selected={filters.dueDateFrom} 
+                            onSelect={(date) => setFilters({ ...filters, dueDateFrom: date })}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="h-10 justify-start text-left text-sm">
+                            <CalendarIcon className="h-4 w-4 mr-2" />
+                            {filters.dueDateTo ? format(filters.dueDateTo, "dd/MM/yy", { locale: es }) : "Hasta"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar 
+                            mode="single" 
+                            selected={filters.dueDateTo} 
+                            onSelect={(date) => setFilters({ ...filters, dueDateTo: date })}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+
+                  {/* Rangos de Monto */}
+                  <div className="space-y-2.5">
+                    <Label className="text-sm font-medium">Monto Total</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input
+                        type="number"
+                        placeholder="Mínimo"
+                        value={filters.minAmount}
+                        onChange={(e) => setFilters({ ...filters, minAmount: e.target.value })}
+                        className="h-10"
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Máximo"
+                        value={filters.maxAmount}
+                        onChange={(e) => setFilters({ ...filters, maxAmount: e.target.value })}
+                        className="h-10"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Rangos de Saldo */}
+                  <div className="space-y-2.5">
+                    <Label className="text-sm font-medium">Saldo Pendiente</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input
+                        type="number"
+                        placeholder="Mínimo"
+                        value={filters.minBalance}
+                        onChange={(e) => setFilters({ ...filters, minBalance: e.target.value })}
+                        className="h-10"
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Máximo"
+                        value={filters.maxBalance}
+                        onChange={(e) => setFilters({ ...filters, maxBalance: e.target.value })}
+                        className="h-10"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Botones */}
+                  <div className="flex gap-3 pt-6 mt-2 border-t">
                     <Button 
                       variant="outline" 
-                      className={`w-full justify-start text-left font-normal ${!filters.dateFrom ? 'text-muted-foreground' : ''}`}
+                      className="flex-1 h-11"
+                      onClick={() => {
+                        handleClearFilters()
+                        setIsAdvancedFiltersOpen(false)
+                      }}
                     >
-                      <CalendarIcon className="h-4 w-4 mr-2" />
-                      {filters.dateFrom ? format(filters.dateFrom, "dd/MM/yyyy", { locale: es }) : "Seleccionar fecha"}
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Limpiar
                     </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar 
-                      mode="single" 
-                      selected={filters.dateFrom} 
-                      onSelect={(date) => setFilters({ ...filters, dateFrom: date })}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              
-              {/* Filtro por Fecha Hasta */}
-              <div className="space-y-2">
-                <Label>Fecha Hasta</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
                     <Button 
-                      variant="outline" 
-                      className={`w-full justify-start text-left font-normal ${!filters.dateTo ? 'text-muted-foreground' : ''}`}
+                      className="flex-1 h-11"
+                      onClick={() => {
+                        handleApplyFilters()
+                        setIsAdvancedFiltersOpen(false)
+                      }}
                     >
-                      <CalendarIcon className="h-4 w-4 mr-2" />
-                      {filters.dateTo ? format(filters.dateTo, "dd/MM/yyyy", { locale: es }) : "Seleccionar fecha"}
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Aplicar
                     </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar 
-                      mode="single" 
-                      selected={filters.dateTo} 
-                      onSelect={(date) => setFilters({ ...filters, dateTo: date })}
-                      initialFocus
-                      disabled={(date) => filters.dateFrom ? date < filters.dateFrom : false}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <Button 
+              size="sm" 
+              onClick={handleApplyFilters}
+              disabled={isLoading}
+              className="h-10"
+            >
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Filter className="h-4 w-4" />}
+            </Button>
             
-            {/* Botones de Acción */}
-            <div className="flex justify-end gap-2 pt-2 border-t">
-              <Button 
-                variant="outline" 
-                onClick={handleClearFilters}
-                disabled={filters.clientId === "all" && filters.status === "all" && !filters.dateFrom && !filters.dateTo}
-              >
-                Limpiar Filtros
-              </Button>
-              <Button onClick={handleApplyFilters} disabled={isLoading}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                <Filter className="mr-2 h-4 w-4" />
-                Aplicar Filtros
-              </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={handleClearFilters}
+              className="h-10"
+            >
+              <XCircle className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Fila 2: Chips de Filtros Activos */}
+        {(() => {
+          const chips: { label: string; onRemove: () => void }[] = []
+          
+          if (filters.search) chips.push({ 
+            label: `Búsqueda: ${filters.search}`,
+            onRemove: () => setFilters({ ...filters, search: '' })
+          })
+          if (filters.clientId !== "all") {
+            const client = clients.find(c => c.id === filters.clientId)
+            chips.push({ 
+              label: `Cliente: ${client?.name}`,
+              onRemove: () => setFilters({ ...filters, clientId: 'all' })
+            })
+          }
+          if (filters.projectId !== "all") {
+            const project = filterProjects.find(p => p.id === filters.projectId)
+            chips.push({ 
+              label: `Proyecto: ${project?.nombreProyecto || project?.name}`,
+              onRemove: () => setFilters({ ...filters, projectId: 'all' })
+            })
+          }
+          if (filters.categoryId !== "all") {
+            const category = categories.find(c => c.id === filters.categoryId)
+            chips.push({ 
+              label: `Categoría: ${category?.name}`,
+              onRemove: () => setFilters({ ...filters, categoryId: 'all' })
+            })
+          }
+          if (filters.status !== "all") {
+            chips.push({ 
+              label: `Estado: ${filters.status}`,
+              onRemove: () => setFilters({ ...filters, status: 'all' })
+            })
+          }
+          if (filters.invoiceNumber) {
+            chips.push({ 
+              label: `Factura: ${filters.invoiceNumber}`,
+              onRemove: () => setFilters({ ...filters, invoiceNumber: '' })
+            })
+          }
+
+          return chips.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {chips.map((chip, index) => (
+                <Badge 
+                  key={index}
+                  variant="secondary" 
+                  className="px-2 py-1 cursor-pointer hover:bg-destructive/10"
+                  onClick={chip.onRemove}
+                >
+                  {chip.label}
+                  <XCircle className="ml-1.5 h-3 w-3" />
+                </Badge>
+              ))}
             </div>
-          </CardContent>
-        )}
-      </Card>
+          )
+        })()}
+      </div>
 
       {/* Tabla de Cuentas */}
       <Card>

@@ -151,6 +151,7 @@ function CuentasCobrarPageContent() {
     projectId: '',
     invoiceNumber: '',
     iva: '16',
+    ivaType: 'percentage' as 'percentage' | 'amount', // Nuevo: tipo de IVA
     subtotal: '',
     amount: '',
     categoryId: '',
@@ -208,10 +209,20 @@ function CuentasCobrarPageContent() {
       const updated = { ...prev, [field]: unformatted }
       
       // Si se modificó subtotal o iva, calcular amount con IVA
-      if (field === 'subtotal' || field === 'iva') {
+      if (field === 'subtotal' || field === 'iva' || field === 'ivaType') {
         const subtotal = parseFloat(field === 'subtotal' ? unformatted : updated.subtotal) || 0
-        const ivaPercent = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
-        const ivaAmount = subtotal * (ivaPercent / 100)
+        const ivaValue = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
+        const ivaType = field === 'ivaType' ? value : updated.ivaType
+        
+        let ivaAmount = 0
+        if (ivaType === 'percentage') {
+          // IVA como porcentaje
+          ivaAmount = subtotal * (ivaValue / 100)
+        } else {
+          // IVA como monto fijo en pesos
+          ivaAmount = ivaValue
+        }
+        
         updated.amount = (subtotal + ivaAmount).toString()
       }
       
@@ -393,6 +404,7 @@ function CuentasCobrarPageContent() {
       projectId: '',
       invoiceNumber: '',
       iva: '16',
+      ivaType: 'percentage',
       subtotal: '',
       amount: '',
       categoryId: '',
@@ -410,12 +422,19 @@ function CuentasCobrarPageContent() {
 
   const handleEditarCuenta = (cuenta: AccountReceivable) => {
     setSelectedCuenta(cuenta)
+    
+    // Detectar tipo de IVA basándose en el valor
+    // Heurística: si IVA <= 100 → porcentaje, si IVA > 100 → monto fijo
+    const ivaValue = parseFloat(cuenta.iva?.toString() || '16')
+    const detectedIvaType: 'percentage' | 'amount' = ivaValue <= 100 ? 'percentage' : 'amount'
+    
     // Pre-llenar formulario con datos existentes
     setFormData({
       clientId: cuenta.clientId,
       projectId: cuenta.projectId || '',
       invoiceNumber: cuenta.invoiceNumber,
       iva: cuenta.iva?.toString() || '16',
+      ivaType: detectedIvaType,
       subtotal: cuenta.subtotal?.toString() || '',
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || '',
@@ -565,11 +584,53 @@ function CuentasCobrarPageContent() {
     try {
       const resultado = await accountsReceivableUploadService.importarDatos(uploadResponse.uploadId)
       setImportacionResultado(resultado)
-      toast.success(`Importación completada: ${resultado.registrosImportados} cuentas importadas`)
       
-      // Recargar datos
-      await handleApplyFilters()
-      await fetchDashboard()
+      // Mostrar resultado según lo que pasó
+      const totalRegistros = resultado.registrosImportados + resultado.registrosOmitidos
+      
+      if (resultado.registrosImportados > 0 && resultado.registrosOmitidos === 0) {
+        // Éxito total
+        toast.success(`✅ Importación exitosa: ${resultado.registrosImportados} de ${totalRegistros} cuentas importadas`)
+      } else if (resultado.registrosImportados > 0 && resultado.registrosOmitidos > 0) {
+        // Éxito parcial
+        toast.warning(
+          `⚠️ Importación parcial: ${resultado.registrosImportados} importadas, ${resultado.registrosOmitidos} con errores. Revisa los detalles.`,
+          { duration: 6000 }
+        )
+        
+        // Mostrar errores específicos
+        if (resultado.errores && resultado.errores.length > 0) {
+          resultado.errores.forEach((error, index) => {
+            if (index < 3) { // Mostrar máximo 3 errores en toast
+              toast.error(error, { duration: 8000 })
+            }
+          })
+          if (resultado.errores.length > 3) {
+            toast.error(`... y ${resultado.errores.length - 3} errores más. Revisa el resumen completo.`, { duration: 6000 })
+          }
+        }
+      } else if (resultado.registrosImportados === 0 && resultado.registrosOmitidos > 0) {
+        // Fallo total
+        toast.error(`❌ Error: Ninguna cuenta pudo ser importada. ${resultado.registrosOmitidos} registros con errores.`, { duration: 6000 })
+        
+        // Mostrar errores específicos
+        if (resultado.errores && resultado.errores.length > 0) {
+          resultado.errores.forEach((error, index) => {
+            if (index < 3) { // Mostrar máximo 3 errores en toast
+              toast.error(error, { duration: 8000 })
+            }
+          })
+          if (resultado.errores.length > 3) {
+            toast.error(`... y ${resultado.errores.length - 3} errores más.`, { duration: 6000 })
+          }
+        }
+      }
+      
+      // Recargar datos solo si se importó algo
+      if (resultado.registrosImportados > 0) {
+        await handleApplyFilters()
+        await fetchDashboard()
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Error al importar los datos')
     } finally {
@@ -1201,6 +1262,7 @@ function CuentasCobrarPageContent() {
             projectId: '',
             invoiceNumber: '',
             iva: '16',
+            ivaType: 'percentage',
             subtotal: '',
             amount: '',
             categoryId: '',
@@ -1315,22 +1377,39 @@ function CuentasCobrarPageContent() {
               />
             </div>
             {/* Campos de IVA y Monto */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-primary">💰 Monto</h3>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="iva">IVA (%) *</Label>
-                  <Input 
-                    id="iva"
-                    type="text" 
-                    placeholder="16"
-                    value={formData.iva}
-                    onChange={(e) => handlePresupuestoChange('iva', e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Porcentaje de IVA
-                  </p>
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-primary">💰 Monto e Impuestos</h3>
+              
+              {/* Selector de Tipo de IVA */}
+              <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg border">
+                <Label className="text-sm font-medium">Tipo de IVA:</Label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="ivaType"
+                      value="percentage"
+                      checked={formData.ivaType === 'percentage'}
+                      onChange={(e) => handlePresupuestoChange('ivaType', e.target.value)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm">Porcentaje (%)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="ivaType"
+                      value="amount"
+                      checked={formData.ivaType === 'amount'}
+                      onChange={(e) => handlePresupuestoChange('ivaType', e.target.value)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm">Monto Fijo ($)</span>
+                  </label>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="subtotal">Subtotal (sin IVA) *</Label>
                   <Input 
@@ -1342,6 +1421,21 @@ function CuentasCobrarPageContent() {
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     Monto sin IVA
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="iva">
+                    {formData.ivaType === 'percentage' ? 'IVA (%)' : 'IVA ($)'} *
+                  </Label>
+                  <Input 
+                    id="iva"
+                    type="text" 
+                    placeholder={formData.ivaType === 'percentage' ? '16' : '0'}
+                    value={formData.ivaType === 'percentage' ? formData.iva : formatNumber(formData.iva)}
+                    onChange={(e) => handlePresupuestoChange('iva', e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formData.ivaType === 'percentage' ? 'Porcentaje de IVA' : 'Monto fijo de IVA'}
                   </p>
                 </div>
                 <div>

@@ -49,6 +49,7 @@ export default function CuentasPagarPage() {
     projectId: "",
     invoiceNumber: "",
     iva: "16",
+    ivaType: 'percentage' as 'percentage' | 'amount',
     subtotal: "",
     amount: "",
     categoryId: "",
@@ -187,11 +188,21 @@ export default function CuentasPagarPage() {
     setFormData((prev) => {
       const updated = { ...prev, [field]: unformatted }
       
-      // Si se modificó subtotal o iva, calcular amount con IVA
-      if (field === 'subtotal' || field === 'iva') {
+      // Si se modificó subtotal, iva o ivaType, calcular amount con IVA
+      if (field === 'subtotal' || field === 'iva' || field === 'ivaType') {
         const subtotal = parseFloat(field === 'subtotal' ? unformatted : updated.subtotal) || 0
-        const ivaPercent = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
-        const ivaAmount = subtotal * (ivaPercent / 100)
+        const ivaValue = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
+        const ivaType = field === 'ivaType' ? value : updated.ivaType
+
+        let ivaAmount = 0
+        if (ivaType === 'percentage') {
+          // IVA como porcentaje
+          ivaAmount = subtotal * (ivaValue / 100)
+        } else {
+          // IVA como monto fijo en pesos
+          ivaAmount = ivaValue
+        }
+
         updated.amount = (subtotal + ivaAmount).toString()
       }
       
@@ -207,6 +218,7 @@ export default function CuentasPagarPage() {
       projectId: "",
       invoiceNumber: "",
       iva: "16",
+      ivaType: 'percentage',
       subtotal: "",
       amount: "",
       categoryId: "",
@@ -221,12 +233,19 @@ export default function CuentasPagarPage() {
   const handleEditarCuenta = (cuenta: AccountPayable) => {
     console.log("🚀 ~ handleEditarCuenta ~ cuenta:", cuenta)
     setSelectedAccount(cuenta)
+    
+    // Detectar tipo de IVA basándose en el valor
+    // Heurística: si IVA <= 100 → porcentaje, si IVA > 100 → monto fijo
+    const ivaValue = parseFloat(cuenta.iva?.toString() || '16')
+    const detectedIvaType: 'percentage' | 'amount' = ivaValue <= 100 ? 'percentage' : 'amount'
+    
     setFormData({
       supplierId: cuenta.supplierId || "",
       supplierName: cuenta.supplier?.name || cuenta.supplierName || "",
       projectId: cuenta.projectId || "",
       invoiceNumber: cuenta.invoiceNumber,
       iva: cuenta.iva?.toString() || "16",
+      ivaType: detectedIvaType,
       subtotal: cuenta.subtotal?.toString() || "",
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || "",
@@ -796,22 +815,39 @@ export default function CuentasPagarPage() {
               />
             </div>
             {/* Campos de IVA y Monto */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-primary">💰 Monto</h3>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="iva">IVA (%) *</Label>
-                  <Input 
-                    id="iva"
-                    type="text" 
-                    placeholder="16"
-                    value={formData.iva}
-                    onChange={(e) => handlePresupuestoChange('iva', e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Porcentaje de IVA
-                  </p>
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-primary">💰 Monto e Impuestos</h3>
+              
+              {/* Selector de Tipo de IVA */}
+              <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg border">
+                <Label className="text-sm font-medium">Tipo de IVA:</Label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="ivaType"
+                      value="percentage"
+                      checked={formData.ivaType === 'percentage'}
+                      onChange={(e) => handlePresupuestoChange('ivaType', e.target.value)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm">Porcentaje (%)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="ivaType"
+                      value="amount"
+                      checked={formData.ivaType === 'amount'}
+                      onChange={(e) => handlePresupuestoChange('ivaType', e.target.value)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm">Monto Fijo ($)</span>
+                  </label>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="subtotal">Subtotal (sin IVA) *</Label>
                   <Input 
@@ -823,6 +859,21 @@ export default function CuentasPagarPage() {
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     Monto sin IVA
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="iva">
+                    {formData.ivaType === 'percentage' ? 'IVA (%)' : 'IVA ($)'} *
+                  </Label>
+                  <Input 
+                    id="iva"
+                    type="text" 
+                    placeholder={formData.ivaType === 'percentage' ? '16' : '0'}
+                    value={formData.ivaType === 'percentage' ? formData.iva : formatNumber(formData.iva)}
+                    onChange={(e) => handlePresupuestoChange('iva', e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formData.ivaType === 'percentage' ? 'Porcentaje de IVA' : 'Monto fijo de IVA'}
                   </p>
                 </div>
                 <div>

@@ -25,6 +25,10 @@ export interface PendingApproval {
   scheduledDate: string
   amount: number | string  // El backend puede devolver string
   paymentMethod?: string
+  bankAccount?: string
+  checkNumber?: string
+  reference?: string
+  notes?: string
   status: string
   requiresApproval?: boolean
   accountPayable: {

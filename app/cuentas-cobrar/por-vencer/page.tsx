@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Search, Download, Calendar, AlertCircle } from "lucide-react"
+import { Search, Download, Calendar as CalendarIcon, AlertCircle } from "lucide-react"
 
 export default function PorVencerPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -208,7 +208,7 @@ export default function PorVencerPage() {
                     <TableCell className="font-medium">${cuenta.monto.toLocaleString()}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                         {cuenta.fechaVencimiento}
                       </div>
                     </TableCell>

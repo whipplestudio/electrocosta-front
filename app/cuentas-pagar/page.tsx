@@ -170,10 +170,22 @@ export default function CuentasPagarPage() {
     }
   }, [formData.categoryId, categories, selectedAccount])
 
-  // Formatear número con separadores de miles
+  // Formatear número con separadores de miles (permite punto decimal mientras se escribe)
   const formatNumber = (value: string): string => {
     const num = value.replace(/,/g, '')
-    if (!num || isNaN(Number(num))) return ''
+    if (!num) return ''
+    
+    // Si termina en punto decimal, mantenerlo para permitir escribir decimales
+    if (num.endsWith('.')) return num
+    
+    // Si tiene punto pero no es un número válido completo, mantener como está
+    if (num.includes('.') && num.split('.')[1] !== undefined) {
+      const [integer, decimal] = num.split('.')
+      if (isNaN(Number(integer))) return ''
+      return `${Number(integer).toLocaleString('en-US')}.${decimal}`
+    }
+    
+    if (isNaN(Number(num))) return ''
     return Number(num).toLocaleString('en-US')
   }
 
@@ -250,16 +262,23 @@ export default function CuentasPagarPage() {
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || "",
       macroClasificacion: cuenta.macroClasificacion || "",
-      issueDate: new Date(cuenta.issueDate),
-      dueDate: new Date(cuenta.dueDate),
+      issueDate: new Date(cuenta.issueDate.split('T')[0] + 'T12:00:00'),
+      dueDate: cuenta.dueDate ? new Date(cuenta.dueDate.split('T')[0] + 'T12:00:00') : undefined,
       description: cuenta.description || "",
     })
     setIsDialogOpen(true)
   }
 
   const handleSubmitForm = async () => {
-    if (!formData.supplierName || !formData.subtotal || !formData.issueDate || !formData.dueDate) {
+    // Validar campos obligatorios
+    if (!formData.supplierName || !formData.subtotal || !formData.issueDate) {
       toast.error("Por favor completa todos los campos requeridos")
+      return
+    }
+
+    // Validar que fecha de vencimiento sea >= fecha de emisión (si se proporciona)
+    if (formData.dueDate && formData.issueDate && formData.dueDate < formData.issueDate) {
+      toast.error("La fecha de vencimiento debe ser igual o mayor a la fecha de emisión")
       return
     }
 
@@ -293,7 +312,7 @@ export default function CuentasPagarPage() {
           categoryId: formData.categoryId || undefined,
           macroClasificacion: formData.macroClasificacion || undefined,
           issueDate: formData.issueDate?.toISOString() || new Date().toISOString(),
-          dueDate: formData.dueDate?.toISOString() || new Date().toISOString(),
+          dueDate: formData.dueDate?.toISOString(),
           description: formData.description || undefined,
           currency: "MXN",
         })
@@ -302,9 +321,11 @@ export default function CuentasPagarPage() {
       setIsDialogOpen(false)
       fetchAccounts(filters)
       fetchDashboard()
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error al guardar cuenta:", error)
-      toast.error("Error al guardar la cuenta")
+      // Mostrar mensaje específico del backend si está disponible
+      const errorMessage = error?.response?.data?.message || error?.message || "Error al guardar la cuenta"
+      toast.error(errorMessage)
     } finally {
       setSavingAccount(false)
     }
@@ -722,7 +743,9 @@ export default function CuentasPagarPage() {
                       </span>
                     </TableCell>
                     <TableCell>${parseFloat(cuenta.amount).toLocaleString()}</TableCell>
-                    <TableCell>{format(new Date(cuenta.dueDate), "dd MMM yyyy", { locale: es })}</TableCell>
+                    <TableCell>
+                      {cuenta.dueDate ? format(new Date(cuenta.dueDate), "dd MMM yyyy", { locale: es }) : <span className="text-muted-foreground">Sin vencimiento</span>}
+                    </TableCell>
                     <TableCell>{getEstadoBadge(cuenta.status)}</TableCell>
                     <TableCell>{getAprobacionBadge(cuenta.approvalStatus)}</TableCell>
                     <TableCell>
@@ -942,7 +965,7 @@ export default function CuentasPagarPage() {
               </Popover>
             </div>
             <div className="grid gap-2">
-              <Label>Fecha de Vencimiento *</Label>
+              <Label>Fecha de Vencimiento</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="justify-start text-left font-normal">

@@ -193,7 +193,7 @@ export default function AprobacionPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto px-4 py-6 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Aprobación de Pagos</h1>
@@ -296,10 +296,10 @@ export default function AprobacionPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Proveedor / Factura</TableHead>
-                  <TableHead>Descripción</TableHead>
                   <TableHead>Monto</TableHead>
                   <TableHead>Fecha Programada</TableHead>
-                  <TableHead>Método</TableHead>
+                  <TableHead>Método de Pago</TableHead>
+                  <TableHead>Referencia / Detalles</TableHead>
                   <TableHead>Solicitado Por</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -320,13 +320,13 @@ export default function AprobacionPage() {
                             {approval.accountPayable.supplier?.name || (approval.accountPayable as any).supplierName || 'N/A'}
                           </div>
                           <div className="text-sm text-gray-500">
-                            {approval.accountPayable.invoiceNumber}
+                            Factura: {approval.accountPayable.invoiceNumber}
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="max-w-xs truncate">
-                          {approval.accountPayable.description}
+                          {approval.accountPayable.description && (
+                            <div className="text-xs text-gray-400 max-w-xs truncate mt-1">
+                              {approval.accountPayable.description}
+                            </div>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -341,9 +341,38 @@ export default function AprobacionPage() {
                         {formatDate(approval.scheduledDate)}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">
-                          {approval.paymentMethod ? (paymentMethodLabels[approval.paymentMethod] || approval.paymentMethod) : 'N/A'}
-                        </Badge>
+                        <div>
+                          <Badge variant="outline" className="mb-1">
+                            {approval.paymentMethod ? (paymentMethodLabels[approval.paymentMethod] || approval.paymentMethod) : 'N/A'}
+                          </Badge>
+                          {approval.bankAccount && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              Cuenta: {approval.bankAccount}
+                            </div>
+                          )}
+                          {approval.checkNumber && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              Cheque: {approval.checkNumber}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          {approval.reference && (
+                            <div className="text-sm font-medium mb-1">
+                              {approval.reference}
+                            </div>
+                          )}
+                          {approval.notes && (
+                            <div className="text-xs text-gray-500 max-w-xs truncate">
+                              {approval.notes}
+                            </div>
+                          )}
+                          {!approval.reference && !approval.notes && (
+                            <span className="text-xs text-gray-400">Sin detalles</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">

@@ -83,7 +83,7 @@ export interface AccountReceivable {
   balance: number;
   currency: string;
   issueDate: string;
-  dueDate: string;
+  dueDate: string | null;
   description?: string;
   notes?: string;
   status: AccountReceivableStatus;
@@ -147,7 +147,7 @@ export interface CreateAccountReceivableDto {
   amount?: number;
   currency?: string;
   issueDate: string;
-  dueDate: string;
+  dueDate?: string;
   description?: string;
   notes?: string;
 }

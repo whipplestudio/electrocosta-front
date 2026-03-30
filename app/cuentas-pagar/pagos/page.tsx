@@ -18,12 +18,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { CheckCircle, Clock, DollarSign, Search, Calendar, Loader2, History, Receipt, CreditCard } from "lucide-react"
+import { CheckCircle, Clock, DollarSign, Search, Calendar as CalendarIcon, Loader2, History, Receipt, CreditCard } from "lucide-react"
 import { accountsPayableService } from "@/services/accounts-payable.service"
 import type { AccountPayable, RegisterPaymentDto, Payment } from "@/types/accounts-payable"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
 
 const paymentMethodLabels: Record<string, string> = {
   transfer: 'Transferencia',
@@ -47,9 +49,9 @@ export default function AplicacionPagosCuentasPagar() {
 
   // Form state
   const [formData, setFormData] = useState({
-    amount: 0,
+    amount: '',
     paymentMethod: 'transfer' as any,
-    paymentDate: new Date().toISOString().split('T')[0],
+    paymentDate: new Date(),
     reference: '',
     notes: '',
   })
@@ -90,10 +92,22 @@ export default function AplicacionPagosCuentasPagar() {
     loadData()
   }, [loadData])
 
-  // Formatear número con separadores de miles
+  // Formatear número con separadores de miles (permite punto decimal mientras se escribe)
   const formatNumber = (value: string): string => {
     const num = value.replace(/,/g, '')
-    if (!num || isNaN(Number(num))) return ''
+    if (!num) return ''
+    
+    // Si termina en punto decimal, mantenerlo para permitir escribir decimales
+    if (num.endsWith('.')) return num
+    
+    // Si tiene punto pero no es un número válido completo, mantener como está
+    if (num.includes('.') && num.split('.')[1] !== undefined) {
+      const [integer, decimal] = num.split('.')
+      if (isNaN(Number(integer))) return ''
+      return `${Number(integer).toLocaleString('en-US')}.${decimal}`
+    }
+    
+    if (isNaN(Number(num))) return ''
     return Number(num).toLocaleString('en-US')
   }
 
@@ -104,7 +118,7 @@ export default function AplicacionPagosCuentasPagar() {
 
   const handleAmountChange = (value: string) => {
     const unformatted = unformatNumber(value)
-    setFormData((prev) => ({ ...prev, amount: parseFloat(unformatted) || 0 }))
+    setFormData((prev) => ({ ...prev, amount: unformatted }))
   }
 
   // Registrar pago
@@ -118,12 +132,13 @@ export default function AplicacionPagosCuentasPagar() {
 
     console.log('Validando formData:', formData)
 
-    if (!formData.amount || formData.amount <= 0) {
+    const amountValue = parseFloat(formData.amount)
+    if (!formData.amount || isNaN(amountValue) || amountValue <= 0) {
       toast.error('El monto debe ser mayor a cero')
       return
     }
 
-    if (formData.amount > Number(selectedAccount.balance)) {
+    if (amountValue > Number(selectedAccount.balance)) {
       toast.error('El monto no puede ser mayor al saldo pendiente')
       return
     }
@@ -139,12 +154,12 @@ export default function AplicacionPagosCuentasPagar() {
       
       // Registrar el pago
       console.log('Registrando pago...')
-      const paymentData: any = {
-        amount: formData.amount,
+      const paymentData: RegisterPaymentDto = {
+        amount: parseFloat(formData.amount),
         paymentMethod: formData.paymentMethod,
-        paymentDate: formData.paymentDate,
+        paymentDate: format(formData.paymentDate, 'yyyy-MM-dd'),
         reference: formData.reference,
-        notes: formData.notes,
+        notes: formData.notes || undefined,
       }
 
       console.log('Payment data:', paymentData)
@@ -183,9 +198,9 @@ export default function AplicacionPagosCuentasPagar() {
 
   const resetForm = () => {
     setFormData({
-      amount: 0,
+      amount: '',
       paymentMethod: 'transfer',
-      paymentDate: new Date().toISOString().split('T')[0],
+      paymentDate: new Date(),
       reference: '',
       notes: '',
     })
@@ -195,9 +210,9 @@ export default function AplicacionPagosCuentasPagar() {
   const openRegisterDialog = (account: AccountPayable) => {
     setSelectedAccount(account)
     setFormData({
-      amount: Number(account.balance),
+      amount: String(account.balance),
       paymentMethod: 'transfer',
-      paymentDate: new Date().toISOString().split('T')[0],
+      paymentDate: new Date(),
       reference: account.invoiceNumber,
       notes: account.description || '',
     })
@@ -301,6 +316,7 @@ export default function AplicacionPagosCuentasPagar() {
                   <TableHead>Proveedor</TableHead>
                   <TableHead>Factura</TableHead>
                   <TableHead>Monto Total</TableHead>
+                  <TableHead>Pagado</TableHead>
                   <TableHead>Saldo Pendiente</TableHead>
                   <TableHead>Vencimiento</TableHead>
                   <TableHead>Estado</TableHead>
@@ -310,13 +326,13 @@ export default function AplicacionPagosCuentasPagar() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : filteredAccounts.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       {searchTerm ? 'No se encontraron cuentas' : 'No hay cuentas pendientes de pago'}
                     </TableCell>
                   </TableRow>
@@ -326,6 +342,9 @@ export default function AplicacionPagosCuentasPagar() {
                       <TableCell className="font-medium">{account.supplier?.name || (account as any).supplierName || 'N/A'}</TableCell>
                       <TableCell>{account.invoiceNumber}</TableCell>
                       <TableCell>${Number(account.amount).toLocaleString()}</TableCell>
+                      <TableCell className="font-medium text-green-600">
+                        ${Number(account.paidAmount || 0).toLocaleString()}
+                      </TableCell>
                       <TableCell className="font-bold text-red-600">
                         ${Number(account.balance).toLocaleString()}
                       </TableCell>
@@ -424,13 +443,26 @@ export default function AplicacionPagosCuentasPagar() {
                 </div>
 
                 <div>
-                  <Label htmlFor="paymentDate">Fecha de Pago *</Label>
-                  <Input
-                    id="paymentDate"
-                    type="date"
-                    value={formData.paymentDate}
-                    onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
-                  />
+                  <Label>Fecha de Pago *</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        className={`w-full justify-start text-left font-normal ${!formData.paymentDate ? 'text-muted-foreground' : ''}`}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {formData.paymentDate ? format(formData.paymentDate, "dd/MM/yyyy", { locale: es }) : "Seleccionar fecha"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar 
+                        mode="single"
+                        selected={formData.paymentDate}
+                        onSelect={(date) => setFormData({...formData, paymentDate: date || new Date()})}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 <div>

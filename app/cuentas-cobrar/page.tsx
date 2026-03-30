@@ -190,10 +190,22 @@ function CuentasCobrarPageContent() {
     }
   }, [formData.projectId, projects, selectedCuenta])
 
-  // Formatear número con separadores de miles
+  // Formatear número con separadores de miles (permite punto decimal mientras se escribe)
   const formatNumber = (value: string): string => {
     const num = value.replace(/,/g, '')
-    if (!num || isNaN(Number(num))) return ''
+    if (!num) return ''
+    
+    // Si termina en punto decimal, mantenerlo para permitir escribir decimales
+    if (num.endsWith('.')) return num
+    
+    // Si tiene punto pero no es un número válido completo, mantener como está
+    if (num.includes('.') && num.split('.')[1] !== undefined) {
+      const [integer, decimal] = num.split('.')
+      if (isNaN(Number(integer))) return ''
+      return `${Number(integer).toLocaleString('en-US')}.${decimal}`
+    }
+    
+    if (isNaN(Number(num))) return ''
     return Number(num).toLocaleString('en-US')
   }
 
@@ -373,6 +385,7 @@ function CuentasCobrarPageContent() {
   const cuentasVencidas = accounts.filter((c) => c.status === AccountReceivableStatus.OVERDUE).length
   const proximasVencer = accounts.filter((c) => {
     if (c.status === AccountReceivableStatus.PENDING || c.status === AccountReceivableStatus.PARTIAL) {
+      if (!c.dueDate) return false
       const dueDate = new Date(c.dueDate)
       const today = new Date()
       const diffDays = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
@@ -439,7 +452,7 @@ function CuentasCobrarPageContent() {
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || '',
       issueDate: new Date(cuenta.issueDate),
-      dueDate: new Date(cuenta.dueDate),
+      dueDate: cuenta.dueDate ? new Date(cuenta.dueDate) : undefined,
       description: cuenta.description || '',
     })
     setIsDialogOpen(true)
@@ -455,7 +468,7 @@ function CuentasCobrarPageContent() {
     if (!formData.invoiceNumber) missingFields.push("Número de Factura")
     if (!formData.subtotal) missingFields.push("Subtotal")
     if (!formData.issueDate) missingFields.push("Fecha de Emisión")
-    if (!formData.dueDate) missingFields.push("Fecha de Vencimiento")
+    // dueDate es opcional
     
     if (missingFields.length > 0) {
       toast.error(`Campos requeridos faltantes: ${missingFields.join(", ")}`)
@@ -489,7 +502,7 @@ function CuentasCobrarPageContent() {
         amount: parseFloat(formData.amount),
         categoryId: formData.categoryId || undefined,
         issueDate: formData.issueDate?.toISOString() || new Date().toISOString(),
-        dueDate: formData.dueDate?.toISOString() || new Date().toISOString(),
+        dueDate: formData.dueDate?.toISOString(),
         description: formData.description || undefined,
         currency: 'MXN',
       })
@@ -1214,7 +1227,9 @@ function CuentasCobrarPageContent() {
                     </TableCell>
                     <TableCell>{cuenta.invoiceNumber}</TableCell>
                     <TableCell>{format(new Date(cuenta.issueDate), "dd/MM/yyyy")}</TableCell>
-                    <TableCell>{format(new Date(cuenta.dueDate), "dd/MM/yyyy")}</TableCell>
+                    <TableCell>
+                      {cuenta.dueDate ? format(new Date(cuenta.dueDate), "dd/MM/yyyy") : <span className="text-muted-foreground">Sin vencimiento</span>}
+                    </TableCell>
                     <TableCell>${Number(cuenta.amount).toLocaleString()}</TableCell>
                     <TableCell className="font-medium">${Number(cuenta.balance).toLocaleString()}</TableCell>
                     <TableCell>{getEstadoBadge(mapEstado(cuenta.status))}</TableCell>
@@ -1508,7 +1523,7 @@ function CuentasCobrarPageContent() {
                 </Popover>
               </div>
               <div className="space-y-2">
-                <Label>Fecha de Vencimiento *</Label>
+                <Label>Fecha de Vencimiento</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button 
@@ -1614,7 +1629,9 @@ function CuentasCobrarPageContent() {
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Fecha de Vencimiento</Label>
-                    <p className="font-medium">{format(new Date(cuentaDetalle.dueDate), "dd/MM/yyyy", { locale: es })}</p>
+                    <p className="font-medium">
+                      {cuentaDetalle.dueDate ? format(new Date(cuentaDetalle.dueDate), "dd/MM/yyyy", { locale: es }) : <span className="text-muted-foreground">Sin vencimiento</span>}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Categoría</Label>

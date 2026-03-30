@@ -16,7 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Phone, Mail, MessageSquare, Calendar, Plus, Search } from "lucide-react"
+import { Phone, Mail, MessageSquare, Calendar as CalendarIcon, Plus, Search } from "lucide-react"
 
 export default function CobranzaPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -235,7 +235,7 @@ export default function CobranzaPage() {
               {historialGestiones.map((gestion, index) => (
                 <div key={index} className="border-l-2 border-blue-200 pl-4 pb-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm font-medium">{gestion.fecha}</span>
                     <Badge variant="outline">{gestion.tipo}</Badge>
                   </div>

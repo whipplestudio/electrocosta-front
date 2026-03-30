@@ -19,10 +19,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { CheckCircle, Clock, DollarSign, FileText, Plus, Search, Calendar, Loader2, X, History, Receipt, CreditCard } from "lucide-react"
+import { CheckCircle, Clock, DollarSign, FileText, Plus, Search, Calendar as CalendarIcon, Loader2, X, History, Receipt, CreditCard } from "lucide-react"
 import { accountsReceivableService, paymentsService } from "@/services/accounts-receivable.service"
 import type { AccountReceivable, Payment, RegisterPaymentDto } from "@/types/accounts-receivable"
 import { RouteProtection } from "@/components/route-protection"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
 
 const paymentMethodLabels: Record<string, string> = {
   transfer: 'Transferencia',
@@ -53,9 +57,9 @@ function AplicacionPagosContent() {
 
   // Form state
   const [formData, setFormData] = useState({
-    amount: 0,
+    amount: '',
     paymentMethod: 'transfer' as any,
-    paymentDate: new Date().toISOString().split('T')[0],
+    paymentDate: new Date(),
     reference: '',
     notes: '',
   })
@@ -81,10 +85,22 @@ function AplicacionPagosContent() {
     loadData()
   }, [loadData])
 
-  // Formatear número con separadores de miles
+  // Formatear número con separadores de miles (permite punto decimal mientras se escribe)
   const formatNumber = (value: string): string => {
     const num = value.replace(/,/g, '')
-    if (!num || isNaN(Number(num))) return ''
+    if (!num) return ''
+    
+    // Si termina en punto decimal, mantenerlo para permitir escribir decimales
+    if (num.endsWith('.')) return num
+    
+    // Si tiene punto pero no es un número válido completo, mantener como está
+    if (num.includes('.') && num.split('.')[1] !== undefined) {
+      const [integer, decimal] = num.split('.')
+      if (isNaN(Number(integer))) return ''
+      return `${Number(integer).toLocaleString('en-US')}.${decimal}`
+    }
+    
+    if (isNaN(Number(num))) return ''
     return Number(num).toLocaleString('en-US')
   }
 
@@ -95,19 +111,21 @@ function AplicacionPagosContent() {
 
   const handleAmountChange = (value: string) => {
     const unformatted = unformatNumber(value)
-    setFormData((prev) => ({ ...prev, amount: parseFloat(unformatted) || 0 }))
+    // Guardar como string para permitir decimales parciales mientras se escribe
+    setFormData((prev) => ({ ...prev, amount: unformatted }))
   }
 
   // Registrar pago
   const handleRegisterPayment = async () => {
     if (!selectedAccount) return
 
-    if (!formData.amount || formData.amount <= 0) {
+    const amountValue = parseFloat(formData.amount)
+    if (!formData.amount || amountValue <= 0) {
       toast.error('El monto debe ser mayor a cero')
       return
     }
 
-    if (formData.amount > Number(selectedAccount.balance)) {
+    if (amountValue > Number(selectedAccount.balance)) {
       toast.error('El monto no puede ser mayor al saldo pendiente')
       return
     }
@@ -119,9 +137,10 @@ function AplicacionPagosContent() {
 
     try {
       setSubmitting(true)
-      // Convertir fecha a formato ISO 8601 completo
+      // Convertir fecha a formato ISO 8601 completo y amount a número
       const paymentData = {
         ...formData,
+        amount: parseFloat(formData.amount),
         paymentDate: new Date(formData.paymentDate).toISOString(),
       }
       await paymentsService.register(selectedAccount.id, paymentData)
@@ -130,9 +149,9 @@ function AplicacionPagosContent() {
       setShowRegisterDialog(false)
       setSelectedAccount(null)
       setFormData({
-        amount: 0,
+        amount: '',
         paymentMethod: 'transfer' as any,
-        paymentDate: new Date().toISOString().split('T')[0],
+        paymentDate: new Date(),
         reference: '',
         notes: '',
       })
@@ -150,7 +169,7 @@ function AplicacionPagosContent() {
     setSelectedAccount(account)
     setFormData({
       ...formData,
-      amount: Number(account.balance),
+      amount: account.balance.toString(),
     })
     setShowRegisterDialog(true)
   }
@@ -291,7 +310,7 @@ function AplicacionPagosContent() {
                       </TableRow>
                     ) : (
                       filteredAccounts.map((account) => {
-                        const isOverdue = new Date(account.dueDate) < new Date()
+                        const isOverdue = account.dueDate ? new Date(account.dueDate) < new Date() : false
                         const isPartial = Number(account.balance) < Number(account.amount)
                         
                         return (
@@ -303,10 +322,14 @@ function AplicacionPagosContent() {
                               ${Number(account.balance).toLocaleString()}
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {new Date(account.dueDate).toLocaleDateString()}
-                              </div>
+                              {account.dueDate ? (
+                                <div className="flex items-center gap-1">
+                                  <CalendarIcon className="h-3 w-3" />
+                                  {new Date(account.dueDate).toLocaleDateString()}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">Sin vencimiento</span>
+                              )}
                             </TableCell>
                             <TableCell>
                               <Badge
@@ -415,13 +438,26 @@ function AplicacionPagosContent() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="fecha">Fecha de Pago *</Label>
-                <Input 
-                  id="fecha" 
-                  type="date"
-                  value={formData.paymentDate}
-                  onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
-                />
+                <Label>Fecha de Pago *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      className={`w-full justify-start text-left font-normal ${!formData.paymentDate ? 'text-muted-foreground' : ''}`}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formData.paymentDate ? format(formData.paymentDate, "dd/MM/yyyy", { locale: es }) : "Seleccionar fecha"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar 
+                      mode="single"
+                      selected={formData.paymentDate}
+                      onSelect={(date) => setFormData({...formData, paymentDate: date || new Date()})}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
             <div className="space-y-2">
@@ -442,9 +478,9 @@ function AplicacionPagosContent() {
                 setShowRegisterDialog(false)
                 setSelectedAccount(null)
                 setFormData({
-                  amount: 0,
+                  amount: '',
                   paymentMethod: 'transfer' as any,
-                  paymentDate: new Date().toISOString().split('T')[0],
+                  paymentDate: new Date(),
                   reference: '',
                   notes: '',
                 })
@@ -562,7 +598,7 @@ function AplicacionPagosContent() {
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1 text-sm">
-                                <Calendar className="h-3 w-3 text-muted-foreground" />
+                                <CalendarIcon className="h-3 w-3 text-muted-foreground" />
                                 {new Date(payment.paymentDate).toLocaleDateString('es-MX', {
                                   day: '2-digit',
                                   month: 'short',

@@ -96,6 +96,13 @@ export const paymentSchedulingService = {
     return response.data;
   },
 
+  async getScheduleById(scheduleId: string): Promise<PaymentSchedule> {
+    const response = await apiClient.get<PaymentSchedule>(
+      `/payment-schedules/${scheduleId}`
+    );
+    return response.data;
+  },
+
   async updateSchedule(
     scheduleId: string,
     data: Partial<SchedulePaymentDto>

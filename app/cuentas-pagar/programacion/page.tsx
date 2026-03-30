@@ -18,10 +18,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Calendar, Plus, Search, CheckCircle, Loader2, X } from "lucide-react"
+import { Calendar as CalendarIcon, Plus, Search, CheckCircle, Loader2, X, Edit } from "lucide-react"
 import { paymentSchedulingService, SchedulePaymentDto, PaymentSchedule } from "@/services/payment-scheduling.service"
 import { accountsPayableService } from "@/services/accounts-payable.service"
 import type { AccountPayable } from "@/types/accounts-payable"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
+
+// Helper para traducir método de pago
+const getPaymentMethodLabel = (method: string | null | undefined) => {
+  const labels: Record<string, string> = {
+    transfer: 'Transferencia bancaria',
+    check: 'Cheque',
+    cash: 'Efectivo',
+    card: 'Tarjeta',
+  }
+  return method ? labels[method] || method : 'N/A'
+}
 
 export default function ProgramacionPagosPage() {
   const { toast } = useToast()
@@ -33,6 +48,9 @@ export default function ProgramacionPagosPage() {
   const [showScheduleDialog, setShowScheduleDialog] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [editingSchedule, setEditingSchedule] = useState<PaymentSchedule | null>(null)
+  const [loadingSchedule, setLoadingSchedule] = useState(false)
+  const isEditing = editingSchedule !== null
   const [summary, setSummary] = useState({
     totalScheduled: 0,
     totalCompleted: 0,
@@ -43,11 +61,11 @@ export default function ProgramacionPagosPage() {
   })
 
   // Form state
-  const [formData, setFormData] = useState<SchedulePaymentDto & { accountPayableId: string }>({
+  const [formData, setFormData] = useState({
     accountPayableId: '',
-    scheduledDate: new Date().toISOString().split('T')[0],
-    scheduledAmount: 0,
-    paymentMethod: 'transfer',
+    scheduledDate: new Date(),
+    scheduledAmount: '',
+    paymentMethod: 'transfer' as 'transfer' | 'check' | 'cash',
     bankAccount: '',
     checkNumber: '',
     reference: '',
@@ -106,10 +124,22 @@ export default function ProgramacionPagosPage() {
     loadData()
   }, [loadData])
 
-  // Formatear número con separadores de miles
+  // Formatear número con separadores de miles (permite punto decimal mientras se escribe)
   const formatNumber = (value: string): string => {
     const num = value.replace(/,/g, '')
-    if (!num || isNaN(Number(num))) return ''
+    if (!num) return ''
+    
+    // Si termina en punto decimal, mantenerlo para permitir escribir decimales
+    if (num.endsWith('.')) return num
+    
+    // Si tiene punto pero no es un número válido completo, mantener como está
+    if (num.includes('.') && num.split('.')[1] !== undefined) {
+      const [integer, decimal] = num.split('.')
+      if (isNaN(Number(integer))) return ''
+      return `${Number(integer).toLocaleString('en-US')}.${decimal}`
+    }
+    
+    if (isNaN(Number(num))) return ''
     return Number(num).toLocaleString('en-US')
   }
 
@@ -120,7 +150,7 @@ export default function ProgramacionPagosPage() {
 
   const handleAmountChange = (value: string) => {
     const unformatted = unformatNumber(value)
-    setFormData((prev) => ({ ...prev, scheduledAmount: parseFloat(unformatted) || 0 }))
+    setFormData((prev) => ({ ...prev, scheduledAmount: unformatted }))
     // Limpiar error de monto
     setErrors(prev => ({ ...prev, scheduledAmount: undefined }))
   }
@@ -133,7 +163,8 @@ export default function ProgramacionPagosPage() {
       newErrors.accountPayableId = 'Debes seleccionar una cuenta por pagar'
     }
 
-    if (!formData.scheduledAmount || formData.scheduledAmount <= 0) {
+    const amountValue = parseFloat(formData.scheduledAmount)
+    if (!formData.scheduledAmount || isNaN(amountValue) || amountValue <= 0) {
       newErrors.scheduledAmount = 'El monto debe ser mayor a cero'
     }
 
@@ -165,7 +196,7 @@ export default function ProgramacionPagosPage() {
     return true
   }
 
-  // Programar pago
+  // Programar o actualizar pago
   const handleSchedulePayment = async () => {
     // Validar formulario
     if (!validateForm()) {
@@ -175,27 +206,42 @@ export default function ProgramacionPagosPage() {
     // Si pasa todas las validaciones, proceder con la petición
     try {
       setSubmitting(true)
-      console.log('📤 Enviando petición al backend...')
+      console.log(isEditing ? '📤 Actualizando pago programado...' : '📤 Programando nuevo pago...')
       
       const { accountPayableId, ...scheduleData } = formData
-      console.log('📦 Datos a enviar:', { accountPayableId, scheduleData })
       
-      const result = await paymentSchedulingService.schedulePayment(accountPayableId, scheduleData)
+      // Convertir tipos para el backend
+      const payloadData = {
+        ...scheduleData,
+        scheduledDate: formData.scheduledDate.toISOString().split('T')[0],
+        scheduledAmount: parseFloat(formData.scheduledAmount),
+      }
+      
+      console.log('📦 Datos a enviar:', { accountPayableId, payloadData })
+      
+      let result
+      if (isEditing && editingSchedule) {
+        // Actualizar pago existente
+        result = await paymentSchedulingService.updateSchedule(editingSchedule.id, payloadData)
+      } else {
+        // Crear nuevo pago programado
+        result = await paymentSchedulingService.schedulePayment(accountPayableId, payloadData)
+      }
       console.log('✅ Respuesta del backend:', result)
 
       toast({
         title: "✅ Éxito",
-        description: "Pago programado exitosamente"
+        description: isEditing ? "Pago actualizado exitosamente" : "Pago programado exitosamente"
       })
       setShowScheduleDialog(false)
       resetForm()
       await loadData()
     } catch (error: any) {
-      console.error('❌ Error al programar pago:', error)
+      console.error('❌ Error:', error)
       console.error('❌ Error response:', error.response)
       console.error('❌ Error data:', error.response?.data)
       
-      const errorMessage = error.response?.data?.message || error.message || 'Error al programar el pago'
+      const errorMessage = error.response?.data?.message || error.message || (isEditing ? 'Error al actualizar el pago' : 'Error al programar el pago')
       toast({
         variant: "destructive",
         title: "❌ Error",
@@ -236,8 +282,8 @@ export default function ProgramacionPagosPage() {
   const resetForm = () => {
     setFormData({
       accountPayableId: '',
-      scheduledDate: new Date().toISOString().split('T')[0],
-      scheduledAmount: 0,
+      scheduledDate: new Date(),
+      scheduledAmount: '',
       paymentMethod: 'transfer',
       bankAccount: '',
       checkNumber: '',
@@ -246,6 +292,7 @@ export default function ProgramacionPagosPage() {
       requiresApproval: true,
     })
     setErrors({})
+    setEditingSchedule(null)
   }
 
   // Seleccionar cuenta y prellenar datos
@@ -255,11 +302,61 @@ export default function ProgramacionPagosPage() {
       setFormData({
         ...formData,
         accountPayableId: accountId,
-        scheduledAmount: Number(account.amount),
+        scheduledAmount: account.amount.toString(),
         reference: account.invoiceNumber,
       })
       // Limpiar error de cuenta
       setErrors(prev => ({ ...prev, accountPayableId: undefined }))
+    }
+  }
+
+  // Abrir dialog para editar pago programado
+  const handleEditSchedule = async (schedule: PaymentSchedule) => {
+    try {
+      setLoadingSchedule(true)
+      console.log('📥 Obteniendo datos completos del pago programado...')
+      
+      // Obtener datos completos del schedule desde la API
+      const fullSchedule = await paymentSchedulingService.getScheduleById(schedule.id)
+      console.log('✅ Datos obtenidos:', fullSchedule)
+      
+      // Asegurar que la cuenta asociada esté en availableAccounts
+      if (fullSchedule.accountPayable) {
+        const accountExists = availableAccounts.some(acc => acc.id === fullSchedule.accountPayableId)
+        if (!accountExists) {
+          console.log('ℹ️ Agregando cuenta asociada a availableAccounts')
+          setAvailableAccounts(prev => [...prev, fullSchedule.accountPayable as AccountPayable])
+        }
+      }
+      
+      setEditingSchedule(fullSchedule)
+      
+      // Parsear fecha sin timezone para evitar problemas de conversión
+      const dateStr = fullSchedule.scheduledDate.split('T')[0]
+      const [year, month, day] = dateStr.split('-').map(Number)
+      const scheduledDate = new Date(year, month - 1, day)
+      
+      setFormData({
+        accountPayableId: fullSchedule.accountPayableId,
+        scheduledDate,
+        scheduledAmount: fullSchedule.amount.toString(),
+        paymentMethod: (fullSchedule.paymentMethod || 'transfer') as 'transfer' | 'check' | 'cash',
+        bankAccount: fullSchedule.bankAccount || '',
+        checkNumber: fullSchedule.checkNumber || '',
+        reference: fullSchedule.reference || '',
+        notes: fullSchedule.notes || '',
+        requiresApproval: fullSchedule.requiresApproval ?? true,
+      })
+      setShowScheduleDialog(true)
+    } catch (error: any) {
+      console.error('❌ Error al obtener datos del pago programado:', error)
+      toast({
+        variant: "destructive",
+        title: "❌ Error",
+        description: error.response?.data?.message || 'Error al cargar los datos del pago programado'
+      })
+    } finally {
+      setLoadingSchedule(false)
     }
   }
 
@@ -433,13 +530,13 @@ export default function ProgramacionPagosPage() {
                       <TableCell className="font-medium">${Number(schedule.amount).toLocaleString()}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                           {new Date(schedule.scheduledDate).toLocaleDateString()}
                         </div>
                       </TableCell>
                       <TableCell>
                         <div>
-                          <div className="text-sm font-medium capitalize">{schedule.paymentMethod}</div>
+                          <div className="text-sm font-medium">{getPaymentMethodLabel(schedule.paymentMethod)}</div>
                           {schedule.bankAccount && (
                             <div className="text-xs text-muted-foreground">{schedule.bankAccount}</div>
                           )}
@@ -452,24 +549,44 @@ export default function ProgramacionPagosPage() {
                       <TableCell>
                         <div className="flex gap-2">
                           {schedule.status === "scheduled" && (
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => handleCancelSchedule(schedule.id)}
-                              disabled={cancellingId === schedule.id}
-                            >
-                              {cancellingId === schedule.id ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                  Cancelando...
-                                </>
-                              ) : (
-                                <>
-                                  <X className="h-4 w-4 mr-1" />
-                                  Cancelar
-                                </>
-                              )}
-                            </Button>
+                            <>
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => handleEditSchedule(schedule)}
+                                disabled={cancellingId === schedule.id || loadingSchedule}
+                              >
+                                {loadingSchedule ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                    Cargando...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Edit className="h-4 w-4 mr-1" />
+                                    Editar
+                                  </>
+                                )}
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleCancelSchedule(schedule.id)}
+                                disabled={cancellingId === schedule.id}
+                              >
+                                {cancellingId === schedule.id ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                    Cancelando...
+                                  </>
+                                ) : (
+                                  <>
+                                    <X className="h-4 w-4 mr-1" />
+                                    Cancelar
+                                  </>
+                                )}
+                              </Button>
+                            </>
                           )}
                         </div>
                       </TableCell>
@@ -486,8 +603,10 @@ export default function ProgramacionPagosPage() {
       <Dialog open={showScheduleDialog} onOpenChange={setShowScheduleDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Programar Nuevo Pago</DialogTitle>
-            <DialogDescription>Programa un pago para una cuenta por pagar aprobada</DialogDescription>
+            <DialogTitle>{isEditing ? 'Editar Pago Programado' : 'Programar Nuevo Pago'}</DialogTitle>
+            <DialogDescription>
+              {isEditing ? 'Actualiza los detalles del pago programado' : 'Programa un pago para una cuenta por pagar aprobada'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -527,16 +646,28 @@ export default function ProgramacionPagosPage() {
               </div>
               <div>
                 <Label>Fecha de Pago *</Label>
-                <Input 
-                  type="date" 
-                  value={formData.scheduledDate}
-                  onChange={(e) => {
-                    setFormData({ ...formData, scheduledDate: e.target.value })
-                    setErrors(prev => ({ ...prev, scheduledDate: undefined }))
-                  }}
-                  min={new Date().toISOString().split('T')[0]}
-                  className={errors.scheduledDate ? "border-red-500" : ""}
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      className={`w-full justify-start text-left font-normal ${!formData.scheduledDate ? 'text-muted-foreground' : ''} ${errors.scheduledDate ? 'border-red-500' : ''}`}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formData.scheduledDate ? format(formData.scheduledDate, "dd/MM/yyyy", { locale: es }) : "Seleccionar fecha"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar 
+                      mode="single"
+                      selected={formData.scheduledDate}
+                      onSelect={(date) => {
+                        setFormData({...formData, scheduledDate: date || new Date()})
+                        setErrors(prev => ({ ...prev, scheduledDate: undefined }))
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
                 {errors.scheduledDate && (
                   <p className="text-sm text-red-500 mt-1">{errors.scheduledDate}</p>
                 )}
@@ -636,10 +767,10 @@ export default function ProgramacionPagosPage() {
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Programando...
+                  {isEditing ? 'Actualizando...' : 'Programando...'}
                 </>
               ) : (
-                'Programar Pago'
+                isEditing ? 'Actualizar Pago' : 'Programar Pago'
               )}
             </Button>
           </DialogFooter>

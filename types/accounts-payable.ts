@@ -74,7 +74,7 @@ export interface AccountPayable {
   balance: string;
   currency: string;
   issueDate: string;
-  dueDate: string;
+  dueDate: string | null;
   description?: string;
   notes?: string;
   status: AccountPayableStatus;
@@ -113,9 +113,10 @@ export interface CreateAccountPayableDto {
   amount?: number;
   currency?: string;
   issueDate: string;
-  dueDate: string;
+  dueDate?: string;
   description?: string;
   notes?: string;
+  macroClasificacion?: 'MATERIALES' | 'MANO_DE_OBRA' | 'OTROS';
 }
 
 export interface UpdateAccountPayableDto {

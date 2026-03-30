@@ -50,6 +50,13 @@ import {
 } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+
+// Helper para parsear fecha sin timezone (evita que se muestre un día atrasado)
+const parseDateWithoutTimezone = (dateStr: string | Date): Date => {
+  if (dateStr instanceof Date) return dateStr
+  const [year, month, day] = dateStr.split('T')[0].split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
 import { toast } from "sonner"
 import { useAccountsReceivable } from "@/hooks/use-accounts-receivable"
 import { AccountReceivable, AccountReceivableStatus } from "@/types/accounts-receivable"
@@ -451,8 +458,8 @@ function CuentasCobrarPageContent() {
       subtotal: cuenta.subtotal?.toString() || '',
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || '',
-      issueDate: new Date(cuenta.issueDate),
-      dueDate: cuenta.dueDate ? new Date(cuenta.dueDate) : undefined,
+      issueDate: parseDateWithoutTimezone(cuenta.issueDate),
+      dueDate: cuenta.dueDate ? parseDateWithoutTimezone(cuenta.dueDate) : undefined,
       description: cuenta.description || '',
     })
     setIsDialogOpen(true)
@@ -1226,9 +1233,9 @@ function CuentasCobrarPageContent() {
                       </span>
                     </TableCell>
                     <TableCell>{cuenta.invoiceNumber}</TableCell>
-                    <TableCell>{format(new Date(cuenta.issueDate), "dd/MM/yyyy")}</TableCell>
+                    <TableCell>{format(parseDateWithoutTimezone(cuenta.issueDate), "dd/MM/yyyy")}</TableCell>
                     <TableCell>
-                      {cuenta.dueDate ? format(new Date(cuenta.dueDate), "dd/MM/yyyy") : <span className="text-muted-foreground">Sin vencimiento</span>}
+                      {cuenta.dueDate ? format(parseDateWithoutTimezone(cuenta.dueDate), "dd/MM/yyyy") : <span className="text-muted-foreground">Sin vencimiento</span>}
                     </TableCell>
                     <TableCell>${Number(cuenta.amount).toLocaleString()}</TableCell>
                     <TableCell className="font-medium">${Number(cuenta.balance).toLocaleString()}</TableCell>

@@ -86,6 +86,7 @@ export default function ProyectosPage() {
     fechaInicio: new Date().toISOString().split('T')[0],
     fechaFinEstimada: '',
     iva: '16',
+    ivaType: 'percentage' as 'percentage' | 'amount',
     subtotalVenta: '',
     valorVenta: '',
     presupuestoTotal: '',
@@ -182,10 +183,22 @@ export default function ProyectosPage() {
     cargarAreas()
   }, [cargarProyectos, cargarUsuarios, cargarClientes, cargarAreas])
 
-  // Formatear número con separadores de miles
+  // Formatear número con separadores de miles (permite punto decimal mientras se escribe)
   const formatNumber = (value: string): string => {
     const num = value.replace(/,/g, '')
-    if (!num || isNaN(Number(num))) return ''
+    if (!num) return ''
+    
+    // Si termina en punto decimal, mantenerlo para permitir escribir decimales
+    if (num.endsWith('.')) return num
+    
+    // Si tiene punto pero no es un número válido completo, mantener como está
+    if (num.includes('.') && num.split('.')[1] !== undefined) {
+      const [integer, decimal] = num.split('.')
+      if (isNaN(Number(integer))) return ''
+      return `${Number(integer).toLocaleString('en-US')}.${decimal}`
+    }
+    
+    if (isNaN(Number(num))) return ''
     return Number(num).toLocaleString('en-US')
   }
 
@@ -203,6 +216,7 @@ export default function ProyectosPage() {
       fechaInicio: new Date().toISOString().split('T')[0],
       fechaFinEstimada: '',
       iva: '16',
+      ivaType: 'percentage' as 'percentage' | 'amount',
       subtotalVenta: '',
       valorVenta: '',
       presupuestoTotal: '',
@@ -232,23 +246,24 @@ export default function ProyectosPage() {
       const updated = { ...prev, [field]: unformatted }
       
       const iva = parseFloat(updated.iva) || 0
+      const ivaType = updated.ivaType
       
-      // Si se modificó subtotalVenta o iva, calcular valorVenta con IVA
-      if (field === 'subtotalVenta' || field === 'iva') {
+      // Si se modificó subtotalVenta, iva o ivaType, calcular valorVenta con IVA
+      if (field === 'subtotalVenta' || field === 'iva' || field === 'ivaType') {
         const subtotal = parseFloat(field === 'subtotalVenta' ? unformatted : updated.subtotalVenta) || 0
-        const ivaPercent = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
-        const ivaAmount = subtotal * (ivaPercent / 100)
+        const ivaValue = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
+        const ivaAmount = ivaType === 'percentage' ? subtotal * (ivaValue / 100) : ivaValue
         updated.valorVenta = (subtotal + ivaAmount).toString()
       }
       
       // Si se modificó alguno de los 3 campos de desglose, calcular el presupuestoTotal con IVA
-      if (field === 'presupuestoMateriales' || field === 'presupuestoManoObra' || field === 'presupuestoOtros' || field === 'iva') {
+      if (field === 'presupuestoMateriales' || field === 'presupuestoManoObra' || field === 'presupuestoOtros' || field === 'iva' || field === 'ivaType') {
         const materiales = parseFloat(field === 'presupuestoMateriales' ? unformatted : updated.presupuestoMateriales) || 0
         const manoObra = parseFloat(field === 'presupuestoManoObra' ? unformatted : updated.presupuestoManoObra) || 0
         const otros = parseFloat(field === 'presupuestoOtros' ? unformatted : updated.presupuestoOtros) || 0
         const subtotalPresupuesto = materiales + manoObra + otros
-        const ivaPercent = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
-        const ivaAmount = subtotalPresupuesto * (ivaPercent / 100)
+        const ivaValue = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
+        const ivaAmount = ivaType === 'percentage' ? subtotalPresupuesto * (ivaValue / 100) : ivaValue
         updated.presupuestoTotal = (subtotalPresupuesto + ivaAmount).toString()
       }
       
@@ -319,6 +334,7 @@ export default function ProyectosPage() {
         fechaInicio: nuevoProyecto.fechaInicio,
         fechaFinEstimada: nuevoProyecto.fechaFinEstimada,
         iva: parseFloat(nuevoProyecto.iva) || 16,
+        ivaType: nuevoProyecto.ivaType,
         subtotalVenta: parseFloat(nuevoProyecto.subtotalVenta) || 0,
         valorVenta: parseFloat(nuevoProyecto.valorVenta) || 0,
         presupuestoMateriales: parseFloat(nuevoProyecto.presupuestoMateriales) || 0,
@@ -512,6 +528,7 @@ export default function ProyectosPage() {
         fechaInicio: proyecto.fechaInicio ? proyecto.fechaInicio.split('T')[0] : '',
         fechaFinEstimada: proyecto.fechaFinEstimada ? proyecto.fechaFinEstimada.split('T')[0] : '',
         iva: proyecto.iva?.toString() || '16',
+        ivaType: (proyecto as any).ivaType || 'percentage',
         subtotalVenta: proyecto.subtotalVenta?.toString() || '',
         valorVenta: proyecto.valorVenta?.toString() || '',
         presupuestoMateriales: proyecto.presupuestoMateriales?.toString() || '',
@@ -615,23 +632,6 @@ export default function ProyectosPage() {
                     Descarga el archivo Excel con el formato correcto para importar múltiples proyectos a la vez
                   </p>
                 </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  onClick={() => setShowTemplateInfoDialog(true)}
-                  className="h-10 w-10"
-                >
-                  <Info className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p>Cómo usar la plantilla Excel</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -802,23 +802,41 @@ export default function ProyectosPage() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-primary">💰 Venta</h3>
+                  
+                  {/* Selector de Tipo de IVA */}
+                  <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg border">
+                    <Label className="text-sm font-medium">Tipo de IVA:</Label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="ivaType"
+                          value="percentage"
+                          checked={nuevoProyecto.ivaType === 'percentage'}
+                          onChange={(e) => handlePresupuestoChange('ivaType', e.target.value)}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">Porcentaje (%)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="ivaType"
+                          value="amount"
+                          checked={nuevoProyecto.ivaType === 'amount'}
+                          onChange={(e) => handlePresupuestoChange('ivaType', e.target.value)}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">Monto Fijo ($)</span>
+                      </label>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <Label>IVA (%) *</Label>
-                      <Input 
-                        type="text" 
-                        placeholder="Ej: 16"
-                        value={nuevoProyecto.iva}
-                        onChange={(e) => handlePresupuestoChange('iva', e.target.value)}
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Porcentaje de IVA
-                      </p>
-                    </div>
-                    <div>
-                      <Label>Subtotal de Venta (sin IVA) *</Label>
+                      <Label htmlFor="subtotal">Subtotal (sin IVA) *</Label>
                       <Input 
                         type="text" 
                         placeholder="Ej: 100,000"
@@ -830,12 +848,24 @@ export default function ProyectosPage() {
                         <p className="text-sm text-red-500 mt-1">{formErrors.subtotalVenta}</p>
                       ) : (
                         <p className="text-xs text-muted-foreground mt-1">
-                          Precio sin IVA
+                          Monto sin IVA
                         </p>
                       )}
                     </div>
                     <div>
-                      <Label>Total de Venta (con IVA)</Label>
+                      <Label>{nuevoProyecto.ivaType === 'percentage' ? 'IVA (%)' : 'IVA ($)'} *</Label>
+                      <Input 
+                        type="text" 
+                        placeholder={nuevoProyecto.ivaType === 'percentage' ? 'Ej: 16' : 'Ej: 16000'}
+                        value={nuevoProyecto.ivaType === 'percentage' ? nuevoProyecto.iva : formatNumber(nuevoProyecto.iva)}
+                        onChange={(e) => handlePresupuestoChange('iva', e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {nuevoProyecto.ivaType === 'percentage' ? 'Porcentaje de IVA' : 'Monto fijo de IVA'}
+                      </p>
+                    </div>
+                    <div>
+                      <Label htmlFor="amount">Total (con IVA)</Label>
                       <Input 
                         type="text" 
                         value={formatNumber(nuevoProyecto.valorVenta)}
@@ -1218,255 +1248,6 @@ export default function ProyectosPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setVerModalOpen(false)}>Cerrar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Diálogo informativo sobre la plantilla Excel */}
-      <Dialog open={showTemplateInfoDialog} onOpenChange={setShowTemplateInfoDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">  
-          <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <FileText className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <DialogTitle className="text-2xl">Guía de Uso: Plantilla Excel</DialogTitle>
-                <DialogDescription>
-                  Aprende a importar múltiples proyectos de forma rápida y eficiente
-                </DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
-
-          <div className="overflow-y-auto max-h-[calc(90vh-180px)] px-1">
-            <div className="space-y-6 py-4">
-            {/* Paso 1 */}
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0">
-                  <span className="text-sm font-bold text-blue-700 dark:text-blue-300">1</span>
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg mb-2">Descarga la plantilla</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Haz clic en el botón "Plantilla Excel" para descargar el archivo con el formato correcto. 
-                    La plantilla incluye dos hojas:
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 rounded-lg border bg-card">
-                      <div className="flex items-center gap-2 mb-1">
-                        <FileText className="h-4 w-4 text-green-600" />
-                        <span className="font-medium text-sm">Proyectos</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Hoja principal con datos de ejemplo</p>
-                    </div>
-                    <div className="p-3 rounded-lg border bg-card">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Info className="h-4 w-4 text-blue-600" />
-                        <span className="font-medium text-sm">Instrucciones</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Guía detallada de campos y validaciones</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Paso 2 */}
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="h-8 w-8 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center flex-shrink-0">
-                  <span className="text-sm font-bold text-purple-700 dark:text-purple-300">2</span>
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg mb-2">Completa los datos</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Llena la información de tus proyectos siguiendo el formato de ejemplo. Los campos obligatorios son:
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      <span>Nombre del proyecto</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      <span>RFC del cliente</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      <span>Fechas (inicio y fin)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      <span>IVA y Subtotal de Venta</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      <span>Presupuestos (desglose)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      <span>Email del responsable</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Paso 3 */}
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="h-8 w-8 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center flex-shrink-0">
-                  <span className="text-sm font-bold text-orange-700 dark:text-orange-300">3</span>
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg mb-2">Sube el archivo</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Arrastra el archivo Excel completado al área de carga o haz clic para seleccionarlo. 
-                    El sistema validará automáticamente los datos antes de importarlos.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Consejos importantes */}
-            <div className="rounded-lg border-2 border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950 p-4">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                <div className="space-y-2">
-                  <h4 className="font-semibold text-amber-900 dark:text-amber-100">Consejos importantes</h4>
-                  <ul className="space-y-1.5 text-sm text-amber-800 dark:text-amber-200">
-                    <li className="flex items-start gap-2">
-                      <span className="text-amber-600 dark:text-amber-400">•</span>
-                      <span>No modifiques los nombres de las columnas (encabezados)</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-amber-600 dark:text-amber-400">🔍</span>
-                      <span className="font-semibold">Usa el RFC del cliente para identificación precisa y evitar errores de tipeo</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-amber-600 dark:text-amber-400">•</span>
-                      <span>Alternativa: Puedes usar el email del cliente en lugar del RFC</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-amber-600 dark:text-amber-400">•</span>
-                      <span>Usa el formato de fecha YYYY-MM-DD (ej: 2024-12-31)</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-amber-600 dark:text-amber-400">💡</span>
-                      <span className="font-semibold">Las columnas valorVenta y presupuestoTotal tienen fórmulas de Excel que calculan automáticamente en TIEMPO REAL</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-amber-600 dark:text-amber-400">•</span>
-                      <span>valorVenta = subtotalVenta + (subtotalVenta × iva/100). Ej: iva=16, subtotal=100,000 → 116,000</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-amber-600 dark:text-amber-400">•</span>
-                      <span>presupuestoTotal = (materiales + manoObra + otros) + IVA aplicado</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-amber-600 dark:text-amber-400">•</span>
-                      <span>NO modifiques las fórmulas en las columnas valorVenta y presupuestoTotal</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-amber-600 dark:text-amber-400">•</span>
-                      <span>El RFC/email del cliente y el email del responsable deben estar registrados</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-amber-600 dark:text-amber-400">•</span>
-                      <span>El código del proyecto se genera automáticamente al importar</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            {/* Ejemplo visual */}
-            <div className="space-y-3">
-              <h4 className="font-semibold flex items-center gap-2">
-                <Eye className="h-4 w-4" />
-                Ejemplo de datos (campos de la plantilla Excel)
-              </h4>
-              <div className="rounded-lg border bg-muted/50 overflow-auto max-h-60" style={{maxWidth: '100%'}}>
-                <table className="w-full text-xs" style={{minWidth: '1200px'}}>
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-2 font-semibold whitespace-nowrap">nombreProyecto</th>
-                      <th className="text-left p-2 font-semibold whitespace-nowrap">clienteRfc</th>
-                      <th className="text-left p-2 font-semibold whitespace-nowrap">fechaInicio</th>
-                      <th className="text-left p-2 font-semibold whitespace-nowrap">fechaFinEstimada</th>
-                      <th className="text-left p-2 font-semibold whitespace-nowrap">iva</th>
-                      <th className="text-left p-2 font-semibold whitespace-nowrap">subtotalVenta</th>
-                      <th className="text-left p-2 font-semibold whitespace-nowrap bg-blue-50 dark:bg-blue-950">valorVenta 💡</th>
-                      <th className="text-left p-2 font-semibold whitespace-nowrap">presupuestoMateriales</th>
-                      <th className="text-left p-2 font-semibold whitespace-nowrap">presupuestoManoObra</th>
-                      <th className="text-left p-2 font-semibold whitespace-nowrap">presupuestoOtros</th>
-                      <th className="text-left p-2 font-semibold whitespace-nowrap bg-blue-50 dark:bg-blue-950">presupuestoTotal 💡</th>
-                      <th className="text-left p-2 font-semibold whitespace-nowrap">responsableEmail</th>
-                      <th className="text-left p-2 font-semibold whitespace-nowrap">descripcion</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b">
-                      <td className="p-2 whitespace-nowrap">Implementación Sistema ERP</td>
-                      <td className="p-2 whitespace-nowrap">20123456789</td>
-                      <td className="p-2 whitespace-nowrap">2024-02-01</td>
-                      <td className="p-2 whitespace-nowrap">2024-06-30</td>
-                      <td className="p-2 whitespace-nowrap">16</td>
-                      <td className="p-2 whitespace-nowrap">100,000</td>
-                      <td className="p-2 whitespace-nowrap bg-blue-50 dark:bg-blue-950 font-medium">116,000</td>
-                      <td className="p-2 whitespace-nowrap">20,000</td>
-                      <td className="p-2 whitespace-nowrap">25,000</td>
-                      <td className="p-2 whitespace-nowrap">5,000</td>
-                      <td className="p-2 whitespace-nowrap bg-blue-50 dark:bg-blue-950 font-medium">58,000</td>
-                      <td className="p-2 whitespace-nowrap">gerente@empresa.com</td>
-                      <td className="p-2">Proyecto estratégico ERP</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 whitespace-nowrap">Instalación Eléctrica Norte</td>
-                      <td className="p-2 whitespace-nowrap">20987654321</td>
-                      <td className="p-2 whitespace-nowrap">2024-03-15</td>
-                      <td className="p-2 whitespace-nowrap">2024-08-30</td>
-                      <td className="p-2 whitespace-nowrap">16</td>
-                      <td className="p-2 whitespace-nowrap">250,000</td>
-                      <td className="p-2 whitespace-nowrap bg-blue-50 dark:bg-blue-950 font-medium">290,000</td>
-                      <td className="p-2 whitespace-nowrap">80,000</td>
-                      <td className="p-2 whitespace-nowrap">60,000</td>
-                      <td className="p-2 whitespace-nowrap">10,000</td>
-                      <td className="p-2 whitespace-nowrap bg-blue-50 dark:bg-blue-950 font-medium">174,000</td>
-                      <td className="p-2 whitespace-nowrap">jefe@empresa.com</td>
-                      <td className="p-2">Sistema eléctrico completo</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <span className="inline-block w-3 h-3 bg-blue-50 dark:bg-blue-950 border rounded"></span>
-                Las columnas resaltadas se calculan automáticamente con fórmulas de Excel
-              </p>
-            </div>
-            </div>
-          </div>
-
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => setShowTemplateInfoDialog(false)}
-              className="w-full sm:w-auto"
-            >
-              Cerrar
-            </Button>
-            <Button 
-              onClick={() => {
-                setShowTemplateInfoDialog(false)
-                descargarPlantilla()
-              }}
-              className="w-full sm:w-auto gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Descargar Plantilla
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

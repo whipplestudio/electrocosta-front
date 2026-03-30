@@ -10,6 +10,7 @@ export interface CrearProyectoData {
   fechaInicio: string
   fechaFinEstimada: string
   iva?: number
+  ivaType?: string
   subtotalVenta: number
   valorVenta: number
   presupuestoMateriales: number

@@ -89,6 +89,22 @@ export const paymentSchedulingService = {
     return response.data;
   },
 
+  async getScheduledPaymentsByPaymentStatus(
+    paymentStatus: 'pending' | 'paid',
+    filters?: {
+      status?: string;
+      supplierId?: string;
+      page?: number;
+      limit?: number;
+    }
+  ): Promise<PaymentSchedulesResponse & { summary: { totalPending: number; countPending: number; totalPaid: number; countPaid: number } }> {
+    const response = await apiClient.get(
+      `/payment-schedules/by-payment-status/${paymentStatus}`,
+      { params: filters }
+    );
+    return response.data;
+  },
+
   async getAccountSchedules(accountPayableId: string): Promise<PaymentSchedule[]> {
     const response = await apiClient.get<PaymentSchedule[]>(
       `/payment-schedules/account/${accountPayableId}`

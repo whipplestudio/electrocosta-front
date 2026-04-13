@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog"
 import { CheckCircle, Clock, DollarSign, Search, Calendar as CalendarIcon, Loader2, History, Receipt, CreditCard } from "lucide-react"
 import { accountsPayableService } from "@/services/accounts-payable.service"
+import { paymentSchedulingService, type PaymentSchedule } from "@/services/payment-scheduling.service"
 import type { AccountPayable, RegisterPaymentDto, Payment } from "@/types/accounts-payable"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -38,14 +39,19 @@ const paymentMethodLabels: Record<string, string> = {
 export default function AplicacionPagosCuentasPagar() {
   const [searchTerm, setSearchTerm] = useState("")
   const [accounts, setAccounts] = useState<AccountPayable[]>([])
+  const [approvedSchedules, setApprovedSchedules] = useState<Array<PaymentSchedule & { paidAmount?: number; remainingAmount?: number; isFullyPaid?: boolean }>>([])
+  const [paidSchedules, setPaidSchedules] = useState<Array<PaymentSchedule & { paidAmount?: number; remainingAmount?: number; isFullyPaid?: boolean }>>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'pending' | 'paid'>('pending')
   const [showRegisterDialog, setShowRegisterDialog] = useState(false)
   const [showHistoryDialog, setShowHistoryDialog] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<AccountPayable | null>(null)
+  const [selectedSchedule, setSelectedSchedule] = useState<PaymentSchedule | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [paymentsToday, setPaymentsToday] = useState(0)
+  const [summary, setSummary] = useState({ totalPending: 0, countPending: 0, totalPaid: 0, countPaid: 0 })
 
   // Form state
   const [formData, setFormData] = useState({
@@ -61,16 +67,48 @@ export default function AplicacionPagosCuentasPagar() {
     try {
       setLoading(true)
       
-      // Cargar cuentas (prioritario)
-      const accountsData = await accountsPayableService.getAll({ 
-        page: 1, 
+      // 1. Cargar programaciones PENDIENTES de pago (con saldo por pagar)
+      const pendingData = await paymentSchedulingService.getScheduledPaymentsByPaymentStatus('pending', {
+        status: 'completed', // Solo las aprobadas
+        page: 1,
         limit: 100,
-        approvalStatus: 'approved', // Solo cuentas aprobadas
       })
       
-      // Filtrar solo cuentas con saldo pendiente
-      const pendingAccounts = accountsData.data.filter(a => Number(a.balance) > 0)
-      setAccounts(pendingAccounts)
+      // 2. Cargar programaciones YA PAGADAS
+      const paidData = await paymentSchedulingService.getScheduledPaymentsByPaymentStatus('paid', {
+        status: 'completed',
+        page: 1,
+        limit: 100,
+      })
+      
+      // 3. Extraer todos los accountPayableId únicos
+      const allSchedules = [...pendingData.data, ...paidData.data]
+      const approvedAccountIds = [...new Set(
+        allSchedules.map((s: PaymentSchedule) => s.accountPayableId)
+      )]
+      
+      // 4. Cargar las cuentas relacionadas
+      let accountsWithApprovedSchedules: AccountPayable[] = []
+      if (approvedAccountIds.length > 0) {
+        const accountsData = await accountsPayableService.getAll({
+          page: 1,
+          limit: 100,
+          approvalStatus: 'approved',
+        })
+        accountsWithApprovedSchedules = accountsData.data.filter(
+          (a: AccountPayable) => approvedAccountIds.includes(a.id)
+        )
+      }
+      
+      setApprovedSchedules(pendingData.data)
+      setPaidSchedules(paidData.data)
+      setAccounts(accountsWithApprovedSchedules)
+      setSummary({
+        totalPending: pendingData.summary?.totalPending || 0,
+        countPending: pendingData.summary?.countPending || 0,
+        totalPaid: paidData.summary?.totalPaid || 0,
+        countPaid: paidData.summary?.countPaid || 0,
+      })
       
       // Cargar pagos de hoy (opcional, no bloquea la carga)
       try {
@@ -196,6 +234,75 @@ export default function AplicacionPagosCuentasPagar() {
     }
   }
 
+  // Helper: Calcular cuánto se debe pagar de otras programaciones de la misma cuenta
+  const getPaidAmountForOtherSchedules = (
+    allSchedules: PaymentSchedule[], 
+    currentSchedule: PaymentSchedule,
+    paymentsByAccount: Record<string, Payment[]>
+  ): number => {
+    const accountId = currentSchedule.accountPayableId
+    const accountSchedules = allSchedules
+      .filter((s: PaymentSchedule) => s.accountPayableId === accountId)
+      .sort((a: PaymentSchedule, b: PaymentSchedule) => 
+        new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()
+      )
+    
+    const currentIndex = accountSchedules.findIndex((s: PaymentSchedule) => s.id === currentSchedule.id)
+    if (currentIndex === -1) return 0
+    
+    // Sumar montos de programaciones anteriores
+    let otherSchedulesAmount = 0
+    for (let i = 0; i < currentIndex; i++) {
+      otherSchedulesAmount += Number(accountSchedules[i].amount)
+    }
+    
+    return otherSchedulesAmount
+  }
+
+  // Helper: Calcular el balance de cada programación considerando pagos en orden cronológico
+  const calculateScheduleBalances = (
+    schedules: PaymentSchedule[],
+    paymentsByAccount: Record<string, Payment[]>
+  ): Array<PaymentSchedule & { paidAmount: number; remainingAmount: number; isFullyPaid: boolean }> => {
+    // Agrupar programaciones por cuenta
+    const schedulesByAccount: Record<string, PaymentSchedule[]> = {}
+    schedules.forEach((s: PaymentSchedule) => {
+      if (!schedulesByAccount[s.accountPayableId]) {
+        schedulesByAccount[s.accountPayableId] = []
+      }
+      schedulesByAccount[s.accountPayableId].push(s)
+    })
+    
+    const result: Array<PaymentSchedule & { paidAmount: number; remainingAmount: number; isFullyPaid: boolean }> = []
+    
+    // Procesar cada cuenta
+    Object.keys(schedulesByAccount).forEach((accountId) => {
+      const accountSchedules = schedulesByAccount[accountId].sort(
+        (a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()
+      )
+      const accountPayments = paymentsByAccount[accountId] || []
+      const totalPaid = accountPayments.reduce((sum: number, p: Payment) => sum + Number(p.amount), 0)
+      
+      let paidAccumulator = 0
+      
+      accountSchedules.forEach((schedule: PaymentSchedule) => {
+        const scheduledAmount = Number(schedule.amount)
+        const paidForThisSchedule = Math.max(0, Math.min(scheduledAmount, totalPaid - paidAccumulator))
+        paidAccumulator += paidForThisSchedule
+        const remaining = scheduledAmount - paidForThisSchedule
+        
+        result.push({
+          ...schedule,
+          paidAmount: paidForThisSchedule,
+          remainingAmount: remaining,
+          isFullyPaid: remaining === 0
+        })
+      })
+    })
+    
+    return result
+  }
+
   const resetForm = () => {
     setFormData({
       amount: '',
@@ -205,25 +312,37 @@ export default function AplicacionPagosCuentasPagar() {
       notes: '',
     })
     setSelectedAccount(null)
+    setSelectedSchedule(null)
   }
 
-  const openRegisterDialog = (account: AccountPayable) => {
-    setSelectedAccount(account)
+  const openRegisterDialog = (schedule: PaymentSchedule & { remainingAmount?: number }) => {
+    setSelectedSchedule(schedule)
+    // Buscar la cuenta relacionada
+    const account = accounts.find(a => a.id === schedule.accountPayableId)
+    setSelectedAccount(account || null)
+    // Pre-llenar con el monto faltante, no el total
+    const amountToPay = schedule.remainingAmount || Number(schedule.amount)
     setFormData({
-      amount: String(account.balance),
-      paymentMethod: 'transfer',
+      amount: String(amountToPay),
+      paymentMethod: schedule.paymentMethod || 'transfer',
       paymentDate: new Date(),
-      reference: account.invoiceNumber,
-      notes: account.description || '',
+      reference: schedule.reference || '',
+      notes: schedule.notes || '',
     })
     setShowRegisterDialog(true)
   }
 
-  const filteredAccounts = accounts.filter(account => {
-    const supplierName = account.supplier?.name || (account as any).supplierName || '';
+  const currentSchedules = activeTab === 'pending' ? approvedSchedules : paidSchedules
+  
+  const filteredSchedules = currentSchedules.filter(schedule => {
+    const account = accounts.find(a => a.id === schedule.accountPayableId)
+    const supplierName = account?.supplier?.name || (account as any)?.supplierName || '';
+    const invoiceNumber = account?.invoiceNumber || '';
+    const reference = schedule.reference || '';
     return (
       supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      account.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase())
+      invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reference.toLowerCase().includes(searchTerm.toLowerCase())
     )
   })
 
@@ -249,18 +368,33 @@ export default function AplicacionPagosCuentasPagar() {
       </div>
 
       {/* Estadísticas */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Pendiente</CardTitle>
+            <CardTitle className="text-sm font-medium">Por Pagar</CardTitle>
             <DollarSign className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${accounts.reduce((sum, a) => sum + Number(a.balance), 0).toLocaleString()}
+              ${summary.totalPending.toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">
-              {accounts.length} cuenta{accounts.length !== 1 ? 's' : ''}
+              {summary.countPending} programaci{summary.countPending !== 1 ? 'ones' : 'ón'}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Ya Pagado</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              ${summary.totalPaid.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {summary.countPaid} programaci{summary.countPaid !== 1 ? 'ones' : 'ón'}
             </p>
           </CardContent>
         </Card>
@@ -272,16 +406,16 @@ export default function AplicacionPagosCuentasPagar() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {accounts.filter(a => a.status === 'overdue').length}
+              {approvedSchedules.filter(s => new Date(s.scheduledDate) < new Date()).length}
             </div>
-            <p className="text-xs text-muted-foreground">Requieren atención</p>
+            <p className="text-xs text-muted-foreground">Con fecha vencida</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pagos Hoy</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
+            <CreditCard className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{paymentsToday}</div>
@@ -290,18 +424,52 @@ export default function AplicacionPagosCuentasPagar() {
         </Card>
       </div>
 
-      {/* Búsqueda y filtros */}
+      {/* Tabs y Tabla */}
       <Card>
-        <CardHeader>
-          <CardTitle>Cuentas por Pagar Pendientes</CardTitle>
-          <CardDescription>Selecciona una cuenta para registrar un pago</CardDescription>
+        <CardHeader className="pb-0">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Pagos Programados</CardTitle>
+              <CardDescription>Programaciones de pago aprobadas</CardDescription>
+            </div>
+          </div>
+          
+          {/* Tabs */}
+          <div className="flex gap-2 mt-4 border-b">
+            <button
+              onClick={() => setActiveTab('pending')}
+              className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                activeTab === 'pending' 
+                  ? 'border-blue-600 text-blue-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Por Pagar ({summary.countPending})
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('paid')}
+              className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                activeTab === 'paid' 
+                  ? 'border-green-600 text-green-600' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <CheckCircle className="h-4 w-4" />
+                Ya Pagadas ({summary.countPaid})
+              </span>
+            </button>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-4">
           <div className="mb-4">
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por proveedor o número de factura..."
+                placeholder="Buscar por proveedor, factura o referencia..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8"
@@ -314,65 +482,87 @@ export default function AplicacionPagosCuentasPagar() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Proveedor</TableHead>
-                  <TableHead>Factura</TableHead>
-                  <TableHead>Monto Total</TableHead>
+                  <TableHead>Monto Programado</TableHead>
                   <TableHead>Pagado</TableHead>
-                  <TableHead>Saldo Pendiente</TableHead>
-                  <TableHead>Vencimiento</TableHead>
-                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Faltante</TableHead>
+                  <TableHead>Fecha Programada</TableHead>
+                  <TableHead>Método</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={7} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
-                ) : filteredAccounts.length === 0 ? (
+                ) : filteredSchedules.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      {searchTerm ? 'No se encontraron cuentas' : 'No hay cuentas pendientes de pago'}
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      {searchTerm ? 'No se encontraron programaciones' : activeTab === 'pending' ? 'No hay pagos programados pendientes' : 'No hay pagos programados completados'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredAccounts.map((account) => (
-                    <TableRow key={account.id}>
-                      <TableCell className="font-medium">{account.supplier?.name || (account as any).supplierName || 'N/A'}</TableCell>
-                      <TableCell>{account.invoiceNumber}</TableCell>
-                      <TableCell>${Number(account.amount).toLocaleString()}</TableCell>
-                      <TableCell className="font-medium text-green-600">
-                        ${Number(account.paidAmount || 0).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="font-bold text-red-600">
-                        ${Number(account.balance).toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        {format(new Date(account.dueDate), 'dd MMM yyyy', { locale: es })}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(account.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleViewHistory(account)}
-                          >
-                            <History className="h-4 w-4 mr-1" />
-                            Historial
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => openRegisterDialog(account)}
-                          >
-                            <CreditCard className="h-4 w-4 mr-1" />
-                            Registrar Pago
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  filteredSchedules.map((schedule: any) => {
+                    const account = accounts.find(a => a.id === schedule.accountPayableId);
+                    const progressPercent = Number(schedule.amount) > 0 
+                      ? (schedule.paidAmount / Number(schedule.amount)) * 100 
+                      : 0;
+                    const isPaidTab = activeTab === 'paid';
+                    return (
+                      <TableRow key={schedule.id}>
+                        <TableCell className="font-medium">
+                          {account?.supplier?.name || (account as any)?.supplierName || 'N/A'}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          ${Number(schedule.amount).toLocaleString()}
+                        </TableCell>
+                        <TableCell className={`${isPaidTab ? 'text-green-600 font-bold' : 'text-green-600'}`}>
+                          ${schedule.paidAmount.toLocaleString()}
+                          <div className="w-16 h-1 bg-gray-200 rounded-full mt-1">
+                            <div 
+                              className={`h-1 rounded-full ${isPaidTab ? 'bg-green-600' : 'bg-green-500'}`}
+                              style={{ width: `${progressPercent}%` }}
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell className={`text-right font-bold ${isPaidTab ? 'text-green-600' : 'text-red-600'}`}>
+                          ${schedule.remainingAmount.toLocaleString()}
+                          {isPaidTab && <span className="text-xs block font-normal">(Completado)</span>}
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(schedule.scheduledDate), 'dd MMM yyyy', { locale: es })}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {paymentMethodLabels[schedule.paymentMethod || 'transfer'] || schedule.paymentMethod}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => account && handleViewHistory(account)}
+                            >
+                              <History className="h-4 w-4 mr-1" />
+                              Historial
+                            </Button>
+                            {!isPaidTab && (
+                              <Button
+                                size="sm"
+                                onClick={() => openRegisterDialog(schedule)}
+                              >
+                                <CreditCard className="h-4 w-4 mr-1" />
+                                Registrar Pago
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -390,22 +580,46 @@ export default function AplicacionPagosCuentasPagar() {
             </DialogDescription>
           </DialogHeader>
 
-          {selectedAccount && (
+          {selectedSchedule && (
             <div className="space-y-4 py-4">
-              {/* Info de la cuenta */}
+              {/* Info de la programación y cuenta */}
               <div className="rounded-lg bg-muted p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Proveedor:</span>
-                  <span className="font-medium">{selectedAccount.supplier?.name || (selectedAccount as any).supplierName || 'N/A'}</span>
+                  <span className="font-medium">{selectedAccount?.supplier?.name || (selectedAccount as any)?.supplierName || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Factura:</span>
-                  <span className="font-medium">{selectedAccount.invoiceNumber}</span>
+                  <span className="font-medium">{selectedAccount?.invoiceNumber || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Saldo Pendiente:</span>
-                  <span className="font-bold text-red-600">
-                    ${Number(selectedAccount.balance).toLocaleString()}
+                  <span className="text-muted-foreground">Monto Programado:</span>
+                  <span className="font-medium">
+                    ${Number(selectedSchedule.amount).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Ya Pagado:</span>
+                  <span className="text-green-600">
+                    ${(selectedSchedule as any).paidAmount?.toLocaleString() || '0'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm border-t border-gray-300 pt-2 mt-2">
+                  <span className="text-muted-foreground font-semibold">Faltante por Pagar:</span>
+                  <span className="font-bold text-red-600 text-base">
+                    ${(selectedSchedule as any).remainingAmount?.toLocaleString() || Number(selectedSchedule.amount).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Fecha Programada:</span>
+                  <span className="font-medium">
+                    {format(new Date(selectedSchedule.scheduledDate), 'dd MMM yyyy', { locale: es })}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Método:</span>
+                  <span className="font-medium">
+                    {paymentMethodLabels[selectedSchedule.paymentMethod || 'transfer']}
                   </span>
                 </div>
               </div>

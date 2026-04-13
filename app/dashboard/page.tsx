@@ -86,6 +86,18 @@ function DashboardContent() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
+  
+  // Datos de cuentas por pagar por proyecto
+  const [accountsPayableByProject, setAccountsPayableByProject] = useState<{
+    total: number
+    pagado: number
+    pendiente: number
+    porCategoria: {
+      materiales: { total: number; pagado: number; pendiente: number }
+      manoObra: { total: number; pagado: number; pendiente: number }
+      otros: { total: number; pagado: number; pendiente: number }
+    }
+  } | null>(null)
 
   useEffect(() => {
     cargarDashboardGeneral()
@@ -105,6 +117,7 @@ function DashboardContent() {
   useEffect(() => {
     if (selectedProjectId) {
       cargarDashboardProyecto(selectedProjectId)
+      cargarCuentasPorPagarProyecto(selectedProjectId)
     }
   }, [selectedProjectId, searchParams])
 
@@ -141,6 +154,71 @@ function DashboardContent() {
     }
   }
 
+  const cargarCuentasPorPagarProyecto = async (projectId: string) => {
+    try {
+      const params = new URLSearchParams()
+      params.append("projectId", projectId)
+      params.append("limit", "1000")
+      
+      const from = searchParams.get("from")
+      const to = searchParams.get("to")
+      if (from) params.append("dateFrom", from)
+      if (to) params.append("dateTo", to)
+
+      const response = await apiClient.get(`/accounts-payable?${params.toString()}`)
+      const accounts = response.data.data || []
+      
+      // Calcular totales por categoría
+      const porCategoria = {
+        materiales: { total: 0, pagado: 0, pendiente: 0 },
+        manoObra: { total: 0, pagado: 0, pendiente: 0 },
+        otros: { total: 0, pagado: 0, pendiente: 0 },
+      }
+      
+      let total = 0
+      let pagado = 0
+      let pendiente = 0
+      
+      accounts.forEach((account: any) => {
+        const amount = Number(account.amount || 0)
+        const paidAmount = Number(account.paidAmount || 0)
+        const balance = Number(account.balance || 0)
+        
+        total += amount
+        pagado += paidAmount
+        pendiente += balance
+        
+        const clasificacion = account.macroClasificacion || account.category?.macroClasificacion
+        
+        switch (clasificacion) {
+          case 'MATERIALES':
+            porCategoria.materiales.total += amount
+            porCategoria.materiales.pagado += paidAmount
+            porCategoria.materiales.pendiente += balance
+            break
+          case 'MANO_DE_OBRA':
+            porCategoria.manoObra.total += amount
+            porCategoria.manoObra.pagado += paidAmount
+            porCategoria.manoObra.pendiente += balance
+            break
+          default:
+            porCategoria.otros.total += amount
+            porCategoria.otros.pagado += paidAmount
+            porCategoria.otros.pendiente += balance
+        }
+      })
+      
+      setAccountsPayableByProject({
+        total,
+        pagado,
+        pendiente,
+        porCategoria
+      })
+    } catch (error) {
+      console.error("Error al cargar cuentas por pagar del proyecto:", error)
+    }
+  }
+
   const handleDateRangeChange = (range: DateRange | undefined) => {
     setDateRange(range)
     const params = new URLSearchParams(searchParams.toString())
@@ -158,11 +236,25 @@ function DashboardContent() {
     }
 
     router.push(`/dashboard?${params.toString()}`)
+    
+    // Recargar cuentas por pagar si hay proyecto seleccionado
+    if (selectedProjectId) {
+      setTimeout(() => {
+        cargarCuentasPorPagarProyecto(selectedProjectId)
+      }, 100)
+    }
   }
 
   const clearDateRange = () => {
     setDateRange(undefined)
     router.push("/dashboard")
+    
+    // Recargar cuentas por pagar si hay proyecto seleccionado
+    if (selectedProjectId) {
+      setTimeout(() => {
+        cargarCuentasPorPagarProyecto(selectedProjectId)
+      }, 100)
+    }
   }
 
   const formatCurrency = (value: number) => {
@@ -386,6 +478,11 @@ function DashboardContent() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium">Presupuesto Gastos</CardTitle>
+                {accountsPayableByProject && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    CxP: {formatCurrency(accountsPayableByProject.total)} total
+                  </p>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold mb-4">
@@ -395,6 +492,9 @@ function DashboardContent() {
                   {/* Materiales */}
                   {(() => {
                     const presupuesto = dashboardProyecto.kpis.presupuestoGastos.materiales
+                    const cxpData = accountsPayableByProject?.porCategoria.materiales
+                    const gastadoCxP = cxpData?.pagado || 0
+                    const pendienteCxP = cxpData?.pendiente || 0
                     const gastado = dashboardProyecto.kpis.ejecucionReal.materialesReal
                     const porcentaje = presupuesto > 0 ? (gastado / presupuesto) * 100 : 0
                     const restante = presupuesto - gastado
@@ -419,6 +519,11 @@ function DashboardContent() {
                             {restante >= 0 ? `Falta: ${formatCurrency(restante)}` : `Excedido: ${formatCurrency(Math.abs(restante))}`}
                           </span>
                         </div>
+                        {cxpData && cxpData.total > 0 && (
+                          <div className="text-xs text-muted-foreground mt-1 pl-2 border-l-2 border-blue-300">
+                            CxP: {formatCurrency(gastadoCxP)} pagado / {formatCurrency(pendienteCxP)} pendiente
+                          </div>
+                        )}
                       </div>
                     )
                   })()}
@@ -426,7 +531,9 @@ function DashboardContent() {
                   {/* Mano de Obra */}
                   {(() => {
                     const presupuesto = dashboardProyecto.kpis.presupuestoGastos.manoObra
-                    console.log("🚀 ~ DashboardContent ~ presupuesto:", presupuesto)
+                    const cxpData = accountsPayableByProject?.porCategoria.manoObra
+                    const gastadoCxP = cxpData?.pagado || 0
+                    const pendienteCxP = cxpData?.pendiente || 0
                     const gastado = dashboardProyecto.kpis.ejecucionReal.manoObraReal
                     const porcentaje = presupuesto > 0 ? (gastado / presupuesto) * 100 : 0
                     const restante = presupuesto - gastado
@@ -451,6 +558,11 @@ function DashboardContent() {
                             {restante >= 0 ? `Falta: ${formatCurrency(restante)}` : `Excedido: ${formatCurrency(Math.abs(restante))}`}
                           </span>
                         </div>
+                        {cxpData && cxpData.total > 0 && (
+                          <div className="text-xs text-muted-foreground mt-1 pl-2 border-l-2 border-blue-300">
+                            CxP: {formatCurrency(gastadoCxP)} pagado / {formatCurrency(pendienteCxP)} pendiente
+                          </div>
+                        )}
                       </div>
                     )
                   })()}
@@ -458,6 +570,9 @@ function DashboardContent() {
                   {/* Otros */}
                   {(() => {
                     const presupuesto = dashboardProyecto.kpis.presupuestoGastos.otros
+                    const cxpData = accountsPayableByProject?.porCategoria.otros
+                    const gastadoCxP = cxpData?.pagado || 0
+                    const pendienteCxP = cxpData?.pendiente || 0
                     const gastado = dashboardProyecto.kpis.ejecucionReal.otrosReal
                     const porcentaje = presupuesto > 0 ? (gastado / presupuesto) * 100 : 0
                     const restante = presupuesto - gastado
@@ -482,6 +597,11 @@ function DashboardContent() {
                             {restante >= 0 ? `Falta: ${formatCurrency(restante)}` : `Excedido: ${formatCurrency(Math.abs(restante))}`}
                           </span>
                         </div>
+                        {cxpData && cxpData.total > 0 && (
+                          <div className="text-xs text-muted-foreground mt-1 pl-2 border-l-2 border-blue-300">
+                            CxP: {formatCurrency(gastadoCxP)} pagado / {formatCurrency(pendienteCxP)} pendiente
+                          </div>
+                        )}
                       </div>
                     )
                   })()}
@@ -492,6 +612,11 @@ function DashboardContent() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium">Ejecución Real</CardTitle>
+                {accountsPayableByProject && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Desde Cuentas por Pagar
+                  </p>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-orange-600">
@@ -500,6 +625,22 @@ function DashboardContent() {
                 <div className="mt-2 text-xs text-muted-foreground">
                   Por Pagar: {formatCurrency(dashboardProyecto.kpis.ejecucionReal.pendientePorPagar)}
                 </div>
+                {accountsPayableByProject && (
+                  <div className="mt-3 pt-3 border-t space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">CxP Total:</span>
+                      <span className="font-medium">{formatCurrency(accountsPayableByProject.total)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">CxP Pagado:</span>
+                      <span className="font-medium text-green-600">{formatCurrency(accountsPayableByProject.pagado)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">CxP Pendiente:</span>
+                      <span className="font-medium text-orange-600">{formatCurrency(accountsPayableByProject.pendiente)}</span>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

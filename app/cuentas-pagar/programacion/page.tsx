@@ -293,20 +293,56 @@ export default function ProgramacionPagosPage() {
     })
     setErrors({})
     setEditingSchedule(null)
+    setSelectedAccountInfo(null)
   }
 
+  // Estado para información de montos de la cuenta seleccionada
+  const [selectedAccountInfo, setSelectedAccountInfo] = useState<{
+    totalAmount: number;
+    scheduledAmount: number;
+    remainingAmount: number;
+  } | null>(null)
+
   // Seleccionar cuenta y prellenar datos
-  const handleSelectAccount = (accountId: string) => {
+  const handleSelectAccount = async (accountId: string) => {
     const account = availableAccounts.find(acc => acc.id === accountId)
     if (account) {
-      setFormData({
-        ...formData,
-        accountPayableId: accountId,
-        scheduledAmount: account.amount.toString(),
-        reference: account.invoiceNumber,
-      })
-      // Limpiar error de cuenta
-      setErrors(prev => ({ ...prev, accountPayableId: undefined }))
+      try {
+        // Obtener pagos ya programados para esta cuenta
+        const schedules = await paymentSchedulingService.getAccountSchedules(accountId)
+        const totalScheduled = schedules
+          .filter(s => s.status === 'scheduled' || s.status === 'approved')
+          .reduce((sum, s) => sum + Number(s.amount), 0)
+        
+        const accountTotal = Number(account.amount)
+        const remainingAmount = accountTotal - totalScheduled
+        
+        // Guardar info para mostrar en UI
+        setSelectedAccountInfo({
+          totalAmount: accountTotal,
+          scheduledAmount: totalScheduled,
+          remainingAmount: remainingAmount
+        })
+        
+        setFormData({
+          ...formData,
+          accountPayableId: accountId,
+          scheduledAmount: remainingAmount > 0 ? remainingAmount.toString() : '0',
+          reference: account.invoiceNumber,
+        })
+        // Limpiar error de cuenta
+        setErrors(prev => ({ ...prev, accountPayableId: undefined }))
+      } catch (error) {
+        console.error('Error al obtener schedules:', error)
+        // Fallback: usar monto total si hay error
+        setFormData({
+          ...formData,
+          accountPayableId: accountId,
+          scheduledAmount: account.amount.toString(),
+          reference: account.invoiceNumber,
+        })
+        setErrors(prev => ({ ...prev, accountPayableId: undefined }))
+      }
     }
   }
 
@@ -628,6 +664,32 @@ export default function ProgramacionPagosPage() {
               </Select>
               {errors.accountPayableId && (
                 <p className="text-sm text-red-500 mt-1">{errors.accountPayableId}</p>
+              )}
+              
+              {/* Info de montos de la cuenta seleccionada */}
+              {selectedAccountInfo && (
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <div className="text-center">
+                      <p className="text-muted-foreground">Total</p>
+                      <p className="font-semibold text-blue-900">
+                        ${selectedAccountInfo.totalAmount.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="text-center border-l border-blue-200">
+                      <p className="text-muted-foreground">Programado</p>
+                      <p className="font-semibold text-amber-600">
+                        ${selectedAccountInfo.scheduledAmount.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="text-center border-l border-blue-200">
+                      <p className="text-muted-foreground">Restante</p>
+                      <p className="font-semibold text-green-600">
+                        ${selectedAccountInfo.remainingAmount.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
 

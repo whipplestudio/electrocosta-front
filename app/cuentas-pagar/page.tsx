@@ -17,6 +17,7 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { toast } from "sonner"
 import { accountsPayableService } from "@/services/accounts-payable.service"
+import { paymentSchedulingService } from "@/services/payment-scheduling.service"
 import { accountsPayableUploadService } from "@/services/accounts-payable-upload.service"
 import type { UploadResponse, ValidacionResultado, ImportacionResultado } from "@/services/accounts-payable-upload.service"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
@@ -43,6 +44,9 @@ export default function CuentasPagarPage() {
   })
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<AccountPayable | null>(null)
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false)
+  const [accountHistory, setAccountHistory] = useState<{ payments: any[]; schedules: any[] } | null>(null)
+  const [loadingHistory, setLoadingHistory] = useState(false)
   const [formData, setFormData] = useState({
     supplierId: "",
     supplierName: "",
@@ -102,6 +106,36 @@ export default function CuentasPagarPage() {
     }
   }, [])
 
+  // Calcular métricas del dashboard basadas en las cuentas (filtradas o totales)
+  const calculateDashboardMetrics = useCallback((accountsData: AccountPayable[]) => {
+    const now = new Date()
+    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+    
+    const totalPendiente = accountsData.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
+    
+    const overdueAccounts = accountsData.filter(acc => {
+      if (!acc.dueDate) return false
+      return new Date(acc.dueDate) < now && acc.status !== 'paid' && acc.status !== 'cancelled'
+    })
+    const totalVencido = overdueAccounts.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
+    
+    const proximasVencer = accountsData.filter(acc => {
+      if (!acc.dueDate) return false
+      const dueDate = new Date(acc.dueDate)
+      return dueDate >= now && dueDate <= sevenDaysFromNow && acc.status !== 'paid' && acc.status !== 'cancelled'
+    }).length
+    
+    const pendientesAprobacion = accountsData.filter(acc => acc.approvalStatus === 'pending').length
+    
+    return {
+      totalPendiente,
+      totalVencido,
+      cuentasVencidas: overdueAccounts.length,
+      proximasVencer,
+      pendientesAprobacion,
+    }
+  }, [])
+
   const fetchDashboard = useCallback(async () => {
     try {
       const data = await accountsPayableService.getDashboard()
@@ -155,6 +189,14 @@ export default function CuentasPagarPage() {
     fetchDashboard()
     loadSuppliersAndCategories()
   }, [fetchAccounts, fetchDashboard])
+
+  // Recalcular métricas del dashboard cuando cambian las cuentas (por filtros)
+  useEffect(() => {
+    if (accounts.length > 0) {
+      const filteredMetrics = calculateDashboardMetrics(accounts)
+      setDashboardData(filteredMetrics)
+    }
+  }, [accounts, calculateDashboardMetrics])
 
   // Auto-completar macroClasificacion cuando se selecciona una categoría (solo al crear, no al editar)
   useEffect(() => {
@@ -290,7 +332,7 @@ export default function CuentasPagarPage() {
         await accountsPayableService.update(selectedAccount.id, {
           supplierName: formData.supplierName,
           invoiceNumber: formData.invoiceNumber,
-          iva: parseFloat(formData.iva) || 16,
+          iva: formData.iva !== "" ? parseFloat(formData.iva) : 0,
           subtotal: parseFloat(formData.subtotal),
           amount: parseFloat(formData.amount),
           projectId: formData.projectId || undefined,
@@ -306,7 +348,7 @@ export default function CuentasPagarPage() {
           supplierName: formData.supplierName,
           projectId: formData.projectId || undefined,
           invoiceNumber: formData.invoiceNumber,
-          iva: parseFloat(formData.iva) || 16,
+          iva: formData.iva !== "" ? parseFloat(formData.iva) : 0,
           subtotal: parseFloat(formData.subtotal),
           amount: parseFloat(formData.amount),
           categoryId: formData.categoryId || undefined,
@@ -372,6 +414,25 @@ export default function CuentasPagarPage() {
       toast.error("Error al rechazar")
     } finally {
       setRejectingId(null)
+    }
+  }
+
+  const handleVerHistorial = async (account: AccountPayable) => {
+    setSelectedAccount(account)
+    setLoadingHistory(true)
+    setIsHistoryDialogOpen(true)
+    try {
+      const [payments, schedules] = await Promise.all([
+        accountsPayableService.getPayments(account.id),
+        paymentSchedulingService.getAccountSchedules(account.id),
+      ])
+      setAccountHistory({ payments, schedules })
+    } catch (error) {
+      console.error("Error al cargar historial:", error)
+      toast.error("Error al cargar el historial de pagos")
+      setAccountHistory({ payments: [], schedules: [] })
+    } finally {
+      setLoadingHistory(false)
     }
   }
 
@@ -708,7 +769,9 @@ export default function CuentasPagarPage() {
                 <TableHead>Proyecto</TableHead>
                 <TableHead>Factura</TableHead>
                 <TableHead>Clasificación</TableHead>
-                <TableHead>Monto</TableHead>
+                <TableHead>Monto Total</TableHead>
+                <TableHead>Pagado</TableHead>
+                <TableHead>Faltante</TableHead>
                 <TableHead>Vencimiento</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Aprobación</TableHead>
@@ -718,11 +781,11 @@ export default function CuentasPagarPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center">Cargando...</TableCell>
+                  <TableCell colSpan={11} className="text-center">Cargando...</TableCell>
                 </TableRow>
               ) : accounts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center">No hay cuentas por pagar</TableCell>
+                  <TableCell colSpan={11} className="text-center">No hay cuentas por pagar</TableCell>
                 </TableRow>
               ) : (
                 accounts.map((cuenta) => (
@@ -743,6 +806,12 @@ export default function CuentasPagarPage() {
                       </span>
                     </TableCell>
                     <TableCell>${parseFloat(cuenta.amount).toLocaleString()}</TableCell>
+                    <TableCell className="text-green-600">
+                      ${parseFloat(cuenta.paidAmount || '0').toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-red-600 font-medium">
+                      ${parseFloat(cuenta.balance || '0').toLocaleString()}
+                    </TableCell>
                     <TableCell>
                       {cuenta.dueDate ? format(new Date(cuenta.dueDate), "dd MMM yyyy", { locale: es }) : <span className="text-muted-foreground">Sin vencimiento</span>}
                     </TableCell>
@@ -778,6 +847,9 @@ export default function CuentasPagarPage() {
                             </Button>
                           </>
                         )}
+                        <Button size="sm" variant="ghost" onClick={() => handleVerHistorial(cuenta)} title="Ver historial de pagos">
+                          <Clock className="h-4 w-4 text-blue-600" />
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={() => handleEditarCuenta(cuenta)}>
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -998,6 +1070,115 @@ export default function CuentasPagarPage() {
                 selectedAccount ? "Actualizar" : "Crear"
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Historial de Pagos */}
+      <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Historial de Pagos - {selectedAccount?.supplierName || selectedAccount?.supplier?.name}</DialogTitle>
+          </DialogHeader>
+          
+          {loadingHistory ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          ) : accountHistory ? (
+            <div className="space-y-6 py-4">
+              {/* Resumen */}
+              <div className="grid grid-cols-3 gap-4 bg-muted p-4 rounded-lg">
+                <div>
+                  <p className="text-sm text-muted-foreground">Monto Total</p>
+                  <p className="text-lg font-bold">${parseFloat(selectedAccount?.amount || '0').toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Pagado</p>
+                  <p className="text-lg font-bold text-green-600">${parseFloat(selectedAccount?.paidAmount || '0').toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Faltante</p>
+                  <p className="text-lg font-bold text-red-600">${parseFloat(selectedAccount?.balance || '0').toLocaleString()}</p>
+                </div>
+              </div>
+
+              {/* Programaciones */}
+              <div>
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  Programaciones de Pago ({accountHistory.schedules.length})
+                </h3>
+                {accountHistory.schedules.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Sin programaciones</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Fecha Programada</TableHead>
+                        <TableHead>Monto</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Método</TableHead>
+                        <TableHead>Referencia</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {accountHistory.schedules.map((schedule: any) => (
+                        <TableRow key={schedule.id}>
+                          <TableCell>{format(new Date(schedule.scheduledDate), "dd MMM yyyy", { locale: es })}</TableCell>
+                          <TableCell>${parseFloat(schedule.amount).toLocaleString()}</TableCell>
+                          <TableCell>
+                            <Badge className={schedule.status === 'completed' ? 'bg-green-100 text-green-800' : schedule.status === 'scheduled' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}>
+                              {schedule.status === 'completed' ? 'Completado' : schedule.status === 'scheduled' ? 'Programado' : schedule.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{schedule.paymentMethod || '-'}</TableCell>
+                          <TableCell>{schedule.reference || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+
+              {/* Pagos Realizados */}
+              <div>
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  Pagos Realizados ({accountHistory.payments.length})
+                </h3>
+                {accountHistory.payments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Sin pagos registrados</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Monto</TableHead>
+                        <TableHead>Método</TableHead>
+                        <TableHead>Referencia</TableHead>
+                        <TableHead>Registrado por</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {accountHistory.payments.map((payment: any) => (
+                        <TableRow key={payment.id}>
+                          <TableCell>{format(new Date(payment.paymentDate), "dd MMM yyyy", { locale: es })}</TableCell>
+                          <TableCell className="font-medium text-green-600">${parseFloat(payment.amount).toLocaleString()}</TableCell>
+                          <TableCell>{payment.paymentMethod || '-'}</TableCell>
+                          <TableCell>{payment.reference || '-'}</TableCell>
+                          <TableCell>{payment.createdBy?.firstName} {payment.createdBy?.lastName}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </div>
+          ) : null}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsHistoryDialogOpen(false)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

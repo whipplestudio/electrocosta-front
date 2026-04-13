@@ -47,6 +47,11 @@ import {
   CheckCircle2,
   XCircle,
   Info,
+  History,
+  Receipt,
+  CreditCard,
+  DollarSign,
+  FileText,
 } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -151,6 +156,12 @@ function CuentasCobrarPageContent() {
   const [importacionResultado, setImportacionResultado] = useState<any>(null)
   const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   const [loading, setLoading] = useState(false)
+  
+  // Estados para historial de pagos
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false)
+  const [selectedAccountForHistory, setSelectedAccountForHistory] = useState<AccountReceivable | null>(null)
+  const [accountPayments, setAccountPayments] = useState<any[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
   
   // Estados del formulario
   const [formData, setFormData] = useState({
@@ -489,7 +500,7 @@ function CuentasCobrarPageContent() {
       result = await updateAccount(selectedCuenta.id, {
         clientId: formData.clientId,
         invoiceNumber: formData.invoiceNumber,
-        iva: parseFloat(formData.iva) || 16,
+        iva: formData.iva !== "" ? parseFloat(formData.iva) : 0,
         subtotal: parseFloat(formData.subtotal),
         amount: parseFloat(formData.amount),
         projectId: formData.projectId || undefined,
@@ -504,7 +515,7 @@ function CuentasCobrarPageContent() {
         clientId: formData.clientId,
         projectId: formData.projectId || undefined,
         invoiceNumber: formData.invoiceNumber,
-        iva: parseFloat(formData.iva) || 16,
+        iva: formData.iva !== "" ? parseFloat(formData.iva) : 0,
         subtotal: parseFloat(formData.subtotal),
         amount: parseFloat(formData.amount),
         categoryId: formData.categoryId || undefined,
@@ -529,17 +540,33 @@ function CuentasCobrarPageContent() {
     if (!confirm('¿Estás seguro de que deseas eliminar esta cuenta?')) {
       return
     }
-
     setDeletingId(cuentaId)
     try {
-      const success = await deleteAccount(cuentaId)
-      if (success) {
-        // Recargar datos
-        await handleApplyFilters()
-        await fetchDashboard()
-      }
+      await deleteAccount(cuentaId)
+      toast.success("Cuenta eliminada correctamente")
+      fetchAccounts()
+      fetchDashboard()
+    } catch (error) {
+      console.error('Error al eliminar cuenta:', error)
+      toast.error("Error al eliminar la cuenta")
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  const handleVerHistorial = async (account: AccountReceivable) => {
+    setSelectedAccountForHistory(account)
+    setLoadingHistory(true)
+    setIsHistoryDialogOpen(true)
+    try {
+      const response = await apiClient.get(`/accounts-receivable/${account.id}/payments`)
+      setAccountPayments(response.data || [])
+    } catch (error) {
+      console.error("Error al cargar historial:", error)
+      toast.error("Error al cargar el historial de pagos")
+      setAccountPayments([])
+    } finally {
+      setLoadingHistory(false)
     }
   }
 
@@ -764,7 +791,7 @@ function CuentasCobrarPageContent() {
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs - Calculados desde las cuentas filtradas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -772,8 +799,8 @@ function CuentasCobrarPageContent() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${Number(dashboard?.summary?.totalReceivable || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">{dashboard?.summary?.totalAccounts || 0} cuentas</p>
+            <div className="text-2xl font-bold">${accounts.reduce((sum, c) => sum + Number(c.balance || 0), 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">{accounts.length} cuentas</p>
           </CardContent>
         </Card>
         
@@ -783,7 +810,7 @@ function CuentasCobrarPageContent() {
             <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">${Number(dashboard?.summary?.totalPaid || 0).toLocaleString()}</div>
+            <div className="text-2xl font-bold text-green-600">${accounts.reduce((sum, c) => sum + Number(c.paidAmount || 0), 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Monto cobrado</p>
           </CardContent>
         </Card>
@@ -794,8 +821,8 @@ function CuentasCobrarPageContent() {
             <AlertCircle className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">${Number(dashboard?.summary?.totalOverdue || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">{dashboard?.summary?.overdueAccounts || 0} cuentas</p>
+            <div className="text-2xl font-bold text-red-600">${accounts.filter(c => c.status === AccountReceivableStatus.OVERDUE).reduce((sum, c) => sum + Number(c.balance || 0), 0).toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">{accounts.filter(c => c.status === AccountReceivableStatus.OVERDUE).length} cuentas</p>
           </CardContent>
         </Card>
         
@@ -805,8 +832,19 @@ function CuentasCobrarPageContent() {
             <Clock className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">${Number(dashboard?.summary?.totalUpcoming || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">{dashboard?.summary?.upcomingAccounts || 0} cuentas</p>
+            <div className="text-2xl font-bold text-yellow-600">
+              {(() => {
+                const now = new Date()
+                const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+                return accounts.filter(c => {
+                  if (!c.dueDate) return false
+                  const dueDate = new Date(c.dueDate)
+                  return dueDate >= now && dueDate <= sevenDaysFromNow && 
+                    (c.status === AccountReceivableStatus.PENDING || c.status === AccountReceivableStatus.PARTIAL)
+                }).length
+              })()}
+            </div>
+            <p className="text-xs text-muted-foreground">Próximos 7 días</p>
           </CardContent>
         </Card>
         
@@ -816,7 +854,7 @@ function CuentasCobrarPageContent() {
             <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.summary?.totalAccounts || 0}</div>
+            <div className="text-2xl font-bold">{accounts.length}</div>
             <p className="text-xs text-muted-foreground">Facturas emitidas</p>
           </CardContent>
         </Card>
@@ -1245,10 +1283,13 @@ function CuentasCobrarPageContent() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleVerDetalle(cuenta)}>
+                        <Button variant="ghost" size="sm" onClick={() => handleVerDetalle(cuenta)} title="Ver detalle">
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleEditarCuenta(cuenta)}>
+                        <Button variant="ghost" size="sm" onClick={() => handleVerHistorial(cuenta)} title="Ver historial de pagos">
+                          <History className="h-4 w-4 text-blue-600" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleEditarCuenta(cuenta)} title="Editar">
                           <Edit className="h-4 w-4" />
                         </Button>
                         <Button 
@@ -1257,6 +1298,7 @@ function CuentasCobrarPageContent() {
                           onClick={() => handleEliminarCuenta(cuenta.id)}
                           disabled={deletingId === cuenta.id}
                           className="text-destructive hover:text-destructive"
+                          title="Eliminar"
                         >
                           {deletingId === cuenta.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -1762,6 +1804,139 @@ function CuentasCobrarPageContent() {
                 Editar Cuenta
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Historial de Pagos */}
+      <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
+        <DialogContent className="max-w-[95vw] lg:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Historial de Cobros/Pagos Recibidos
+            </DialogTitle>
+            <DialogDescription>
+              Factura: {selectedAccountForHistory?.invoiceNumber} - Cliente: {selectedAccountForHistory?.client?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 flex-1 overflow-y-auto py-4">
+            {/* Resumen de la cuenta */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-muted/50 rounded-lg">
+              <div className="text-center">
+                <Label className="text-xs text-muted-foreground">Monto Original</Label>
+                <p className="font-bold text-xl">
+                  ${Number(selectedAccountForHistory?.amount || 0).toLocaleString()}
+                </p>
+              </div>
+              <div className="text-center">
+                <Label className="text-xs text-muted-foreground">Total Cobrado</Label>
+                <p className="font-bold text-xl text-green-600">
+                  ${accountPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0).toLocaleString()}
+                </p>
+              </div>
+              <div className="text-center">
+                <Label className="text-xs text-muted-foreground">Saldo Pendiente</Label>
+                <p className="font-bold text-xl text-orange-600">
+                  ${Number(selectedAccountForHistory?.balance || 0).toLocaleString()}
+                </p>
+              </div>
+              <div className="text-center">
+                <Label className="text-xs text-muted-foreground">Total de Cobros</Label>
+                <p className="font-bold text-xl text-blue-600">{accountPayments.length}</p>
+              </div>
+            </div>
+
+            {/* Lista de pagos */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold">Registro de Cobros</h3>
+                {loadingHistory && (
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                )}
+              </div>
+
+              {loadingHistory ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : accountPayments.length === 0 ? (
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center py-8 text-center">
+                    <Receipt className="h-12 w-12 text-muted-foreground mb-3" />
+                    <p className="text-muted-foreground">
+                      No hay cobros registrados para esta cuenta
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Los cobros aparecerán aquí una vez que sean registrados
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="w-12">#</TableHead>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Método</TableHead>
+                        <TableHead>Referencia</TableHead>
+                        <TableHead className="text-right">Monto</TableHead>
+                        <TableHead>Observaciones</TableHead>
+                        <TableHead>Registrado por</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {accountPayments.map((payment, index) => {
+                        const PaymentIcon = payment.paymentMethod === 'transfer' ? CreditCard :
+                                           payment.paymentMethod === 'cash' ? DollarSign :
+                                           payment.paymentMethod === 'check' ? FileText :
+                                           payment.paymentMethod === 'card' ? CreditCard : Receipt
+
+                        return (
+                          <TableRow key={payment.id} className="hover:bg-muted/30">
+                            <TableCell className="font-medium">
+                              {accountPayments.length - index}
+                            </TableCell>
+                            <TableCell>
+                              {format(new Date(payment.paymentDate), "dd MMM yyyy", { locale: es })}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <PaymentIcon className="h-4 w-4 text-muted-foreground" />
+                                <span className="capitalize">
+                                  {payment.paymentMethod === 'transfer' ? 'Transferencia' :
+                                   payment.paymentMethod === 'cash' ? 'Efectivo' :
+                                   payment.paymentMethod === 'check' ? 'Cheque' :
+                                   payment.paymentMethod === 'card' ? 'Tarjeta' : payment.paymentMethod}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>{payment.reference || '-'}</TableCell>
+                            <TableCell className="text-right font-medium text-green-600">
+                              ${Number(payment.amount).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {payment.notes || '-'}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {payment.createdBy?.firstName} {payment.createdBy?.lastName}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsHistoryDialogOpen(false)}>
+              Cerrar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

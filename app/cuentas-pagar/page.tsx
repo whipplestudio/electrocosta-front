@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, Edit, Trash2, CalendarIcon, TrendingDown, AlertCircle, Clock, CheckCircle, XCircle, Loader2, Upload, FileDown } from "lucide-react"
+import { Plus, Edit, Trash2, CalendarIcon, TrendingDown, AlertCircle, Clock, CheckCircle, XCircle, Loader2, Upload, FileDown, History, Receipt, CreditCard } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { toast } from "sonner"
@@ -1097,111 +1097,247 @@ export default function CuentasPagarPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Diálogo de Historial de Pagos */}
+      {/* Diálogo de Historial de Pagos - Material Design 3 */}
       <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Historial de Pagos - {selectedAccount?.supplierName || selectedAccount?.supplier?.name}</DialogTitle>
+        <DialogContent className="!max-w-7xl !w-[95vw] max-h-[85vh] overflow-y-auto overflow-x-hidden p-0 gap-0">
+          {/* Header con tonal surface */}
+          <DialogHeader className="px-6 pt-6 pb-4 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <History className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-semibold tracking-tight">
+                  Historial de Pagos
+                </DialogTitle>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {selectedAccount?.supplierName || selectedAccount?.supplier?.name}
+                </p>
+              </div>
+            </div>
           </DialogHeader>
-          
+
           {loadingHistory ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin" />
+            <div className="flex flex-col items-center justify-center py-16 gap-4">
+              <div className="w-12 h-12 rounded-full bg-primary/5 flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+              <p className="text-sm text-muted-foreground">Cargando historial...</p>
             </div>
           ) : accountHistory ? (
-            <div className="space-y-6 py-4">
-              {/* Resumen */}
-              <div className="grid grid-cols-3 gap-4 bg-muted p-4 rounded-lg">
-                <div>
-                  <p className="text-sm text-muted-foreground">Monto Total</p>
-                  <p className="text-lg font-bold">${parseFloat(selectedAccount?.amount || '0').toLocaleString()}</p>
+            <div className="p-6 space-y-6">
+              {/* Resumen - Cards con elevación MD3 */}
+              <div className="grid grid-cols-3 gap-4">
+                {/* Monto Total - Surface Container Highest */}
+                <div className="bg-slate-100 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200 dark:border-slate-700/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                      <Receipt className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Monto Total
+                    </span>
+                  </div>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                    ${parseFloat(selectedAccount?.amount || '0').toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Pagado</p>
-                  <p className="text-lg font-bold text-green-600">${parseFloat(selectedAccount?.paidAmount || '0').toLocaleString()}</p>
+
+                {/* Pagado - Primary Container */}
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl p-4 border border-emerald-200 dark:border-emerald-800/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-800/50 flex items-center justify-center">
+                      <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <span className="text-xs font-medium uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                      Pagado
+                    </span>
+                  </div>
+                  <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 tracking-tight">
+                    ${parseFloat(selectedAccount?.paidAmount || '0').toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Faltante</p>
-                  <p className="text-lg font-bold text-red-600">${parseFloat(selectedAccount?.balance || '0').toLocaleString()}</p>
+
+                {/* Faltante - Error Container */}
+                <div className="bg-rose-50 dark:bg-rose-900/20 rounded-2xl p-4 border border-rose-200 dark:border-rose-800/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-800/50 flex items-center justify-center">
+                      <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                    </div>
+                    <span className="text-xs font-medium uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                      Faltante
+                    </span>
+                  </div>
+                  <p className="text-2xl font-bold text-rose-700 dark:text-rose-300 tracking-tight">
+                    ${parseFloat(selectedAccount?.balance || '0').toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
                 </div>
               </div>
 
-              {/* Programaciones */}
-              <div>
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Programaciones de Pago ({accountHistory.schedules.length})
-                </h3>
-                {accountHistory.schedules.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Sin programaciones</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Fecha Programada</TableHead>
-                        <TableHead>Monto</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead>Método</TableHead>
-                        <TableHead>Referencia</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {accountHistory.schedules.map((schedule: any) => (
-                        <TableRow key={schedule.id}>
-                          <TableCell>{formatDateWithoutTimezone(schedule.scheduledDate)}</TableCell>
-                          <TableCell>${parseFloat(schedule.amount).toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Badge className={schedule.status === 'completed' ? 'bg-green-100 text-green-800' : schedule.status === 'scheduled' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}>
-                              {schedule.status === 'completed' ? 'Completado' : schedule.status === 'scheduled' ? 'Programado' : schedule.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{schedule.paymentMethod || '-'}</TableCell>
-                          <TableCell>{schedule.reference || '-'}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
+              {/* Progress Bar - Visual indicator */}
+              <div className="bg-slate-50 dark:bg-slate-800/30 rounded-xl p-4 border border-slate-200 dark:border-slate-700/50">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-slate-600 dark:text-slate-400">Progreso de pago</span>
+                  <span className="font-medium text-slate-900 dark:text-slate-100">
+                    {selectedAccount?.amount && parseFloat(selectedAccount.amount) > 0
+                      ? Math.round((parseFloat(selectedAccount.paidAmount || '0') / parseFloat(selectedAccount.amount)) * 100)
+                      : 0}%
+                  </span>
+                </div>
+                <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${selectedAccount?.amount && parseFloat(selectedAccount.amount) > 0
+                        ? Math.min((parseFloat(selectedAccount.paidAmount || '0') / parseFloat(selectedAccount.amount)) * 100, 100)
+                        : 0}%`
+                    }}
+                  />
+                </div>
               </div>
 
-              {/* Pagos Realizados */}
-              <div>
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                  Pagos Realizados ({accountHistory.payments.length})
-                </h3>
-                {accountHistory.payments.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Sin pagos registrados</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead>Monto</TableHead>
-                        <TableHead>Método</TableHead>
-                        <TableHead>Referencia</TableHead>
-                        <TableHead>Registrado por</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {accountHistory.payments.map((payment: any) => (
-                        <TableRow key={payment.id}>
-                          <TableCell>{formatDateWithoutTimezone(payment.paymentDate)}</TableCell>
-                          <TableCell className="font-medium text-green-600">${parseFloat(payment.amount).toLocaleString()}</TableCell>
-                          <TableCell>{payment.paymentMethod || '-'}</TableCell>
-                          <TableCell>{payment.reference || '-'}</TableCell>
-                          <TableCell>{payment.createdBy?.firstName} {payment.createdBy?.lastName}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
+              {/* Programaciones - Outlined Card */}
+              <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
+                <div className="px-4 py-3 bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                      <Clock className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                    </div>
+                    <h3 className="font-semibold text-slate-900 dark:text-slate-100">
+                      Programaciones de Pago
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">
+                      {accountHistory.schedules.length}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-4">
+                  {accountHistory.schedules.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
+                        <Clock className="h-5 w-5 text-slate-400" />
+                      </div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Sin programaciones de pago</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                      <Table>
+                        <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
+                          <TableRow className="hover:bg-transparent">
+                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Fecha Programada</TableHead>
+                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Monto</TableHead>
+                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Estado</TableHead>
+                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Método</TableHead>
+                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Referencia</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {accountHistory.schedules.map((schedule: any) => (
+                            <TableRow key={schedule.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                              <TableCell className="font-medium">
+                                {formatDateWithoutTimezone(schedule.scheduledDate)}
+                              </TableCell>
+                              <TableCell className="font-semibold">
+                                ${parseFloat(schedule.amount).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell>
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                                  schedule.status === 'completed'
+                                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                                    : schedule.status === 'scheduled'
+                                    ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                                    schedule.status === 'completed' ? 'bg-emerald-500' : schedule.status === 'scheduled' ? 'bg-violet-500' : 'bg-slate-500'
+                                  }`} />
+                                  {schedule.status === 'completed' ? 'Completado' : schedule.status === 'scheduled' ? 'Programado' : schedule.status}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-slate-600 dark:text-slate-400">{schedule.paymentMethod || '-'}</TableCell>
+                              <TableCell className="text-slate-600 dark:text-slate-400 font-mono text-xs">{schedule.reference || '-'}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Pagos Realizados - Outlined Card */}
+              <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
+                <div className="px-4 py-3 bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                      <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <h3 className="font-semibold text-slate-900 dark:text-slate-100">
+                      Pagos Realizados
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
+                      {accountHistory.payments.length}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-4">
+                  {accountHistory.payments.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
+                        <CreditCard className="h-5 w-5 text-slate-400" />
+                      </div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Sin pagos registrados</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                      <Table>
+                        <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
+                          <TableRow className="hover:bg-transparent">
+                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Fecha</TableHead>
+                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Monto</TableHead>
+                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Método</TableHead>
+                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Referencia</TableHead>
+                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Registrado por</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {accountHistory.payments.map((payment: any) => (
+                            <TableRow key={payment.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                              <TableCell className="font-medium">
+                                {formatDateWithoutTimezone(payment.paymentDate)}
+                              </TableCell>
+                              <TableCell className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                ${parseFloat(payment.amount).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell className="text-slate-600 dark:text-slate-400">{payment.paymentMethod || '-'}</TableCell>
+                              <TableCell className="text-slate-600 dark:text-slate-400 font-mono text-xs">{payment.reference || '-'}</TableCell>
+                              <TableCell className="text-slate-700 dark:text-slate-300">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-medium">
+                                    {payment.createdBy?.firstName?.[0]}{payment.createdBy?.lastName?.[0]}
+                                  </div>
+                                  <span className="text-sm">{payment.createdBy?.firstName} {payment.createdBy?.lastName}</span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ) : null}
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsHistoryDialogOpen(false)}>Cerrar</Button>
+
+          <DialogFooter className="px-6 py-4 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-800">
+            <Button
+              variant="outline"
+              onClick={() => setIsHistoryDialogOpen(false)}
+              className="rounded-full px-6 h-11 font-medium border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              Cerrar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

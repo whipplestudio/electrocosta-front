@@ -26,6 +26,17 @@ import { categoriesService, type Category } from "@/services/categories.service"
 import { projectsService, type Project } from "@/services/projects.service"
 import type { AccountPayable, AccountPayableStatus, CreateAccountPayableDto, UpdateAccountPayableDto } from "@/types/accounts-payable"
 
+// Helper para formatear fechas sin conversión de zona horaria
+const formatDateWithoutTimezone = (dateString: string): string => {
+  const date = new Date(dateString)
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  const day = date.getUTCDate()
+  
+  const localDate = new Date(year, month, day)
+  return format(localDate, "dd MMM yyyy", { locale: es })
+}
+
 export default function CuentasPagarPage() {
   const [accounts, setAccounts] = useState<AccountPayable[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -813,7 +824,7 @@ export default function CuentasPagarPage() {
                       ${parseFloat(cuenta.balance || '0').toLocaleString()}
                     </TableCell>
                     <TableCell>
-                      {cuenta.dueDate ? format(new Date(cuenta.dueDate), "dd MMM yyyy", { locale: es }) : <span className="text-muted-foreground">Sin vencimiento</span>}
+                      {cuenta.dueDate ? formatDateWithoutTimezone(cuenta.dueDate) : <span className="text-muted-foreground">Sin vencimiento</span>}
                     </TableCell>
                     <TableCell>{getEstadoBadge(cuenta.status)}</TableCell>
                     <TableCell>{getAprobacionBadge(cuenta.approvalStatus)}</TableCell>
@@ -1125,7 +1136,7 @@ export default function CuentasPagarPage() {
                     <TableBody>
                       {accountHistory.schedules.map((schedule: any) => (
                         <TableRow key={schedule.id}>
-                          <TableCell>{format(new Date(schedule.scheduledDate), "dd MMM yyyy", { locale: es })}</TableCell>
+                          <TableCell>{formatDateWithoutTimezone(schedule.scheduledDate)}</TableCell>
                           <TableCell>${parseFloat(schedule.amount).toLocaleString()}</TableCell>
                           <TableCell>
                             <Badge className={schedule.status === 'completed' ? 'bg-green-100 text-green-800' : schedule.status === 'scheduled' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}>
@@ -1163,7 +1174,7 @@ export default function CuentasPagarPage() {
                     <TableBody>
                       {accountHistory.payments.map((payment: any) => (
                         <TableRow key={payment.id}>
-                          <TableCell>{format(new Date(payment.paymentDate), "dd MMM yyyy", { locale: es })}</TableCell>
+                          <TableCell>{formatDateWithoutTimezone(payment.paymentDate)}</TableCell>
                           <TableCell className="font-medium text-green-600">${parseFloat(payment.amount).toLocaleString()}</TableCell>
                           <TableCell>{payment.paymentMethod || '-'}</TableCell>
                           <TableCell>{payment.reference || '-'}</TableCell>

@@ -166,9 +166,16 @@ export default function AprobacionPage() {
     return matchSearch
   })
 
-  // Formato de fecha
+  // Formato de fecha sin conversión de zona horaria
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-MX', {
+    const date = new Date(dateString)
+    const year = date.getUTCFullYear()
+    const month = date.getUTCMonth()
+    const day = date.getUTCDate()
+    
+    // Crear fecha local con componentes UTC exactos
+    const localDate = new Date(year, month, day)
+    return localDate.toLocaleDateString('es-MX', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'

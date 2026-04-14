@@ -36,6 +36,17 @@ const paymentMethodLabels: Record<string, string> = {
   other: 'Otro',
 }
 
+// Helper para formatear fechas sin conversión de zona horaria
+const formatDateWithoutTimezone = (dateString: string): string => {
+  const date = new Date(dateString)
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  const day = date.getUTCDate()
+  
+  const localDate = new Date(year, month, day)
+  return format(localDate, "dd MMM yyyy", { locale: es })
+}
+
 export default function AplicacionPagosCuentasPagar() {
   const [searchTerm, setSearchTerm] = useState("")
   const [accounts, setAccounts] = useState<AccountPayable[]>([])
@@ -532,7 +543,7 @@ export default function AplicacionPagosCuentasPagar() {
                           {isPaidTab && <span className="text-xs block font-normal">(Completado)</span>}
                         </TableCell>
                         <TableCell>
-                          {format(new Date(schedule.scheduledDate), 'dd MMM yyyy', { locale: es })}
+                          {formatDateWithoutTimezone(schedule.scheduledDate)}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">
@@ -613,7 +624,7 @@ export default function AplicacionPagosCuentasPagar() {
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Fecha Programada:</span>
                   <span className="font-medium">
-                    {format(new Date(selectedSchedule.scheduledDate), 'dd MMM yyyy', { locale: es })}
+                    {formatDateWithoutTimezone(selectedSchedule.scheduledDate)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
@@ -780,7 +791,7 @@ export default function AplicacionPagosCuentasPagar() {
                     {payments.map((payment) => (
                       <TableRow key={payment.id}>
                         <TableCell>
-                          {format(new Date(payment.paymentDate), 'dd MMM yyyy', { locale: es })}
+                          {formatDateWithoutTimezone(payment.paymentDate)}
                         </TableCell>
                         <TableCell className="font-bold text-green-600">
                           ${Number(payment.amount).toLocaleString()}

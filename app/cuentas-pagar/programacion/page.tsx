@@ -38,6 +38,17 @@ const getPaymentMethodLabel = (method: string | null | undefined) => {
   return method ? labels[method] || method : 'N/A'
 }
 
+// Helper para formatear fechas sin conversión de zona horaria
+const formatDateWithoutTimezone = (dateString: string): string => {
+  const date = new Date(dateString)
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  const day = date.getUTCDate()
+  
+  const localDate = new Date(year, month, day)
+  return format(localDate, "dd MMM yyyy", { locale: es })
+}
+
 export default function ProgramacionPagosPage() {
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
@@ -567,7 +578,7 @@ export default function ProgramacionPagosPage() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                          {new Date(schedule.scheduledDate).toLocaleDateString()}
+                          {formatDateWithoutTimezone(schedule.scheduledDate)}
                         </div>
                       </TableCell>
                       <TableCell>

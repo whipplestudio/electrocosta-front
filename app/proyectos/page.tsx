@@ -39,6 +39,22 @@ const stringToLocalDate = (dateString: string | undefined): Date | undefined => 
   return new Date(year, month - 1, day)
 }
 
+// Helper para formatear fechas ISO sin conversión de zona horaria
+const formatDateWithoutTimezone = (dateString: string | undefined): string => {
+  if (!dateString) return 'N/A'
+  const date = new Date(dateString)
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  const day = date.getUTCDate()
+  
+  const localDate = new Date(year, month, day)
+  return localDate.toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  })
+}
+
 export default function ProyectosPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   
@@ -559,8 +575,8 @@ export default function ProyectosPage() {
     cliente: p.cliente?.name || 'Cliente',
     valorContrato: Number(p.presupuestoTotal) || 0,
     valorVenta: Number(p.valorVenta) || 0,
-    fechaInicio: new Date(p.fechaInicio).toLocaleDateString('es-MX'),
-    fechaFin: new Date(p.fechaFinEstimada).toLocaleDateString('es-MX'),
+    fechaInicio: formatDateWithoutTimezone(p.fechaInicio),
+    fechaFin: formatDateWithoutTimezone(p.fechaFinEstimada),
     estado: p.estado === 'en_progreso' ? 'En Progreso' : 
             p.estado === 'planificacion' ? 'Planificación' : 
             p.estado === 'completado' ? 'Completado' : 
@@ -1176,11 +1192,11 @@ export default function ProyectosPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Fecha Inicio</Label>
-                  <p className="text-sm">{new Date(proyectoSeleccionado.fechaInicio).toLocaleDateString('es-MX')}</p>
+                  <p className="text-sm">{formatDateWithoutTimezone(proyectoSeleccionado.fechaInicio)}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Fecha Fin Estimada</Label>
-                  <p className="text-sm">{proyectoSeleccionado.fechaFinEstimada ? new Date(proyectoSeleccionado.fechaFinEstimada).toLocaleDateString('es-MX') : 'N/A'}</p>
+                  <p className="text-sm">{formatDateWithoutTimezone(proyectoSeleccionado.fechaFinEstimada)}</p>
                 </div>
               </div>
 
@@ -1241,7 +1257,7 @@ export default function ProyectosPage() {
                 </div>
                 <div>
                   <Label className="text-xs">Creado</Label>
-                  <p>{new Date(proyectoSeleccionado.createdAt).toLocaleString('es-MX')}</p>
+                  <p>{formatDateWithoutTimezone(proyectoSeleccionado.createdAt)}</p>
                 </div>
               </div>
             </div>

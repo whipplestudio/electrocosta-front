@@ -36,6 +36,21 @@ const paymentMethodLabels: Record<string, string> = {
   other: 'Otro',
 }
 
+// Helper para formatear fechas sin conversión de zona horaria
+const formatDateWithoutTimezone = (dateString: string): string => {
+  const date = new Date(dateString)
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  const day = date.getUTCDate()
+  
+  const localDate = new Date(year, month, day)
+  return localDate.toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
 export default function AplicacionPagos() {
   return (
     <RouteProtection requiredPermissions={["cuentas_cobrar.pagos.ver"]}>
@@ -325,7 +340,7 @@ function AplicacionPagosContent() {
                               {account.dueDate ? (
                                 <div className="flex items-center gap-1">
                                   <CalendarIcon className="h-3 w-3" />
-                                  {new Date(account.dueDate).toLocaleDateString()}
+                                  {formatDateWithoutTimezone(account.dueDate)}
                                 </div>
                               ) : (
                                 <span className="text-muted-foreground">Sin vencimiento</span>
@@ -599,11 +614,7 @@ function AplicacionPagosContent() {
                             <TableCell>
                               <div className="flex items-center gap-1 text-sm">
                                 <CalendarIcon className="h-3 w-3 text-muted-foreground" />
-                                {new Date(payment.paymentDate).toLocaleDateString('es-MX', {
-                                  day: '2-digit',
-                                  month: 'short',
-                                  year: 'numeric',
-                                })}
+                                {formatDateWithoutTimezone(payment.paymentDate)}
                               </div>
                             </TableCell>
                             <TableCell>

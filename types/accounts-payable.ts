@@ -109,6 +109,7 @@ export interface CreateAccountPayableDto {
   categoryId?: string;
   invoiceNumber: string;
   iva?: number;
+  ivaType?: 'percentage' | 'amount';
   subtotal: number;
   amount?: number;
   currency?: string;
@@ -123,6 +124,7 @@ export interface UpdateAccountPayableDto {
   supplierName?: string;
   invoiceNumber?: string;
   iva?: number;
+  ivaType?: 'percentage' | 'amount';
   subtotal?: number;
   amount?: number;
   projectId?: string;

@@ -242,6 +242,16 @@ export default function CuentasPagarPage() {
     return Number(num).toLocaleString('en-US')
   }
 
+  // Formatear moneda con máximo 2 decimales (para mostrar montos calculados)
+  const formatCurrency = (value: string): string => {
+    const num = parseFloat(value.replace(/,/g, ''))
+    if (isNaN(num)) return ''
+    // Forzar exactamente 2 decimales y luego formatear con separadores
+    const fixed = num.toFixed(2)
+    const [integer, decimal] = fixed.split('.')
+    return `${Number(integer).toLocaleString('en-US')}.${decimal}`
+  }
+
   // Remover formato para obtener el valor numérico
   const unformatNumber = (value: string): string => {
     return value.replace(/,/g, '')
@@ -268,7 +278,7 @@ export default function CuentasPagarPage() {
           ivaAmount = ivaValue
         }
 
-        updated.amount = (subtotal + ivaAmount).toString()
+        updated.amount = (subtotal + ivaAmount).toFixed(2)
       }
       
       return updated
@@ -344,8 +354,9 @@ export default function CuentasPagarPage() {
           supplierName: formData.supplierName,
           invoiceNumber: formData.invoiceNumber,
           iva: formData.iva !== "" ? parseFloat(formData.iva) : 0,
+          ivaType: formData.ivaType,
           subtotal: parseFloat(formData.subtotal),
-          amount: parseFloat(formData.amount),
+          amount: parseFloat(parseFloat(formData.amount).toFixed(2)),
           projectId: formData.projectId || undefined,
           categoryId: formData.categoryId || undefined,
           macroClasificacion: formData.macroClasificacion || undefined,
@@ -360,8 +371,9 @@ export default function CuentasPagarPage() {
           projectId: formData.projectId || undefined,
           invoiceNumber: formData.invoiceNumber,
           iva: formData.iva !== "" ? parseFloat(formData.iva) : 0,
+          ivaType: formData.ivaType,
           subtotal: parseFloat(formData.subtotal),
-          amount: parseFloat(formData.amount),
+          amount: parseFloat(parseFloat(formData.amount).toFixed(2)),
           categoryId: formData.categoryId || undefined,
           macroClasificacion: formData.macroClasificacion || undefined,
           issueDate: formData.issueDate?.toISOString() || new Date().toISOString(),
@@ -987,7 +999,7 @@ export default function CuentasPagarPage() {
                   <Input 
                     id="amount"
                     type="text" 
-                    value={formatNumber(formData.amount)}
+                    value={formatCurrency(formData.amount)}
                     readOnly
                     className="bg-muted font-semibold text-green-600"
                   />

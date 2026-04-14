@@ -508,7 +508,7 @@ function DashboardContent() {
                             {porcentaje.toFixed(1)}% ejercido
                           </span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden" title={restante >= 0 ? `Falta: ${formatCurrency(restante)}` : `Excedido por: ${formatCurrency(Math.abs(restante))}`}>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden" title={restante >= 0 ? `Gastar: ${formatCurrency(restante)}` : `Excedido por: ${formatCurrency(Math.abs(restante))}`}>
                           <div className={`h-2.5 rounded-full transition-all ${colorClass}`} style={{ width: `${Math.min(porcentaje, 100)}%` }}></div>
                         </div>
                         <div className="flex justify-between items-center text-xs mt-1">
@@ -516,7 +516,7 @@ function DashboardContent() {
                             Gastado: {formatCurrency(gastado)}
                           </span>
                           <span className={restante >= 0 ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
-                            {restante >= 0 ? `Falta: ${formatCurrency(restante)}` : `Excedido: ${formatCurrency(Math.abs(restante))}`}
+                            {restante >= 0 ? `Gastar: ${formatCurrency(restante)}` : `Excedido: ${formatCurrency(Math.abs(restante))}`}
                           </span>
                         </div>
                         {cxpData && cxpData.total > 0 && (
@@ -547,7 +547,7 @@ function DashboardContent() {
                             {porcentaje.toFixed(1)}% ejercido
                           </span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden" title={restante >= 0 ? `Falta: ${formatCurrency(restante)}` : `Excedido por: ${formatCurrency(Math.abs(restante))}`}>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden" title={restante >= 0 ? `Gastar: ${formatCurrency(restante)}` : `Excedido por: ${formatCurrency(Math.abs(restante))}`}>
                           <div className={`h-2.5 rounded-full transition-all ${colorClass}`} style={{ width: `${Math.min(porcentaje, 100)}%` }}></div>
                         </div>
                         <div className="flex justify-between items-center text-xs mt-1">
@@ -555,7 +555,7 @@ function DashboardContent() {
                             Gastado: {formatCurrency(gastado)}
                           </span>
                           <span className={restante >= 0 ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
-                            {restante >= 0 ? `Falta: ${formatCurrency(restante)}` : `Excedido: ${formatCurrency(Math.abs(restante))}`}
+                            {restante >= 0 ? `Gastar: ${formatCurrency(restante)}` : `Excedido: ${formatCurrency(Math.abs(restante))}`}
                           </span>
                         </div>
                         {cxpData && cxpData.total > 0 && (
@@ -586,7 +586,7 @@ function DashboardContent() {
                             {porcentaje.toFixed(1)}% ejercido
                           </span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden" title={restante >= 0 ? `Falta: ${formatCurrency(restante)}` : `Excedido por: ${formatCurrency(Math.abs(restante))}`}>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden" title={restante >= 0 ? `Gastar: ${formatCurrency(restante)}` : `Excedido por: ${formatCurrency(Math.abs(restante))}`}>
                           <div className={`h-2.5 rounded-full transition-all ${colorClass}`} style={{ width: `${Math.min(porcentaje, 100)}%` }}></div>
                         </div>
                         <div className="flex justify-between items-center text-xs mt-1">
@@ -594,7 +594,7 @@ function DashboardContent() {
                             Gastado: {formatCurrency(gastado)}
                           </span>
                           <span className={restante >= 0 ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
-                            {restante >= 0 ? `Falta: ${formatCurrency(restante)}` : `Excedido: ${formatCurrency(Math.abs(restante))}`}
+                            {restante >= 0 ? `Gastar: ${formatCurrency(restante)}` : `Excedido: ${formatCurrency(Math.abs(restante))}`}
                           </span>
                         </div>
                         {cxpData && cxpData.total > 0 && (

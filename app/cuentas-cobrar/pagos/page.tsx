@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { CheckCircle, Clock, DollarSign, FileText, Plus, Search, Calendar as CalendarIcon, Loader2, X, History, Receipt, CreditCard } from "lucide-react"
+import { CheckCircle, Clock, DollarSign, FileText, Plus, Search, Calendar as CalendarIcon, Loader2, X, History, Receipt, CreditCard, Pencil, Filter } from "lucide-react"
 import { accountsReceivableService, paymentsService } from "@/services/accounts-receivable.service"
 import type { AccountReceivable, Payment, RegisterPaymentDto } from "@/types/accounts-receivable"
 import { RouteProtection } from "@/components/route-protection"
@@ -69,6 +69,21 @@ function AplicacionPagosContent() {
   const [selectedAccount, setSelectedAccount] = useState<AccountReceivable | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
+  
+  // Filtros
+  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'paid'>('all')
+  const [clientFilter, setClientFilter] = useState('')
+  
+  // Estados para edición de pago
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null)
+  const [editFormData, setEditFormData] = useState({
+    amount: '',
+    paymentMethod: 'transfer' as any,
+    paymentDate: new Date(),
+    reference: '',
+    notes: '',
+  })
 
   // Form state
   const [formData, setFormData] = useState({
@@ -87,7 +102,8 @@ function AplicacionPagosContent() {
         page: 1, 
         limit: 100,
       })
-      setAccounts(accountsData.data.filter(a => Number(a.balance) > 0))
+      // Cargar TODAS las cuentas, incluyendo las pagadas
+      setAccounts(accountsData.data)
     } catch (error) {
       console.error('Error al cargar datos:', error)
       toast.error('Error al cargar las cuentas por cobrar')
@@ -205,17 +221,107 @@ function AplicacionPagosContent() {
     }
   }
 
-  // Filtrar cuentas
-  const filteredAccounts = accounts.filter(
-    (account) =>
+  // Filtrar cuentas por búsqueda, estado y cliente
+  const filteredAccounts = accounts.filter((account) => {
+    // Filtro de búsqueda (factura o cliente)
+    const matchesSearch = 
       account.client?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      account.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+      account.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    // Filtro de cliente específico
+    const matchesClient = clientFilter === '' || 
+      account.client?.name?.toLowerCase().includes(clientFilter.toLowerCase())
+    
+    // Filtro de estado (tab)
+    const balance = Number(account.balance || 0)
+    let matchesStatus = true
+    if (activeTab === 'pending') {
+      matchesStatus = balance > 0
+    } else if (activeTab === 'paid') {
+      matchesStatus = balance === 0
+    }
+    // 'all' no filtra por estado
+    
+    return matchesSearch && matchesClient && matchesStatus
+  })
+  
+  // Lista única de clientes para el filtro
+  const uniqueClients = [...new Set(accounts.map(a => a.client?.name).filter(Boolean))]
 
   // Calcular KPIs
   const totalPending = accounts.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
   const overdueAccounts = accounts.filter(acc => new Date(acc.dueDate) < new Date())
   const totalOverdue = overdueAccounts.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
+
+  // Abrir dialog de editar pago
+  const openEditDialog = (payment: Payment) => {
+    setSelectedPayment(payment)
+    setEditFormData({
+      amount: payment.amount.toString(),
+      paymentMethod: payment.paymentMethod,
+      paymentDate: new Date(payment.paymentDate),
+      reference: payment.reference || '',
+      notes: payment.notes || '',
+    })
+    setShowEditDialog(true)
+  }
+
+  // Manejar cambio de monto en edición
+  const handleEditAmountChange = (value: string) => {
+    const unformatted = unformatNumber(value)
+    setEditFormData((prev) => ({ ...prev, amount: unformatted }))
+  }
+
+  // Guardar edición de pago
+  const handleUpdatePayment = async () => {
+    if (!selectedPayment || !selectedAccount) return
+
+    const amountValue = parseFloat(editFormData.amount)
+    if (!editFormData.amount || amountValue <= 0) {
+      toast.error('El monto debe ser mayor a cero')
+      return
+    }
+
+    const oldAmount = Number(selectedPayment.amount)
+    const accountTotal = Number(selectedAccount.amount)
+    const currentPaid = Number(selectedAccount.paidAmount)
+    const difference = amountValue - oldAmount
+    const newBalance = accountTotal - (currentPaid + difference)
+
+    if (newBalance < 0) {
+      toast.error(`El nuevo monto excede el total de la factura. Máximo permitido: $${(accountTotal - (currentPaid - oldAmount)).toLocaleString()}`)
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      const paymentData = {
+        ...editFormData,
+        amount: amountValue,
+        paymentDate: new Date(editFormData.paymentDate).toISOString(),
+      }
+      
+      const result = await paymentsService.updatePayment(selectedPayment.id, paymentData)
+      
+      toast.success(`Pago actualizado. Nuevo balance: $${Number(result.account.balance).toLocaleString()}`)
+      setShowEditDialog(false)
+      setSelectedPayment(null)
+      
+      // Recargar datos
+      await loadData()
+      
+      // Si el dialog de historial está abierto, recargar el historial
+      if (showHistoryDialog && selectedAccount) {
+        const history = await paymentsService.getHistory(selectedAccount.id)
+        setPayments(history)
+      }
+    } catch (error) {
+      console.error('Error al actualizar pago:', error)
+      toast.error('Error al actualizar el pago')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -283,14 +389,72 @@ function AplicacionPagosContent() {
         </Card>
       </div>
 
-      <Tabs defaultValue="pending" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <TabsList className="grid w-full sm:w-auto grid-cols-3">
+            <TabsTrigger value="all" className="gap-2">
+              Todas
+              <Badge variant="secondary" className="ml-1">{accounts.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="pending" className="gap-2">
+              Pendientes
+              <Badge variant="secondary" className="ml-1">
+                {accounts.filter(a => Number(a.balance) > 0).length}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="paid" className="gap-2">
+              Pagadas
+              <Badge variant="secondary" className="ml-1">
+                {accounts.filter(a => Number(a.balance) === 0).length}
+              </Badge>
+            </TabsTrigger>
+          </TabsList>
+          
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Select value={clientFilter || '__all__'} onValueChange={(v) => setClientFilter(v === '__all__' ? '' : v)}>
+              <SelectTrigger className="w-[200px]">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filtrar por cliente" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todos los clientes</SelectItem>
+                {uniqueClients.map((client) => (
+                  <SelectItem key={client} value={client as string}>
+                    {client}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            {clientFilter && (
+              <Button variant="ghost" size="sm" onClick={() => setClientFilter('')}>
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </div>
 
-        <TabsContent value="pending" className="space-y-4">
+        <TabsContent value={activeTab} className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Facturas Pendientes de Pago</CardTitle>
-              <CardDescription>Facturas que requieren aplicación de pagos</CardDescription>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>
+                    {activeTab === 'all' && 'Todas las Facturas'}
+                    {activeTab === 'pending' && 'Facturas Pendientes de Pago'}
+                    {activeTab === 'paid' && 'Facturas Pagadas'}
+                  </CardTitle>
+                  <CardDescription>
+                    {activeTab === 'all' && 'Listado completo de todas las cuentas por cobrar'}
+                    {activeTab === 'pending' && 'Facturas que requieren aplicación de pagos'}
+                    {activeTab === 'paid' && 'Facturas que han sido pagadas completamente'}
+                  </CardDescription>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {filteredAccounts.length} resultados
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-2">
                 <div className="relative flex-1 max-w-sm">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -320,13 +484,19 @@ function AplicacionPagosContent() {
                     {filteredAccounts.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                          No se encontraron cuentas pendientes de pago
+                          {activeTab === 'paid' 
+                            ? 'No se encontraron facturas pagadas'
+                            : activeTab === 'pending'
+                              ? 'No se encontraron cuentas pendientes de pago'
+                              : 'No se encontraron cuentas'}
                         </TableCell>
                       </TableRow>
                     ) : (
                       filteredAccounts.map((account) => {
                         const isOverdue = account.dueDate ? new Date(account.dueDate) < new Date() : false
-                        const isPartial = Number(account.balance) < Number(account.amount)
+                        const isPartial = Number(account.balance) < Number(account.amount) && Number(account.balance) > 0
+                        const isPaid = Number(account.balance) === 0
+                        const hasBalance = Number(account.balance) > 0
                         
                         return (
                           <TableRow key={account.id}>
@@ -347,17 +517,17 @@ function AplicacionPagosContent() {
                               )}
                             </TableCell>
                             <TableCell>
-                              <Badge
-                                variant={
-                                  isOverdue
-                                    ? "destructive"
-                                    : isPartial
-                                      ? "secondary"
-                                      : "default"
-                                }
-                              >
-                                {isOverdue ? 'Vencida' : isPartial ? 'Parcial' : 'Vigente'}
-                              </Badge>
+                              {isPaid ? (
+                                <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+                                  Pagada
+                                </Badge>
+                              ) : isOverdue ? (
+                                <Badge variant="destructive">Vencida</Badge>
+                              ) : isPartial ? (
+                                <Badge variant="secondary">Parcial</Badge>
+                              ) : (
+                                <Badge>Vigente</Badge>
+                              )}
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-2">
@@ -378,9 +548,11 @@ function AplicacionPagosContent() {
                                   size="sm" 
                                   onClick={() => openRegisterDialog(account)}
                                   className="gap-1"
+                                  disabled={!hasBalance}
+                                  title={hasBalance ? 'Aplicar pago' : 'Factura ya pagada'}
                                 >
                                   <DollarSign className="h-3 w-3" />
-                                  Aplicar Pago
+                                  {hasBalance ? 'Aplicar Pago' : 'Pagada'}
                                 </Button>
                               </div>
                             </TableCell>
@@ -594,6 +766,7 @@ function AplicacionPagosContent() {
                         <TableHead className="text-right">Monto</TableHead>
                         <TableHead>Observaciones</TableHead>
                         <TableHead>Registrado por</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -656,6 +829,16 @@ function AplicacionPagosContent() {
                                   'Sistema'}
                               </p>
                             </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => openEditDialog(payment)}
+                                title="Editar pago"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         )
                       })}
@@ -695,6 +878,162 @@ function AplicacionPagosContent() {
               Cerrar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Editar Pago */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5" />
+              Editar Pago
+            </DialogTitle>
+            <DialogDescription>
+              {selectedAccount && selectedPayment && (
+                <div className="mt-2 space-y-1">
+                  <p><strong>Factura:</strong> {selectedAccount.invoiceNumber}</p>
+                  <p><strong>Cliente:</strong> {selectedAccount.client?.name}</p>
+                  <p><strong>Monto Actual:</strong> ${Number(selectedPayment.amount).toLocaleString()}</p>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedAccount && selectedPayment && (
+            <>
+              {/* Preview de cambio */}
+              <div className="bg-muted/50 p-3 rounded-lg space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Monto Actual:</span>
+                  <span className="font-medium">${Number(selectedPayment.amount).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Nuevo Monto:</span>
+                  <span className="font-medium text-blue-600">
+                    ${editFormData.amount ? Number(unformatNumber(editFormData.amount)).toLocaleString() : '-'}
+                  </span>
+                </div>
+                <div className="border-t pt-2 flex justify-between">
+                  <span className="text-muted-foreground">Nuevo Balance:</span>
+                  <span className={`font-bold ${
+                    Number(selectedAccount.amount) - (Number(selectedAccount.paidAmount) - Number(selectedPayment.amount) + Number(unformatNumber(editFormData.amount || '0'))) < 0
+                      ? 'text-red-600'
+                      : 'text-green-600'
+                  }`}>
+                    ${(() => {
+                      const newAmount = Number(unformatNumber(editFormData.amount || '0'))
+                      const oldAmount = Number(selectedPayment.amount)
+                      const currentPaid = Number(selectedAccount.paidAmount)
+                      const accountTotal = Number(selectedAccount.amount)
+                      const newBalance = accountTotal - (currentPaid - oldAmount + newAmount)
+                      return newBalance >= 0 ? newBalance.toLocaleString() : 'Inválido'
+                    })()}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-monto">Nuevo Monto *</Label>
+                    <Input 
+                      id="edit-monto" 
+                      type="text"
+                      placeholder="0" 
+                      value={formatNumber(String(editFormData.amount || ''))}
+                      onChange={(e) => handleEditAmountChange(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-metodo">Método de Pago *</Label>
+                    <Select 
+                      value={editFormData.paymentMethod}
+                      onValueChange={(value) => setEditFormData({ ...editFormData, paymentMethod: value as any })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar método" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="transfer">Transferencia Bancaria</SelectItem>
+                        <SelectItem value="check">Cheque</SelectItem>
+                        <SelectItem value="cash">Efectivo</SelectItem>
+                        <SelectItem value="card">Tarjeta de Crédito</SelectItem>
+                        <SelectItem value="other">Otro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-referencia">Referencia/Folio</Label>
+                    <Input 
+                      id="edit-referencia" 
+                      placeholder="Número de referencia"
+                      value={editFormData.reference}
+                      onChange={(e) => setEditFormData({ ...editFormData, reference: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Fecha de Pago *</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          className={`w-full justify-start text-left font-normal ${!editFormData.paymentDate ? 'text-muted-foreground' : ''}`}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {editFormData.paymentDate ? format(editFormData.paymentDate, "dd/MM/yyyy", { locale: es }) : "Seleccionar fecha"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar 
+                          mode="single"
+                          selected={editFormData.paymentDate}
+                          onSelect={(date) => setEditFormData({...editFormData, paymentDate: date || new Date()})}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-observaciones">Observaciones</Label>
+                  <Textarea 
+                    id="edit-observaciones" 
+                    placeholder="Comentarios adicionales..."
+                    value={editFormData.notes}
+                    onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowEditDialog(false)
+                    setSelectedPayment(null)
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={handleUpdatePayment} 
+                  disabled={submitting || !editFormData.amount || Number(unformatNumber(editFormData.amount)) <= 0}
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    'Guardar Cambios'
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

@@ -69,6 +69,7 @@ import { clientsService, type Client } from "@/services/clients.service"
 import { categoriesService, type Category } from "@/services/categories.service"
 import { projectsService, type Project } from "@/services/projects.service"
 import { accountsReceivableUploadService } from "@/services/accounts-receivable-upload.service"
+import { accountsReceivableService } from "@/services/accounts-receivable.service"
 import apiClient from "@/lib/api-client"
 import { RouteProtection } from "@/components/route-protection"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
@@ -137,6 +138,14 @@ function CuentasCobrarPageContent() {
     maxBalance: "",
   })
   const [isFilterExpanded, setIsFilterExpanded] = useState(true)
+
+  // Totales calculados desde el backend (con filtros aplicados)
+  const [totals, setTotals] = useState({
+    totalAmount: 0,
+    totalPaid: 0,
+    totalBalance: 0,
+    totalCount: 0,
+  })
   const [filterProjects, setFilterProjects] = useState<any[]>([])
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false)
   
@@ -372,7 +381,18 @@ function CuentasCobrarPageContent() {
     if (filters.maxBalance) filterDto.maxBalance = parseFloat(filters.maxBalance)
     
     await fetchAccounts(filterDto)
+    await fetchTotals(filterDto)
     await fetchDashboard()
+  }
+
+  // Cargar totales desde el backend (con filtros)
+  const fetchTotals = async (filterDto?: any) => {
+    try {
+      const totalsData = await accountsReceivableService.getTotals(filterDto)
+      setTotals(totalsData)
+    } catch (error) {
+      console.error('Error al cargar totales:', error)
+    }
   }
 
   // Limpiar filtros
@@ -791,16 +811,29 @@ function CuentasCobrarPageContent() {
         </div>
       </div>
 
-      {/* KPIs - Calculados desde las cuentas filtradas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* KPIs - Calculados desde el backend (con filtros aplicados) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Facturado</CardTitle>
+            <DollarSign className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">
+              ${totals.totalAmount.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">= Cobrado + Por Cobrar</p>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total por Cobrar</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${accounts.reduce((sum, c) => sum + Number(c.balance || 0), 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">{accounts.length} cuentas</p>
+            <div className="text-2xl font-bold">${totals.totalBalance.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">{totals.totalCount} cuentas</p>
           </CardContent>
         </Card>
         
@@ -810,7 +843,7 @@ function CuentasCobrarPageContent() {
             <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">${accounts.reduce((sum, c) => sum + Number(c.paidAmount || 0), 0).toLocaleString()}</div>
+            <div className="text-2xl font-bold text-green-600">${totals.totalPaid.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Monto cobrado</p>
           </CardContent>
         </Card>
@@ -854,7 +887,7 @@ function CuentasCobrarPageContent() {
             <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{accounts.length}</div>
+            <div className="text-2xl font-bold">{totals.totalCount}</div>
             <p className="text-xs text-muted-foreground">Facturas emitidas</p>
           </CardContent>
         </Card>

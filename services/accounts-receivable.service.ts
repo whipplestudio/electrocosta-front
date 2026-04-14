@@ -159,6 +159,25 @@ export const accountsReceivableService = {
       throw new Error(handleApiError(error));
     }
   },
+
+  /**
+   * Obtener totales calculados desde el backend (con filtros)
+   */
+  async getTotals(filters: AccountReceivableFilterDto = {}): Promise<{
+    totalAmount: number;
+    totalPaid: number;
+    totalBalance: number;
+    totalCount: number;
+  }> {
+    try {
+      const response = await apiClient.get('/accounts-receivable/totals', {
+        params: filters,
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
 };
 
 // ============================================
@@ -188,6 +207,21 @@ export const paymentsService = {
     try {
       const response = await apiClient.get<Payment[]>(
         `/accounts-receivable/${accountId}/payments`
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
+
+  /**
+   * Actualizar pago
+   */
+  async updatePayment(paymentId: string, data: Partial<RegisterPaymentDto>): Promise<{ payment: Payment; account: AccountReceivable }> {
+    try {
+      const response = await apiClient.patch<{ payment: Payment; account: AccountReceivable }>(
+        `/accounts-receivable/payments/${paymentId}`,
+        data
       );
       return response.data;
     } catch (error) {

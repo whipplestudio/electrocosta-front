@@ -241,7 +241,7 @@ export function AppSidebar({ className }: SidebarProps) {
               <DollarSign className="h-6 w-6 text-primary-foreground" />
             </div>
             <div>
-              <h2 className="font-bold text-base tracking-tight">Electro Costa</h2>
+              <h2 className="font-bold text-base tracking-tight">Grupo BARREDA</h2>
               <p className="text-xs text-muted-foreground font-medium">ERP Financiero</p>
             </div>
           </div>

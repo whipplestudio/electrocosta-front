@@ -78,7 +78,7 @@ function LoginForm() {
               <DollarSign className="h-12 w-12 text-primary-foreground" />
             </div>
             <div className="space-y-2">
-              <CardTitle className="text-3xl font-bold tracking-tight">Electro Costa</CardTitle>
+              <CardTitle className="text-3xl font-bold tracking-tight">Grupo BARREDA</CardTitle>
               <CardDescription className="text-base font-medium">ERP Financiero - Iniciar Sesión</CardDescription>
             </div>
           </CardHeader>

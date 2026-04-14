@@ -97,7 +97,7 @@ export default function RegistroPage() {
                 <Input
                   id="empresa"
                   type="text"
-                  placeholder="Electro Costa"
+                  placeholder="Grupo BARREDA"
                   className="pl-10"
                   value={formData.empresa}
                   onChange={(e) => setFormData({ ...formData, empresa: e.target.value })}

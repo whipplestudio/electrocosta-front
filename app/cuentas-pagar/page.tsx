@@ -339,12 +339,6 @@ export default function CuentasPagarPage() {
       return
     }
 
-    // Validar que fecha de vencimiento sea >= fecha de emisión (si se proporciona)
-    if (formData.dueDate && formData.issueDate && formData.dueDate < formData.issueDate) {
-      toast.error("La fecha de vencimiento debe ser igual o mayor a la fecha de emisión")
-      return
-    }
-
     if (savingAccount) return
 
     try {

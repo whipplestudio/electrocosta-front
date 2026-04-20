@@ -38,6 +38,13 @@ const getPaymentMethodLabel = (method: string | null | undefined) => {
   return method ? labels[method] || method : 'N/A'
 }
 
+// Helper para formatear moneda en formato mexicano
+const formatCurrency = (value: number | string | null | undefined): string => {
+  const num = typeof value === 'number' ? value : parseFloat(value || '0')
+  if (isNaN(num)) return '$0.00'
+  return '$' + num.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 // Helper para formatear fechas sin conversión de zona horaria
 const formatDateWithoutTimezone = (dateString: string): string => {
   const date = new Date(dateString)
@@ -465,7 +472,7 @@ export default function ProgramacionPagosPage() {
             <CardTitle className="text-sm font-medium">Total Programado</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalProgramado.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalProgramado)}</div>
             <p className="text-xs text-muted-foreground">{filteredSchedules.length} pagos</p>
           </CardContent>
         </Card>
@@ -475,7 +482,7 @@ export default function ProgramacionPagosPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              ${summary.totalScheduled.toLocaleString()}
+              {formatCurrency(summary.totalScheduled)}
             </div>
             <p className="text-xs text-muted-foreground">
               {summary.countScheduled} pagos
@@ -488,7 +495,7 @@ export default function ProgramacionPagosPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              ${summary.totalCancelled.toLocaleString()}
+              {formatCurrency(summary.totalCancelled)}
             </div>
             <p className="text-xs text-muted-foreground">
               {summary.countCancelled} pagos
@@ -501,7 +508,7 @@ export default function ProgramacionPagosPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              ${summary.totalCompleted.toLocaleString()}
+              {formatCurrency(summary.totalCompleted)}
             </div>
             <p className="text-xs text-muted-foreground">
               {summary.countCompleted} pagos

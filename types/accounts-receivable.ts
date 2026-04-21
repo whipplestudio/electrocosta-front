@@ -77,6 +77,7 @@ export interface AccountReceivable {
   categoryId?: string;
   invoiceNumber: string;
   iva: number;
+  ivaType?: 'percentage' | 'amount';
   subtotal: number;
   amount: number;
   paidAmount: number;
@@ -143,6 +144,7 @@ export interface CreateAccountReceivableDto {
   categoryId?: string;
   invoiceNumber: string;
   iva?: number;
+  ivaType?: 'percentage' | 'amount';
   subtotal: number;
   amount?: number;
   currency?: string;
@@ -156,6 +158,7 @@ export interface UpdateAccountReceivableDto {
   clientId?: string;
   invoiceNumber?: string;
   iva?: number;
+  ivaType?: 'percentage' | 'amount';
   subtotal?: number;
   amount?: number;
   projectId?: string;

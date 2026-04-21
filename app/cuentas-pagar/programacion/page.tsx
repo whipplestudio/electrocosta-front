@@ -106,7 +106,7 @@ export default function ProgramacionPagosPage() {
       setLoading(true)
       const [schedulesData, accountsData] = await Promise.all([
         paymentSchedulingService.getScheduledPayments({ page: 1, limit: 100 }),
-        accountsPayableService.getAll({ page: 1, limit: 100, status: 'pending' }),
+        accountsPayableService.getAll({ page: 1, limit: 100, hasBalance: true, approvalStatus: 'approved' }),
       ])
 
       setSchedules(schedulesData.data)
@@ -121,11 +121,8 @@ export default function ProgramacionPagosPage() {
         })
       }
 
-      // Filtrar cuentas aprobadas
-      const pendingAccounts = accountsData.data.filter(
-        acc => acc.approvalStatus === 'approved'
-      )
-      setAvailableAccounts(pendingAccounts)
+      // Usar directamente las cuentas del backend (ya filtradas por hasBalance y approvalStatus)
+      setAvailableAccounts(accountsData.data)
     } catch (error) {
       console.error('Error al cargar datos:', error)
       toast({
@@ -328,12 +325,14 @@ export default function ProgramacionPagosPage() {
       try {
         // Obtener pagos ya programados para esta cuenta
         const schedules = await paymentSchedulingService.getAccountSchedules(accountId)
+        // Incluir todas las programaciones: pendientes, aprobadas y completadas
         const totalScheduled = schedules
-          .filter(s => s.status === 'scheduled' || s.status === 'approved')
+          .filter(s => s.status === 'scheduled' || s.status === 'approved' || s.status === 'completed')
           .reduce((sum, s) => sum + Number(s.amount), 0)
         
         const accountTotal = Number(account.amount)
-        const remainingAmount = accountTotal - totalScheduled
+        const accountBalance = Number(account.balance)
+        const remainingAmount = accountBalance
         
         // Guardar info para mostrar en UI
         setSelectedAccountInfo({

@@ -182,6 +182,7 @@ export interface AccountPayableFiltersDto {
   limit?: number;
   sortBy?: string;
   order?: 'asc' | 'desc';
+  hasBalance?: boolean;
 }
 
 // ============================================

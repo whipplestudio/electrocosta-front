@@ -1619,12 +1619,11 @@ function CuentasCobrarPageContent() {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar 
+                    <Calendar
                       mode="single"
                       selected={formData.dueDate}
                       onSelect={(date) => setFormData({...formData, dueDate: date})}
                       initialFocus
-                      disabled={(date) => formData.issueDate ? date < formData.issueDate : false}
                     />
                   </PopoverContent>
                 </Popover>

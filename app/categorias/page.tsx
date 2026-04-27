@@ -1,135 +1,227 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Tag, Loader2, Search, Filter } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Pencil, Trash2, Tag, Loader2, TrendingUp, TrendingDown, AlertTriangle, Info, Save } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { categoriesService, Category, CategoryType, CreateCategoryDto, UpdateCategoryDto } from '@/services/categories.service';
+import { DynamicForm, FormFieldConfig } from '@/components/forms';
+import { KpiCard, TotalKpiCard, IncomeKpiCard, ExpenseKpiCard, ActionButton, CreateButton, DataTable, Column, Action } from '@/components/ui';
+import { cn } from '@/lib/utils';
 
 export default function CategoriasPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filteredCategories, setFilteredCategories] = useState<Category[]>([]);
+  
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
+  
+  // Search and filter state
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'all' | CategoryType>('all');
+  const [filterType, setFilterType] = useState<CategoryType | ''>('');
   
   // Modal states
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  // Form states
-  const [formData, setFormData] = useState<CreateCategoryDto>({
-    name: '',
-    description: '',
-    type: 'expense',
-    color: '#EF4444', // Rojo por defecto (expense)
-    macroClasificacion: undefined,
-  });
+  
+  // Debounce timer ref
+  const searchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Flag para evitar doble carga inicial
+  const isInitialMount = useRef(true);
 
   // Función para obtener color según tipo
   const getColorByType = (type: CategoryType): string => {
-    return type === 'income' ? '#3B82F6' : '#EF4444'; // Azul para ingresos, Rojo para egresos
+    return type === 'income' ? '#3B82F6' : '#EF4444';
   };
 
-  // Auto-asignar color cuando cambia el tipo
-  useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      color: getColorByType(prev.type)
-    }));
-  }, [formData.type]);
-
-  // Cargar categorías
-  useEffect(() => {
-    loadCategories();
-  }, []);
-
-  // Filtrar categorías
-  useEffect(() => {
-    let filtered = categories;
-
-    // Filtrar por búsqueda
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (cat) =>
-          cat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          cat.description?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    // Filtrar por tipo
-    if (filterType !== 'all') {
-      filtered = filtered.filter((cat) => cat.type === filterType);
-    }
-
-    setFilteredCategories(filtered);
-  }, [categories, searchTerm, filterType]);
-
-  const loadCategories = async () => {
+  // Función para cargar categorías con paginación y filtros
+  const loadCategories = useCallback(async (
+    search?: string, 
+    type?: CategoryType | '', 
+    currentPage?: number, 
+    currentLimit?: number
+  ) => {
     try {
       setLoading(true);
-      const data = await categoriesService.list();
-      setCategories(data);
+      const response = await categoriesService.getAll({ 
+        page: currentPage || page,
+        limit: currentLimit || limit,
+        type: type || undefined,
+        search: search || undefined,
+      });
+      setCategories(response.data);
+      setTotal(response.total);
+      setPages(response.totalPages);
     } catch (error) {
       toast.error('Error al cargar categorías');
       console.error(error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit]);
 
-  const handleCreate = async () => {
-    if (!formData.name.trim()) {
-      toast.error('El nombre es obligatorio');
+  // Cargar categorías al montar
+  useEffect(() => {
+    loadCategories(searchTerm, filterType, page, limit);
+  }, []);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Handler para paginación
+  const handlePageChange = useCallback((newPage: number) => {
+    setPage(newPage);
+  }, []);
+
+  // Handler para cambio de límite
+  const handleLimitChange = useCallback((newLimit: number) => {
+    setLimit(newLimit);
+    setPage(1);
+  }, []);
+
+  // Handler para búsqueda con debounce
+  const handleSearchChange = useCallback((value: string) => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
+    
+    setSearchTerm(value);
+    setPage(1);
+  }, []);
+
+  // Handler para filtro de tipo
+  const handleFilterChange = useCallback((key: string, value: string | string[]) => {
+    const typeValue = value as CategoryType | '';
+    setFilterType(typeValue);
+    setPage(1);
+  }, []);
+
+  // Efecto para cargar datos cuando cambian filtros o paginación
+  useEffect(() => {
+    // Saltar el primer render (ya se carga en el useEffect de montaje)
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
       return;
     }
+    
+    const timer = setTimeout(() => {
+      loadCategories(searchTerm, filterType, page, limit);
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [searchTerm, filterType, page, limit]);
 
-    try {
-      setSubmitting(true);
-      await categoriesService.create(formData);
-      toast.success('Categoría creada exitosamente');
-      setIsCreateModalOpen(false);
-      resetForm();
-      loadCategories();
-    } catch (error: any) {
-      toast.error(error.message || 'Error al crear categoría');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  // Configuración de campos del formulario - Color auto-asignado por backend
+  const categoryFormFields: FormFieldConfig[] = useMemo(() => [
+    {
+      name: 'name',
+      label: 'Nombre',
+      type: 'text',
+      placeholder: 'Ej: Servicios Profesionales',
+      required: true,
+    },
+    {
+      name: 'description',
+      label: 'Descripción',
+      type: 'textarea',
+      placeholder: 'Descripción opcional',
+      maxLength: 200,
+    },
+    {
+      name: 'type',
+      label: 'Tipo de categoría',
+      type: 'select',
+      placeholder: 'Selecciona el tipo',
+      required: true,
+      options: [
+        { label: '💰 Ingreso', value: 'income' },
+        { label: '💸 Egreso', value: 'expense' },
+      ],
+      description: 'El color se asignará automáticamente: azul para ingresos, rojo para egresos',
+    },
+    {
+      name: 'macroClasificacion',
+      label: 'Clasificación para Dashboard',
+      type: 'select',
+      placeholder: 'Selecciona clasificación (opcional)',
+      description: 'Usada por defecto al crear cuentas por pagar con esta categoría',
+      options: [
+        { label: 'Sin clasificación', value: 'none' },
+        { label: '💎 Materiales', value: 'MATERIALES' },
+        { label: '👷 Mano de Obra', value: 'MANO_DE_OBRA' },
+        { label: '📦 Otros Gastos', value: 'OTROS' },
+      ],
+      visibleWhen: (values) => values.type === 'expense',
+    },
+    // REMOVED: color field - now auto-assigned by backend
+  ], []);
 
-  const handleUpdate = async () => {
-    if (!selectedCategory) return;
-    if (!formData.name.trim()) {
-      toast.error('El nombre es obligatorio');
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      const updateData: UpdateCategoryDto = {
-        name: formData.name,
-        description: formData.description,
-        type: formData.type,
-        color: formData.color,
+  const getDefaultFormValues = () => {
+    if (selectedCategory) {
+      return {
+        name: selectedCategory.name,
+        description: selectedCategory.description || '',
+        type: selectedCategory.type,
+        macroClasificacion: selectedCategory.macroClasificacion || 'none',
+        // REMOVED: color - backend handles it
       };
-      await categoriesService.update(selectedCategory.id, updateData);
-      toast.success('Categoría actualizada exitosamente');
-      setIsEditModalOpen(false);
+    }
+    return {
+      name: '',
+      description: '',
+      type: 'expense',
+      macroClasificacion: 'none',
+      // REMOVED: color default - backend handles it
+    };
+  };
+
+  const handleSaveCategory = async (data: Record<string, any>) => {
+    try {
+      setSubmitting(true);
+      
+      // Convertir 'none' a undefined para macroClasificacion
+      const macroClasificacion = data.macroClasificacion === 'none' ? undefined : data.macroClasificacion;
+      
+      if (selectedCategory) {
+        const updateData: UpdateCategoryDto = {
+          name: data.name,
+          description: data.description,
+          type: data.type as CategoryType,
+          macroClasificacion,
+          // REMOVED: color - backend auto-assigns based on type
+        };
+        await categoriesService.update(selectedCategory.id, updateData);
+        toast.success('Categoría actualizada exitosamente');
+      } else {
+        const createData: CreateCategoryDto = {
+          name: data.name,
+          description: data.description,
+          type: data.type as CategoryType,
+          macroClasificacion,
+          // REMOVED: color - backend auto-assigns based on type
+        };
+        await categoriesService.create(createData);
+        toast.success('Categoría creada exitosamente');
+      }
+      
+      setIsFormModalOpen(false);
       setSelectedCategory(null);
-      resetForm();
       loadCategories();
     } catch (error: any) {
-      toast.error(error.message || 'Error al actualizar categoría');
+      toast.error(error.message || 'Error al guardar categoría');
     } finally {
       setSubmitting(false);
     }
@@ -152,31 +244,19 @@ export default function CategoriasPage() {
     }
   };
 
+  const openCreateModal = () => {
+    setSelectedCategory(null);
+    setIsFormModalOpen(true);
+  };
+
   const openEditModal = (category: Category) => {
     setSelectedCategory(category);
-    setFormData({
-      name: category.name,
-      description: category.description || '',
-      type: category.type,
-      color: category.color || getColorByType(category.type),
-      macroClasificacion: category.macroClasificacion,
-    });
-    setIsEditModalOpen(true);
+    setIsFormModalOpen(true);
   };
 
   const openDeleteModal = (category: Category) => {
     setSelectedCategory(category);
     setIsDeleteModalOpen(true);
-  };
-
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      description: '',
-      type: 'expense',
-      color: '#EF4444', // Rojo por defecto (expense)
-      macroClasificacion: undefined,
-    });
   };
 
   const getTypeLabel = (type: CategoryType) => {
@@ -187,385 +267,285 @@ export default function CategoriasPage() {
     return type === 'income' ? 'default' : 'destructive';
   };
 
-  // Estadísticas
+  // Estadísticas (se calculan de los datos paginados + info del backend)
   const stats = {
-    total: categories.length,
+    total: total,
     income: categories.filter((c) => c.type === 'income').length,
     expense: categories.filter((c) => c.type === 'expense').length,
   };
 
-  return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Categorías</h1>
-          <p className="text-muted-foreground">Gestiona las categorías de ingresos y egresos</p>
-        </div>
-        <Button onClick={() => setIsCreateModalOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nueva Categoría
-        </Button>
-      </div>
-
-      {/* Estadísticas */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total</CardTitle>
-            <Tag className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
-            <p className="text-xs text-muted-foreground">Categorías registradas</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ingresos</CardTitle>
-            <Tag className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.income}</div>
-            <p className="text-xs text-muted-foreground">Categorías de ingreso</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Egresos</CardTitle>
-            <Tag className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats.expense}</div>
-            <p className="text-xs text-muted-foreground">Categorías de egreso</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filtros y búsqueda */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por nombre o descripción..."
-                  className="pl-8"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="w-full md:w-[200px]">
-              <Select value={filterType} onValueChange={(value: any) => setFilterType(value)}>
-                <SelectTrigger>
-                  <Filter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Filtrar por tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  <SelectItem value="income">Ingresos</SelectItem>
-                  <SelectItem value="expense">Egresos</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Lista de categorías */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Listado de Categorías</CardTitle>
-          <CardDescription>
-            {filteredCategories.length} categoría{filteredCategories.length !== 1 ? 's' : ''} encontrada
-            {filteredCategories.length !== 1 ? 's' : ''}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : filteredCategories.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              {searchTerm || filterType !== 'all' ? 'No se encontraron categorías con los filtros aplicados' : 'No hay categorías registradas'}
-            </div>
+  // DataTable columns configuration
+  const categoryColumns: Column<Category>[] = useMemo(() => [
+    {
+      key: 'color',
+      header: 'Color',
+      render: (category) => (
+        <div 
+          className="w-4 h-4 rounded-full"
+          style={{ backgroundColor: category.color || '#3B82F6' }}
+        />
+      ),
+    },
+    {
+      key: 'type',
+      header: 'Tipo',
+      render: (category) => (
+        <div className="flex items-center gap-2">
+          {category.type === 'income' ? (
+            <>
+              <TrendingUp className="h-4 w-4 text-blue-500" />
+              <span className="text-sm font-medium text-blue-700">Ingreso</span>
+            </>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredCategories.map((category) => (
-                <Card key={category.id} className="overflow-hidden">
-                  <div className="h-2" style={{ backgroundColor: category.color || '#3B82F6' }} />
-                  <CardContent className="pt-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-lg">{category.name}</h3>
-                        {category.description && (
-                          <p className="text-sm text-muted-foreground mt-1">{category.description}</p>
-                        )}
-                      </div>
-                      <Badge variant={getTypeBadgeVariant(category.type)} className="ml-2">
-                        {getTypeLabel(category.type)}
-                      </Badge>
-                    </div>
-                    <div className="flex gap-2 mt-4">
-                      <Button variant="outline" size="sm" className="flex-1" onClick={() => openEditModal(category)}>
-                        <Pencil className="mr-1 h-3 w-3" />
-                        Editar
-                      </Button>
-                      <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700" onClick={() => openDeleteModal(category)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <>
+              <TrendingDown className="h-4 w-4 text-red-500" />
+              <span className="text-sm font-medium text-red-700">Egreso</span>
+            </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      ),
+    },
+    {
+      key: 'name',
+      header: 'Nombre',
+      render: (category) => (
+        <span className="font-medium text-[#374151]">{category.name}</span>
+      ),
+    },
+    {
+      key: 'description',
+      header: 'Descripción',
+      render: (category) => (
+        category.description ? (
+          <span className="text-sm text-[#6b7280] line-clamp-1">
+            {category.description}
+          </span>
+        ) : (
+          <span className="text-sm text-[#9ca3af] italic">-</span>
+        )
+      ),
+    },
+    {
+      key: 'macroClasificacion',
+      header: 'Clasificación',
+      render: (category) => (
+        category.macroClasificacion ? (
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-[#f0fdf4] text-[#164e63]">
+            {category.macroClasificacion === 'MATERIALES' && '💎 Materiales'}
+            {category.macroClasificacion === 'MANO_DE_OBRA' && '👷 Mano de Obra'}
+            {category.macroClasificacion === 'OTROS' && '📦 Otros'}
+          </span>
+        ) : (
+          <span className="text-sm text-[#9ca3af]">-</span>
+        )
+      ),
+    },
+  ], []);
 
-      {/* Modal Crear */}
-      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Nueva Categoría</DialogTitle>
-            <DialogDescription>Crea una nueva categoría para clasificar tus cuentas</DialogDescription>
+  // DataTable actions configuration
+  const categoryActions = useMemo((): Action<Category>[] => [
+    {
+      label: 'Editar',
+      icon: <Pencil size={16} />,
+      onClick: (category: Category) => openEditModal(category),
+    },
+    {
+      label: 'Eliminar',
+      icon: <Trash2 size={16} />,
+      onClick: (category: Category) => openDeleteModal(category),
+    },
+  ], []);
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header - Material Design 3 */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#e5e7eb]">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-[#374151]">Categorías</h1>
+          <p className="text-[#6b7280]">Gestiona las categorías de ingresos y egresos</p>
+        </div>
+        <CreateButton onClick={openCreateModal}>
+          Nueva Categoría
+        </CreateButton>
+      </div>
+
+      {/* Estadísticas MD3 */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <TotalKpiCard
+          value={stats.total}
+          subtitle="Categorías registradas"
+          icon={<Tag className="h-4 w-4" />}
+        />
+        <IncomeKpiCard
+          value={stats.income}
+          icon={<TrendingUp className="h-4 w-4" />}
+        />
+        <ExpenseKpiCard
+          value={stats.expense}
+          icon={<TrendingDown className="h-4 w-4" />}
+        />
+      </div>
+
+      {/* DataTable con paginación, búsqueda y filtros */}
+      <DataTable
+        title="Listado de Categorías"
+        columns={categoryColumns}
+        data={categories}
+        keyExtractor={(category) => category.id}
+        actions={categoryActions}
+        loading={loading}
+        emptyMessage={searchTerm || filterType 
+          ? "No se encontraron categorías con los filtros aplicados" 
+          : "No hay categorías registradas. Comienza creando una nueva categoría."}
+        
+        // Search filter
+        searchFilter={{ placeholder: 'Buscar por nombre o descripción...', debounceMs: 400 }}
+        searchValue={searchTerm}
+        onSearchChange={handleSearchChange}
+        
+        // Type filter (reemplaza las Tabs)
+        selectFilters={[
+          {
+            key: 'type',
+            label: 'Tipo',
+            options: [
+              { label: 'Todos', value: '' },
+              { label: 'Ingreso', value: 'income' },
+              { label: 'Egreso', value: 'expense' },
+            ],
+            placeholder: 'Filtrar por tipo',
+          }
+        ]}
+        filterValues={{ type: filterType }}
+        onFilterChange={handleFilterChange}
+        
+        // Pagination
+        pagination={{
+          page,
+          limit,
+          total,
+          totalPages: pages,
+        }}
+        onPageChange={handlePageChange}
+        onRowsPerPageChange={handleLimitChange}
+        rowsPerPageOptions={[10, 25, 50, 100]}
+      />
+
+      {/* Modal Crear/Editar - MD3 Style */}
+      <Dialog open={isFormModalOpen} onOpenChange={setIsFormModalOpen}>
+        <DialogContent className="sm:max-w-lg rounded-xl">
+          <DialogHeader className="space-y-2 pb-4">
+            <DialogTitle className="text-2xl font-semibold text-[#374151]">
+              {selectedCategory ? 'Editar Categoría' : 'Nueva Categoría'}
+            </DialogTitle>
+            <DialogDescription className="text-base text-[#6b7280]">
+              {selectedCategory ? 'Modifica los datos de la categoría' : 'Crea una nueva categoría para clasificar tus cuentas'}
+            </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Nombre *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ej: Servicios Profesionales"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="description">Descripción</Label>
-              <Input
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Descripción opcional"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="type">Tipo *</Label>
-              <Select value={formData.type} onValueChange={(value: CategoryType) => setFormData({ ...formData, type: value })}>
-                <SelectTrigger id="type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="income">Ingreso</SelectItem>
-                  <SelectItem value="expense">Egreso</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {formData.type === 'expense' && (
-              <div className="grid gap-2">
-                <Label htmlFor="macroClasificacion">Clasificación por defecto para Dashboard</Label>
-                <Select 
-                  value={formData.macroClasificacion || 'none'} 
-                  onValueChange={(value) => setFormData({ ...formData, macroClasificacion: value === 'none' ? undefined : value as any })}
+          <DynamicForm
+            id="categoria-form"
+            config={{
+              fields: categoryFormFields,
+              defaultValues: getDefaultFormValues(),
+              columns: 1,
+              gap: 'medium',
+              variant: 'outlined',
+              density: 'comfortable',
+            }}
+            onSubmit={handleSaveCategory}
+            loading={submitting}
+            showSubmit={false}
+            showCancel={false}
+            footerClassName="flex justify-end gap-3 pt-4 border-t border-[#e5e7eb]"
+            extraButtons={
+              <>
+                <ActionButton variant="ghost" onClick={() => {
+                  setIsFormModalOpen(false);
+                  setSelectedCategory(null);
+                }} disabled={submitting}>
+                  Cancelar
+                </ActionButton>
+                <ActionButton
+                  type="submit"
+                  form="categoria-form"
+                  variant="save"
+                  disabled={submitting}
+                  startIcon={submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 >
-                  <SelectTrigger id="macroClasificacion">
-                    <SelectValue placeholder="Selecciona clasificación (opcional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sin clasificación</SelectItem>
-                    <SelectItem value="MATERIALES">💎 Materiales</SelectItem>
-                    <SelectItem value="MANO_DE_OBRA">👷 Mano de Obra</SelectItem>
-                    <SelectItem value="OTROS">📦 Otros Gastos</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Esta clasificación se usará por defecto al crear cuentas por pagar con esta categoría
-                </p>
-              </div>
-            )}
-            <div className="grid gap-2">
-              <Label htmlFor="color-preview">Color de la categoría</Label>
-              <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/50">
-                <div 
-                  className="w-12 h-12 rounded-md border-2 border-border shadow-sm" 
-                  style={{ backgroundColor: formData.color }}
-                />
-                <div className="flex-1">
-                  <p className="text-sm font-medium">
-                    {formData.type === 'income' ? '🔵 Azul - Ingresos' : '🔴 Rojo - Egresos'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    El color se asigna automáticamente según el tipo
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateModalOpen(false)} disabled={submitting}>
-              Cancelar
-            </Button>
-            <Button onClick={handleCreate} disabled={submitting}>
-              {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creando...
-                </>
-              ) : (
-                'Crear Categoría'
-              )}
-            </Button>
-          </DialogFooter>
+                  {submitting ? 'Guardando...' : (selectedCategory ? 'Guardar Cambios' : 'Crear Categoría')}
+                </ActionButton>
+              </>
+            }
+          />
         </DialogContent>
       </Dialog>
 
-      {/* Modal Editar */}
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar Categoría</DialogTitle>
-            <DialogDescription>Modifica los datos de la categoría</DialogDescription>
+      {/* Modal Eliminar - MD3 Style */}
+      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <DialogContent className="sm:max-w-md rounded-xl">
+          <DialogHeader className="pb-4">
+            <div className="w-12 h-12 rounded-full bg-red-50 mb-3 flex items-center justify-center">
+              <AlertTriangle className="h-6 w-6 text-red-600" />
+            </div>
+            <DialogTitle className="text-xl text-[#374151]">¿Eliminar categoría?</DialogTitle>
+            <DialogDescription className="text-[#6b7280]">
+              Esta acción no se puede deshacer. Verifica los detalles antes de continuar.
+            </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-name">Nombre *</Label>
-              <Input
-                id="edit-name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ej: Servicios Profesionales"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-description">Descripción</Label>
-              <Input
-                id="edit-description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Descripción opcional"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-type">Tipo *</Label>
-              <Select value={formData.type} onValueChange={(value: CategoryType) => setFormData({ ...formData, type: value })}>
-                <SelectTrigger id="edit-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="income">Ingreso</SelectItem>
-                  <SelectItem value="expense">Egreso</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {formData.type === 'expense' && (
-              <div className="grid gap-2">
-                <Label htmlFor="edit-macroClasificacion">Clasificación por defecto para Dashboard</Label>
-                <Select 
-                  value={formData.macroClasificacion || 'none'} 
-                  onValueChange={(value) => setFormData({ ...formData, macroClasificacion: value === 'none' ? undefined : value as any })}
-                >
-                  <SelectTrigger id="edit-macroClasificacion">
-                    <SelectValue placeholder="Selecciona clasificación (opcional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sin clasificación</SelectItem>
-                    <SelectItem value="MATERIALES">💎 Materiales</SelectItem>
-                    <SelectItem value="MANO_DE_OBRA">👷 Mano de Obra</SelectItem>
-                    <SelectItem value="OTROS">📦 Otros Gastos</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Esta clasificación se usará por defecto al crear cuentas por pagar con esta categoría
-                </p>
-              </div>
-            )}
-            <div className="grid gap-2">
-              <Label htmlFor="edit-color-preview">Color de la categoría</Label>
-              <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/50">
+          
+          {selectedCategory && (
+            <div className="py-4">
+              {/* Preview Card */}
+              <div className="rounded-xl overflow-hidden border border-[#e5e7eb]">
                 <div 
-                  className="w-12 h-12 rounded-md border-2 border-border shadow-sm" 
-                  style={{ backgroundColor: formData.color }}
+                  className="h-8 flex items-center px-3"
+                  style={{ backgroundColor: selectedCategory.color || '#3B82F6' }}
                 />
-                <div className="flex-1">
-                  <p className="text-sm font-medium">
-                    {formData.type === 'income' ? '🔵 Azul - Ingresos' : '🔴 Rojo - Egresos'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    El color se asigna automáticamente según el tipo
-                  </p>
+                <div className="p-4 bg-white">
+                  <h3 className="font-semibold text-[#374151]">{selectedCategory.name}</h3>
+                  {selectedCategory.description && (
+                    <p className="text-sm text-[#6b7280] mt-1">{selectedCategory.description}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-3">
+                    <span className={cn(
+                      "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
+                      selectedCategory.type === 'income' 
+                        ? "bg-blue-50 text-blue-700" 
+                        : "bg-red-50 text-red-700"
+                    )}>
+                      {getTypeLabel(selectedCategory.type)}
+                    </span>
+                  </div>
                 </div>
               </div>
+              
+              {/* Warning Message */}
+              <div className="mt-4 p-3 bg-red-50 rounded-xl border border-red-200">
+                <p className="text-sm text-red-700 flex items-start gap-2">
+                  <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                  Si esta categoría está en uso, no podrá ser eliminada.
+                </p>
+              </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsEditModalOpen(false);
-                resetForm();
-              }}
+          )}
+          
+          <div className="flex justify-end gap-3 pt-4 border-t border-[#e5e7eb]">
+            <ActionButton 
+              variant="ghost" 
+              onClick={() => setIsDeleteModalOpen(false)} 
               disabled={submitting}
             >
               Cancelar
-            </Button>
-            <Button onClick={handleUpdate} disabled={submitting}>
-              {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                'Guardar Cambios'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal Eliminar */}
-      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Eliminar Categoría</DialogTitle>
-            <DialogDescription>¿Estás seguro de que deseas eliminar esta categoría?</DialogDescription>
-          </DialogHeader>
-          {selectedCategory && (
-            <div className="py-4">
-              <Card>
-                <div className="h-2" style={{ backgroundColor: selectedCategory.color || '#3B82F6' }} />
-                <CardContent className="pt-4">
-                  <h3 className="font-semibold">{selectedCategory.name}</h3>
-                  {selectedCategory.description && <p className="text-sm text-muted-foreground mt-1">{selectedCategory.description}</p>}
-                  <Badge variant={getTypeBadgeVariant(selectedCategory.type)} className="mt-2">
-                    {getTypeLabel(selectedCategory.type)}
-                  </Badge>
-                </CardContent>
-              </Card>
-              <p className="text-sm text-muted-foreground mt-4">
-                Esta acción no se puede deshacer. Si la categoría está en uso, no podrá ser eliminada.
-              </p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)} disabled={submitting}>
-              Cancelar
-            </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={submitting}>
-              {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Eliminando...
-                </>
-              ) : (
-                'Eliminar'
-              )}
-            </Button>
-          </DialogFooter>
+            </ActionButton>
+            <ActionButton 
+              variant="delete" 
+              onClick={handleDelete} 
+              disabled={submitting}
+              startIcon={submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            >
+              {submitting ? 'Eliminando...' : 'Eliminar'}
+            </ActionButton>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

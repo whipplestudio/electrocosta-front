@@ -1,13 +1,12 @@
 "use client"
 
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Dialog,
   DialogContent,
@@ -17,20 +16,28 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Upload, Download, Plus, Search, FileText, Calendar as CalendarIcon, Loader2, Eye, Edit, AlertCircle, Check, ChevronsUpDown, Info, CheckCircle2, XCircle } from "lucide-react"
+import { Upload, Download, Plus, Search, FileText, Calendar as CalendarIcon, Loader2, Eye, Edit, AlertCircle, Check, ChevronsUpDown, Info, CheckCircle2, XCircle, Save, FileSpreadsheet, TrendingUp, DollarSign, Briefcase } from "lucide-react"
 import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Calendar } from "@/components/ui/calendar"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { projectsUploadService, type CrearProyectoData } from "@/services/projects-upload.service"
+import { handleApiError } from "@/lib/api-client"
 import { clientsService, type ClientSimple } from "@/services/clients.service"
 import { areasService, type AreaSimple } from "@/services/areas.service"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
+import { CreateButton, ActionButton, DataTable, Column, Action, KpiCard } from "@/components/ui"
+import { FloatingInput } from "@/components/ui/floating-input"
+import { FloatingSelect } from "@/components/ui/floating-select"
+import { FloatingDatePicker } from "@/components/ui/floating-date-picker"
+import { FinancialAmountSection } from "@/components/financial"
+import type { IvaType } from "@/components/financial"
 
 // Helper para convertir string YYYY-MM-DD a Date local sin problemas de zona horaria
 const stringToLocalDate = (dateString: string | undefined): Date | undefined => {
@@ -66,6 +73,12 @@ export default function ProyectosPage() {
   // Estados para proyectos
   const [proyectos, setProyectos] = useState<any[]>([])
   const [loadingProyectos, setLoadingProyectos] = useState(false)
+  
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [pages, setPages] = useState(1)
   
   // Estados para usuarios
   const [usuarios, setUsuarios] = useState<any[]>([])
@@ -130,19 +143,29 @@ export default function ProyectosPage() {
     responsableEmail: ''
   })
 
-  // Cargar proyectos desde la BD
-  const cargarProyectos = useCallback(async () => {
+  // Cargar proyectos desde la BD con paginación y búsqueda
+  const cargarProyectos = useCallback(async (
+    search?: string,
+    currentPage?: number,
+    currentLimit?: number
+  ) => {
     try {
       setLoadingProyectos(true)
-      const response = await projectsUploadService.obtenerListadoProyectos({ limit: 50 })
+      const response = await projectsUploadService.obtenerListadoProyectos({ 
+        page: currentPage || page,
+        limit: currentLimit || limit,
+        search: search || undefined,
+      })
       setProyectos(response.data || [])
+      setTotal(response.total || 0)
+      setPages(response.totalPages || 1)
     } catch (error) {
       console.error('Error al cargar proyectos:', error)
       toast.error('No se pudieron cargar los proyectos')
     } finally {
       setLoadingProyectos(false)
     }
-  }, [])
+  }, [page, limit])
 
   // Cargar usuarios
   const cargarUsuarios = useCallback(async () => {
@@ -193,11 +216,30 @@ export default function ProyectosPage() {
   }, [])
 
   useEffect(() => {
-    cargarProyectos()
+    cargarProyectos(searchTerm, page, limit)
     cargarUsuarios()
     cargarClientes()
     cargarAreas()
-  }, [cargarProyectos, cargarUsuarios, cargarClientes, cargarAreas])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Handlers para paginación y búsqueda
+  const handlePageChange = useCallback((newPage: number) => {
+    setPage(newPage)
+    cargarProyectos(searchTerm, newPage, limit)
+  }, [searchTerm, limit, cargarProyectos])
+
+  const handleLimitChange = useCallback((newLimit: number) => {
+    setLimit(newLimit)
+    setPage(1)
+    cargarProyectos(searchTerm, 1, newLimit)
+  }, [searchTerm, cargarProyectos])
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchTerm(value)
+    setPage(1)
+    cargarProyectos(value, 1, limit)
+  }, [limit, cargarProyectos])
 
   // Formatear número con separadores de miles (permite punto decimal mientras se escribe)
   const formatNumber = (value: string): string => {
@@ -309,11 +351,6 @@ export default function ProyectosPage() {
         hasErrors = true
       }
 
-      if (!nuevoProyecto.fechaFinEstimada) {
-        errors.fechaFinEstimada = 'La fecha fin estimada es obligatoria'
-        hasErrors = true
-      }
-
       if (!nuevoProyecto.subtotalVenta || parseFloat(nuevoProyecto.subtotalVenta) <= 0) {
         errors.subtotalVenta = 'El subtotal de venta es obligatorio y debe ser mayor a 0'
         hasErrors = true
@@ -380,8 +417,9 @@ export default function ProyectosPage() {
       setOpenDialog(false)
       cargarProyectos()
     } catch (error: any) {
-      const mensaje = modoFormulario === 'editar' ? 'Error al actualizar proyecto' : 'Error al crear proyecto'
-      toast.error(error.message || mensaje)
+      const defaultMensaje = modoFormulario === 'editar' ? 'Error al actualizar proyecto' : 'Error al crear proyecto'
+      const errorMessage = handleApiError(error)
+      toast.error(errorMessage || defaultMensaje)
     } finally {
       setLoading(false)
     }
@@ -585,31 +623,99 @@ export default function ProyectosPage() {
     categoria: p.area?.name || 'General',
   }))
 
-  const filteredProyectos = proyectosFormateados.filter((proyecto) => {
-    const matchesSearch =
-      proyecto.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      proyecto.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      proyecto.id.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = filterStatus === "all" || proyecto.estado.toLowerCase().replace(" ", "") === filterStatus
-    return matchesSearch && matchesStatus
-  })
-
-  const totalValor = filteredProyectos.reduce((sum, proyecto) => sum + proyecto.valorContrato, 0)
+  // Use backend data directly - no local filtering
+  const totalValor = proyectosFormateados.reduce((sum, proyecto) => sum + proyecto.valorContrato, 0)
 
   const getStatusBadge = (estado: string) => {
     switch (estado) {
       case "En Progreso":
-        return <Badge className="bg-blue-50 text-blue-700">En Progreso</Badge>
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200">En Progreso</span>
       case "Planificación":
-        return <Badge className="bg-yellow-50 text-yellow-700">Planificación</Badge>
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-yellow-50 text-yellow-700 border-yellow-200">Planificación</span>
       case "Completado":
-        return <Badge className="bg-green-50 text-green-700">Completado</Badge>
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-green-50 text-green-700 border-green-200">Completado</span>
       case "Pausado":
-        return <Badge className="bg-red-50 text-red-700">Pausado</Badge>
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-red-50 text-red-700 border-red-200">Pausado</span>
       default:
-        return <Badge variant="outline">{estado}</Badge>
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-gray-50 text-gray-700 border-gray-200">{estado}</span>
     }
   }
+
+  // DataTable columns configuration
+  const proyectoColumns: Column<typeof proyectosFormateados[0]>[] = useMemo(() => [
+    {
+      key: 'nombre',
+      header: 'Proyecto',
+      render: (proyecto) => (
+        <div>
+          <div className="font-medium text-[#374151]">{proyecto.nombre}</div>
+          <div className="text-sm text-[#6b7280]">{proyecto.responsable}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'cliente',
+      header: 'Cliente',
+      render: (proyecto) => (
+        <div>
+          <div className="font-medium text-[#374151]">{proyecto.cliente}</div>
+          <div className="text-sm text-[#6b7280]">{proyecto.categoria}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'categoria',
+      header: 'Área',
+      render: (proyecto) => (
+        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs border border-[#e5e7eb] bg-white text-[#374151]">
+          {proyecto.categoria}
+        </span>
+      ),
+    },
+    {
+      key: 'valorVenta',
+      header: 'Valor Venta',
+      render: (proyecto) => (
+        <span className="font-medium text-green-600">${proyecto.valorVenta.toLocaleString()}</span>
+      ),
+    },
+    {
+      key: 'valorContrato',
+      header: 'Presupuesto',
+      render: (proyecto) => (
+        <span className="font-medium text-[#374151]">${proyecto.valorContrato.toLocaleString()}</span>
+      ),
+    },
+    {
+      key: 'fechas',
+      header: 'Fechas',
+      render: (proyecto) => (
+        <div className="text-sm">
+          <div className="text-[#374151]">{proyecto.fechaInicio}</div>
+          <div className="text-[#6b7280] text-xs">Fin: {proyecto.fechaFin}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'estado',
+      header: 'Estado',
+      render: (proyecto) => getStatusBadge(proyecto.estado),
+    },
+  ], [])
+
+  // DataTable actions configuration
+  const proyectoActions = useMemo((): Action<typeof proyectosFormateados[0]>[] => [
+    {
+      label: 'Ver',
+      icon: <Eye size={16} />,
+      onClick: (proyecto) => verDetalleProyecto(proyecto.id),
+    },
+    {
+      label: 'Editar',
+      icon: <Edit size={16} />,
+      onClick: (proyecto) => abrirEditarProyecto(proyecto.id),
+    },
+  ], [])
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -622,24 +728,14 @@ export default function ProyectosPage() {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button 
+                <ActionButton 
                   variant="outline" 
                   onClick={descargarPlantilla} 
                   disabled={downloadingTemplate}
-                  className="gap-2"
+                  startIcon={downloadingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 >
-                  {downloadingTemplate ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Descargando...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4" />
-                      Plantilla Excel
-                    </>
-                  )}
-                </Button>
+                  {downloadingTemplate ? 'Descargando...' : 'Plantilla Excel'}
+                </ActionButton>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
                 <div className="space-y-1">
@@ -654,14 +750,13 @@ export default function ProyectosPage() {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button 
+                <ActionButton 
                   variant="outline"
                   onClick={() => setShowBulkUploadDialog(true)}
-                  className="gap-2"
+                  startIcon={<Upload className="h-4 w-4" />}
                 >
-                  <Upload className="h-4 w-4" />
                   Carga Masiva
-                </Button>
+                </ActionButton>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
                 <div className="space-y-1">
@@ -680,12 +775,11 @@ export default function ProyectosPage() {
             }
           }}>
             <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
+              <CreateButton>
                 Nuevo Proyecto
-              </Button>
+              </CreateButton>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[90vw] max-w-[1200px] max-h-[90vh] overflow-y-auto p-6">
               <DialogHeader>
                 <DialogTitle>{modoFormulario === 'editar' ? 'Editar Proyecto' : 'Registrar Nuevo Proyecto'}</DialogTitle>
                 <DialogDescription>
@@ -693,350 +787,177 @@ export default function ProyectosPage() {
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
-                <div>
-                  <Label>Nombre del Proyecto *</Label>
-                  <Input 
-                    placeholder="Ej: Instalación eléctrica Planta Norte" 
+                {/* Fila 1: Nombre del Proyecto + Cliente */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FloatingInput
+                    label="Nombre del Proyecto *"
+                    placeholder="Ej: Instalación eléctrica Planta Norte"
                     value={nuevoProyecto.nombreProyecto}
                     onChange={(e) => setNuevoProyecto({...nuevoProyecto, nombreProyecto: e.target.value})}
-                    className={formErrors.nombreProyecto ? 'border-red-500' : ''}
+                    error={formErrors.nombreProyecto}
                   />
-                  {formErrors.nombreProyecto && (
-                    <p className="text-sm text-red-500 mt-1">{formErrors.nombreProyecto}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <Label>Cliente</Label>
-                  <Popover open={openClientePopover} onOpenChange={setOpenClientePopover}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={openClientePopover}
-                        className="w-full justify-between"
-                      >
-                        {nuevoProyecto.clientId
-                          ? clientes.find((c) => c.id === nuevoProyecto.clientId)?.name
-                          : "Seleccionar cliente..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0">
-                      <Command>
-                        <CommandInput placeholder="Buscar cliente por nombre o RFC..." />
-                        <CommandEmpty>No se encontraron clientes.</CommandEmpty>
-                        <CommandGroup>
-                          <CommandItem
-                            value="sin-cliente"
-                            onSelect={() => {
-                              setNuevoProyecto({...nuevoProyecto, clientId: ''})
-                              setOpenClientePopover(false)
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                nuevoProyecto.clientId === "" ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            Sin cliente
-                          </CommandItem>
-                          {clientes.map((cliente) => (
-                            <CommandItem
-                              key={cliente.id}
-                              value={`${cliente.name} ${cliente.taxId}`}
-                              onSelect={() => {
-                                setNuevoProyecto({...nuevoProyecto, clientId: cliente.id})
-                                setOpenClientePopover(false)
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  nuevoProyecto.clientId === cliente.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              <div className="flex flex-col">
-                                <span className="font-medium">{cliente.name}</span>
-                                <span className="text-xs text-muted-foreground">RFC: {cliente.taxId}</span>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Busca y selecciona un cliente existente o déjalo vacío
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Fecha Inicio *</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="justify-start text-left font-normal">
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {nuevoProyecto.fechaInicio ? format(stringToLocalDate(nuevoProyecto.fechaInicio)!, "PPP", { locale: es }) : "Seleccionar"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar 
-                          mode="single" 
-                          selected={stringToLocalDate(nuevoProyecto.fechaInicio)}
-                          defaultMonth={stringToLocalDate(nuevoProyecto.fechaInicio)}
-                          onSelect={(d) => setNuevoProyecto({...nuevoProyecto, fechaInicio: d ? format(d, 'yyyy-MM-dd') : ''})} 
-                          locale={es} 
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Fecha Fin Estimada *</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className={cn("justify-start text-left font-normal", formErrors.fechaFinEstimada && "border-red-500")}>
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {nuevoProyecto.fechaFinEstimada ? format(stringToLocalDate(nuevoProyecto.fechaFinEstimada)!, "PPP", { locale: es }) : "Seleccionar"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar 
-                          mode="single" 
-                          selected={stringToLocalDate(nuevoProyecto.fechaFinEstimada)}
-                          defaultMonth={stringToLocalDate(nuevoProyecto.fechaFinEstimada)}
-                          onSelect={(d) => setNuevoProyecto({...nuevoProyecto, fechaFinEstimada: d ? format(d, 'yyyy-MM-dd') : ''})} 
-                          locale={es}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    {formErrors.fechaFinEstimada && (
-                      <p className="text-sm text-red-500 mt-1">{formErrors.fechaFinEstimada}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-primary">💰 Venta</h3>
                   
-                  {/* Selector de Tipo de IVA */}
-                  <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg border">
-                    <Label className="text-sm font-medium">Tipo de IVA:</Label>
-                    <div className="flex gap-4">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="ivaType"
-                          value="percentage"
-                          checked={nuevoProyecto.ivaType === 'percentage'}
-                          onChange={(e) => handlePresupuestoChange('ivaType', e.target.value)}
-                          className="w-4 h-4"
-                        />
-                        <span className="text-sm">Porcentaje (%)</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="ivaType"
-                          value="amount"
-                          checked={nuevoProyecto.ivaType === 'amount'}
-                          onChange={(e) => handlePresupuestoChange('ivaType', e.target.value)}
-                          className="w-4 h-4"
-                        />
-                        <span className="text-sm">Monto Fijo ($)</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="subtotal">Subtotal (sin IVA) *</Label>
-                      <Input 
-                        type="text" 
-                        placeholder="Ej: 100,000"
-                        value={formatNumber(nuevoProyecto.subtotalVenta)}
-                        onChange={(e) => handlePresupuestoChange('subtotalVenta', e.target.value)}
-                        className={formErrors.subtotalVenta ? 'border-red-500' : ''}
-                      />
-                      {formErrors.subtotalVenta ? (
-                        <p className="text-sm text-red-500 mt-1">{formErrors.subtotalVenta}</p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Monto sin IVA
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <Label>{nuevoProyecto.ivaType === 'percentage' ? 'IVA (%)' : 'IVA ($)'} *</Label>
-                      <Input 
-                        type="text" 
-                        placeholder={nuevoProyecto.ivaType === 'percentage' ? 'Ej: 16' : 'Ej: 16000'}
-                        value={nuevoProyecto.ivaType === 'percentage' ? nuevoProyecto.iva : formatNumber(nuevoProyecto.iva)}
-                        onChange={(e) => handlePresupuestoChange('iva', e.target.value)}
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {nuevoProyecto.ivaType === 'percentage' ? 'Porcentaje de IVA' : 'Monto fijo de IVA'}
-                      </p>
-                    </div>
-                    <div>
-                      <Label htmlFor="amount">Total (con IVA)</Label>
-                      <Input 
-                        type="text" 
-                        value={formatNumber(nuevoProyecto.valorVenta)}
-                        readOnly
-                        className="bg-muted font-semibold text-green-600"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Subtotal + IVA (calculado)
-                      </p>
-                    </div>
-                  </div>
+                  <FloatingSelect
+                    label="Cliente"
+                    value={nuevoProyecto.clientId}
+                    onChange={(value) => setNuevoProyecto({...nuevoProyecto, clientId: value as string})}
+                    options={[
+                      { label: 'Sin cliente', value: '' },
+                      ...clientes.map((c) => ({ 
+                        label: `${c.name} (RFC: ${c.taxId})`, 
+                        value: c.id 
+                      }))
+                    ]}
+                    placeholder="Selecciona un cliente"
+                    searchable
+                    searchPlaceholder="Buscar por nombre o RFC..."
+                    helperText="Busca y selecciona un cliente existente o déjalo vacío"
+                  />
                 </div>
 
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-primary">📊 Costos Estimados</h3>
+                {/* Fila 2: Fechas */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FloatingDatePicker
+                    label="Fecha Inicio *"
+                    value={stringToLocalDate(nuevoProyecto.fechaInicio)}
+                    onChange={(date) => setNuevoProyecto({...nuevoProyecto, fechaInicio: date instanceof Date ? format(date, 'yyyy-MM-dd') : ''})}
+                    placeholder="Seleccionar fecha"
+                  />
+                  <FloatingDatePicker
+                    label="Fecha Fin Estimada"
+                    value={stringToLocalDate(nuevoProyecto.fechaFinEstimada)}
+                    onChange={(date) => setNuevoProyecto({...nuevoProyecto, fechaFinEstimada: date instanceof Date ? format(date, 'yyyy-MM-dd') : ''})}
+                    placeholder="Seleccionar fecha (opcional)"
+                  />
+                </div>
+
+                {/* Sección Venta - Usando componente reutilizable */}
+                <FinancialAmountSection
+                  title="💰 Venta"
+                  iva={nuevoProyecto.ivaType === 'percentage' ? nuevoProyecto.iva : formatNumber(nuevoProyecto.iva)}
+                  ivaType={nuevoProyecto.ivaType}
+                  subtotal={formatNumber(nuevoProyecto.subtotalVenta)}
+                  total={formatNumber(nuevoProyecto.valorVenta)}
+                  onIvaChange={(value) => handlePresupuestoChange('iva', value)}
+                  onIvaTypeChange={(type) => handlePresupuestoChange('ivaType', type)}
+                  onSubtotalChange={(value) => handlePresupuestoChange('subtotalVenta', value)}
+                  subtotalLabel="Subtotal Venta (sin IVA) *"
+                  totalLabel="Total Venta (con IVA)"
+                  subtotalPlaceholder="Ej: 100,000"
+                  subtotalError={formErrors.subtotalVenta}
+                  subtotalHelperText="Monto sin IVA"
+                />
+
+                {/* Sección Costos Estimados */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-[#164e63]">📊 Costos Estimados</h3>
                   {formErrors.presupuestos && (
                     <p className="text-sm text-red-500">{formErrors.presupuestos}</p>
                   )}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Presupuesto Materiales *</Label>
-                      <Input 
-                        type="text" 
-                        placeholder="Ej: 20,000"
-                        value={formatNumber(nuevoProyecto.presupuestoMateriales)}
-                        onChange={(e) => handlePresupuestoChange('presupuestoMateriales', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label>Presupuesto Mano de Obra *</Label>
-                      <Input 
-                        type="text" 
-                        placeholder="Ej: 25,000"
-                        value={formatNumber(nuevoProyecto.presupuestoManoObra)}
-                        onChange={(e) => handlePresupuestoChange('presupuestoManoObra', e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Presupuesto Otros *</Label>
-                      <Input 
-                        type="text" 
-                        placeholder="Ej: 5,000"
-                        value={formatNumber(nuevoProyecto.presupuestoOtros)}
-                        onChange={(e) => handlePresupuestoChange('presupuestoOtros', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label>Presupuesto Total (con IVA)</Label>
-                      <Input 
-                        type="text" 
-                        value={formatNumber(nuevoProyecto.presupuestoTotal)}
-                        readOnly
-                        className="bg-muted font-semibold"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Suma de costos + IVA (calculado)
-                      </p>
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <FloatingInput
+                      label="Materiales *"
+                      placeholder="Ej: 20,000"
+                      value={formatNumber(nuevoProyecto.presupuestoMateriales)}
+                      onChange={(e) => handlePresupuestoChange('presupuestoMateriales', e.target.value)}
+                    />
+                    <FloatingInput
+                      label="Mano de Obra *"
+                      placeholder="Ej: 25,000"
+                      value={formatNumber(nuevoProyecto.presupuestoManoObra)}
+                      onChange={(e) => handlePresupuestoChange('presupuestoManoObra', e.target.value)}
+                    />
+                    <FloatingInput
+                      label="Otros *"
+                      placeholder="Ej: 5,000"
+                      value={formatNumber(nuevoProyecto.presupuestoOtros)}
+                      onChange={(e) => handlePresupuestoChange('presupuestoOtros', e.target.value)}
+                    />
+                    <FloatingInput
+                      label="Total Costos (con IVA)"
+                      placeholder="Calculado automáticamente"
+                      value={formatNumber(nuevoProyecto.presupuestoTotal)}
+                      readOnly
+                      helperText="Suma de costos + IVA"
+                      className="bg-[#f9fafb]"
+                    />
                   </div>
                 </div>
 
-                <div>
-                  <Label>Responsable del Proyecto *</Label>
-                  <Select 
-                    value={nuevoProyecto.responsableEmail} 
-                    onValueChange={(value) => setNuevoProyecto({...nuevoProyecto, responsableEmail: value})}
-                    disabled={loadingUsuarios}
-                  >
-                    <SelectTrigger className={formErrors.responsableEmail ? 'border-red-500' : ''}>
-                      <SelectValue placeholder={loadingUsuarios ? "Cargando usuarios..." : "Selecciona un responsable"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {usuarios.length === 0 ? (
-                        <SelectItem value="sin-usuarios" disabled>
-                          No hay usuarios disponibles
-                        </SelectItem>
-                      ) : (
-                        usuarios.map((usuario) => (
-                          <SelectItem key={usuario.id} value={usuario.email}>
-                            {usuario.fullName} ({usuario.email})
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {formErrors.responsableEmail && (
-                    <p className="text-sm text-red-500 mt-1">{formErrors.responsableEmail}</p>
-                  )}
-                </div>
+                {/* Responsable - solo */}
+                <FloatingSelect
+                  label="Responsable del Proyecto *"
+                  value={nuevoProyecto.responsableEmail}
+                  onChange={(value) => setNuevoProyecto({...nuevoProyecto, responsableEmail: value as string})}
+                  options={usuarios.length === 0 ? [
+                    { label: 'No hay usuarios disponibles', value: '', disabled: true }
+                  ] : usuarios.map((u) => ({
+                    label: `${u.fullName} (${u.email})`,
+                    value: u.email
+                  }))}
+                  placeholder={loadingUsuarios ? "Cargando usuarios..." : "Selecciona un responsable"}
+                  disabled={loadingUsuarios}
+                  error={formErrors.responsableEmail}
+                />
 
+                {/* Descripción - al final, ancho completo */}
                 <div>
-                  <Label>Descripción</Label>
+                  <Label className="text-sm font-medium text-[#374151]">Descripción</Label>
                   <Textarea 
                     placeholder="Ingrese una descripción detallada del proyecto (opcional)"
                     value={nuevoProyecto.descripcion}
                     onChange={(e) => setNuevoProyecto({...nuevoProyecto, descripcion: e.target.value})}
                     rows={4}
+                    className="mt-1.5 border-[#e5e7eb] focus:border-[#164e63] focus:ring-[#164e63] rounded-xl"
                   />
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setOpenDialog(false)} disabled={loading}>
+                <ActionButton 
+                  variant="cancel" 
+                  onClick={() => setOpenDialog(false)} 
+                  disabled={loading}
+                >
                   Cancelar
-                </Button>
-                <Button onClick={crearNuevoProyecto} disabled={loading}>
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {modoFormulario === 'editar' ? 'Guardando...' : 'Creando...'}
-                    </>
-                  ) : (
-                    modoFormulario === 'editar' ? 'Guardar Cambios' : 'Crear Proyecto'
-                  )}
-                </Button>
+                </ActionButton>
+                <ActionButton 
+                  variant="save" 
+                  onClick={crearNuevoProyecto} 
+                  disabled={loading}
+                  loading={loading}
+                  loadingText={modoFormulario === 'editar' ? 'Guardando...' : 'Creando...'}
+                >
+                  {modoFormulario === 'editar' ? 'Guardar Cambios' : 'Crear Proyecto'}
+                </ActionButton>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
+      {/* KPI Cards - Reusables */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Valor Total</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${totalValor.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">{filteredProyectos.length} proyectos</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">En Progreso</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {proyectosFormateados.filter((p) => p.estado === "En Progreso").length}
-            </div>
-            <p className="text-xs text-muted-foreground">Activos</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Completados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {proyectosFormateados.filter((p) => p.estado === "Completado").length}
-            </div>
-            <p className="text-xs text-muted-foreground">Finalizados</p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Valor Total"
+          value={`$${totalValor.toLocaleString()}`}
+          subtitle={`${total} proyectos`}
+          icon={<DollarSign className="h-4 w-4" />}
+          variant="info"
+        />
+        <KpiCard
+          title="En Progreso"
+          value={proyectosFormateados.filter((p) => p.estado === "En Progreso").length}
+          subtitle="Activos"
+          icon={<TrendingUp className="h-4 w-4" />}
+          variant="info"
+        />
+        <KpiCard
+          title="Completados"
+          value={proyectosFormateados.filter((p) => p.estado === "Completado").length}
+          subtitle="Finalizados"
+          icon={<Briefcase className="h-4 w-4" />}
+          variant="success"
+        />
       </div>
 
       {/* Dialog de Carga Masiva */}
@@ -1057,106 +978,32 @@ export default function ProyectosPage() {
         onReset={handleResetBulkUpload}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Listado de Proyectos</CardTitle>
-          <CardDescription>Proyectos registrados y su estado actual</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="Buscar proyectos por nombre, cliente o ID"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los estados</SelectItem>
-                <SelectItem value="enprogreso">En Progreso</SelectItem>
-                <SelectItem value="planificacion">Planificación</SelectItem>
-                <SelectItem value="completado">Completado</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Proyecto</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Área</TableHead>
-                  <TableHead>Valor Venta</TableHead>
-                  <TableHead>Presupuesto</TableHead>
-                  <TableHead>Fechas</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProyectos.map((proyecto) => (
-                  <TableRow key={proyecto.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{proyecto.nombre}</div>
-                        <div className="text-sm text-muted-foreground">{proyecto.responsable}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{proyecto.cliente}</div>
-                        <div className="text-sm text-muted-foreground">{proyecto.categoria}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {proyectos.find(p => p.id === proyecto.id)?.area?.name || 'Sin área'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-medium text-green-600">${proyecto.valorVenta.toLocaleString()}</TableCell>
-                    <TableCell className="font-medium">${proyecto.valorContrato.toLocaleString()}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 text-sm">
-                        <span>{proyecto.fechaInicio}</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">Fin: {proyecto.fechaFin}</div>
-                    </TableCell>
-                    <TableCell>{getStatusBadge(proyecto.estado)}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => verDetalleProyecto(proyecto.id)}
-                          disabled={loading}
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          Ver
-                        </Button>
-                        <Button 
-                          size="sm"
-                          onClick={() => abrirEditarProyecto(proyecto.id)}
-                          disabled={loading}
-                        >
-                          <Edit className="h-4 w-4 mr-1" />
-                          Editar
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      {/* DataTable con paginación y búsqueda */}
+      <DataTable
+        title="Listado de Proyectos"
+        columns={proyectoColumns}
+        data={proyectosFormateados}
+        keyExtractor={(proyecto) => proyecto.id}
+        actions={proyectoActions}
+        loading={loadingProyectos}
+        emptyMessage="No se encontraron proyectos. Intenta con otra búsqueda o crea un nuevo proyecto."
+        
+        // Search filter
+        searchFilter={{ placeholder: 'Buscar por nombre, cliente o ID...', debounceMs: 1000 }}
+        searchValue={searchTerm}
+        onSearchChange={handleSearchChange}
+        
+        // Pagination
+        pagination={{
+          page,
+          limit,
+          total,
+          totalPages: pages,
+        }}
+        onPageChange={handlePageChange}
+        onRowsPerPageChange={handleLimitChange}
+        rowsPerPageOptions={[10, 25, 50, 100]}
+      />
 
       {/* Modal Ver Detalle */}
       <Dialog open={verModalOpen} onOpenChange={setVerModalOpen}>

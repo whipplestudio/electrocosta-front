@@ -3,18 +3,13 @@
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrendingUp, TrendingDown, DollarSign, CreditCard, Wallet, AlertCircle, CalendarIcon, X } from "lucide-react"
+import { TrendingUp, TrendingDown, DollarSign, CreditCard, Wallet, AlertCircle, X } from "lucide-react"
 import { format } from "date-fns"
-import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import apiClient from "@/lib/api-client"
 import { toast } from "sonner"
-import { DateRange } from "react-day-picker"
+import { FloatingDatePicker, DateSelection, KpiCard, FloatingSelect, SelectOption } from "@/components/ui"
 
 interface Proyecto {
   id: string
@@ -85,7 +80,7 @@ function DashboardContent() {
   const [dashboardProyecto, setDashboardProyecto] = useState<DashboardProyecto | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [loading, setLoading] = useState(true)
-  const [dateRange, setDateRange] = useState<DateRange | undefined>()
+  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date } | undefined>()
   
   // Datos de cuentas por pagar por proyecto
   const [accountsPayableByProject, setAccountsPayableByProject] = useState<{
@@ -219,7 +214,8 @@ function DashboardContent() {
     }
   }
 
-  const handleDateRangeChange = (range: DateRange | undefined) => {
+  const handleDateRangeChange = (value: DateSelection) => {
+    const range = value as { from?: Date; to?: Date } | undefined
     setDateRange(range)
     const params = new URLSearchParams(searchParams.toString())
 
@@ -295,65 +291,34 @@ function DashboardContent() {
       {dashboardGeneral && (
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Proyectos Activos</CardTitle>
-                <AlertCircle className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{dashboardGeneral.proyectosActivos}</div>
-                <p className="text-xs text-muted-foreground">En progreso y planificación</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Ventas Totales</CardTitle>
-                <DollarSign className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-primary">
-                  {formatCurrency(dashboardGeneral.ventaTotal)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Cobrado: {formatCurrency(dashboardGeneral.totalCobrado)}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Gastos Reales</CardTitle>
-                <CreditCard className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(dashboardGeneral.totalGastoReal)}</div>
-                <p className="text-xs text-muted-foreground">
-                  Presupuesto: {formatCurrency(dashboardGeneral.totalPresupuesto)}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Utilidad Global</CardTitle>
-                {dashboardGeneral.utilidadGlobal >= 0 ? (
-                  <TrendingUp className="h-4 w-4 text-green-600" />
-                ) : (
-                  <TrendingDown className="h-4 w-4 text-red-600" />
-                )}
-              </CardHeader>
-              <CardContent>
-                <div
-                  className={`text-2xl font-bold ${
-                    dashboardGeneral.utilidadGlobal >= 0 ? "text-green-600" : "text-red-600"
-                  }`}
-                >
-                  {formatCurrency(dashboardGeneral.utilidadGlobal)}
-                </div>
-                <p className="text-xs text-muted-foreground">Ventas - Gastos</p>
-              </CardContent>
-            </Card>
+            <KpiCard
+              title="Proyectos Activos"
+              value={dashboardGeneral.proyectosActivos}
+              subtitle="En progreso y planificación"
+              icon={<AlertCircle className="h-4 w-4" />}
+              variant="default"
+            />
+            <KpiCard
+              title="Ventas Totales"
+              value={formatCurrency(dashboardGeneral.ventaTotal)}
+              subtitle={`Cobrado: ${formatCurrency(dashboardGeneral.totalCobrado)}`}
+              icon={<DollarSign className="h-4 w-4" />}
+              variant="success"
+            />
+            <KpiCard
+              title="Gastos Reales"
+              value={formatCurrency(dashboardGeneral.totalGastoReal)}
+              subtitle={`Presupuesto: ${formatCurrency(dashboardGeneral.totalPresupuesto)}`}
+              icon={<CreditCard className="h-4 w-4" />}
+              variant="warning"
+            />
+            <KpiCard
+              title="Utilidad Global"
+              value={formatCurrency(dashboardGeneral.utilidadGlobal)}
+              subtitle="Ventas - Gastos"
+              icon={dashboardGeneral.utilidadGlobal >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+              variant={dashboardGeneral.utilidadGlobal >= 0 ? "success" : "danger"}
+            />
           </div>
 
           <Card>
@@ -364,66 +329,30 @@ function DashboardContent() {
             <CardContent className="space-y-4">
               <div className="flex gap-4 items-end">
                 <div className="flex-1">
-                  <label className="text-sm font-medium mb-2 block">Proyecto</label>
-                  <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un proyecto" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {dashboardGeneral.proyectos.map((proyecto) => (
-                        <SelectItem key={proyecto.id} value={proyecto.id}>
-                          {proyecto.codigo} - {proyecto.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FloatingSelect
+                    label="Proyecto"
+                    value={selectedProjectId}
+                    onChange={(value) => setSelectedProjectId(value as string)}
+                    options={[
+                      { value: '', label: 'Selecciona un proyecto' },
+                      ...dashboardGeneral.proyectos.map((proyecto): SelectOption => ({
+                        value: proyecto.id,
+                        label: `${proyecto.codigo} - ${proyecto.nombre}`,
+                      }))
+                    ]}
+                    placeholder="Selecciona un proyecto"
+                  />
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium mb-2 block">Rango de Fechas</label>
-                  <div className="flex gap-2">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-[280px] justify-start text-left font-normal",
-                            !dateRange && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {dateRange?.from ? (
-                            dateRange.to ? (
-                              <>
-                                {format(dateRange.from, "dd/MM/yyyy", { locale: es })} -{" "}
-                                {format(dateRange.to, "dd/MM/yyyy", { locale: es })}
-                              </>
-                            ) : (
-                              format(dateRange.from, "dd/MM/yyyy", { locale: es })
-                            )
-                          ) : (
-                            <span>Seleccionar rango</span>
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          initialFocus
-                          mode="range"
-                          defaultMonth={dateRange?.from}
-                          selected={dateRange}
-                          onSelect={handleDateRangeChange}
-                          numberOfMonths={2}
-                          locale={es}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    {dateRange && (
-                      <Button variant="ghost" size="icon" onClick={clearDateRange}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
+                  <FloatingDatePicker
+                    label="Rango de Fechas"
+                    value={dateRange}
+                    onChange={handleDateRangeChange}
+                    mode="range"
+                    placeholder="Seleccionar rango de fechas"
+                    containerClassName="min-w-[280px]"
+                  />
                 </div>
               </div>
             </CardContent>
@@ -446,34 +375,20 @@ function DashboardContent() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Proyección Total</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-primary">
-                  {formatCurrency(dashboardProyecto.kpis.proyeccionTotal.total)}
-                </div>
-                <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                  <div>Subtotal: {formatCurrency(dashboardProyecto.kpis.proyeccionTotal.subtotal)}</div>
-                  <div>IVA (6%): {formatCurrency(dashboardProyecto.kpis.proyeccionTotal.iva)}</div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Cobranza</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">
-                  {formatCurrency(dashboardProyecto.kpis.cobranza.facturadoYCobrado)}
-                </div>
-                <div className="mt-2 text-xs text-muted-foreground">
-                  Pendiente: {formatCurrency(dashboardProyecto.kpis.cobranza.saldoEstimadoPendiente)}
-                </div>
-              </CardContent>
-            </Card>
+            <KpiCard
+              title="Proyección Total"
+              value={formatCurrency(dashboardProyecto.kpis.proyeccionTotal.total)}
+              subtitle={`Subtotal: ${formatCurrency(dashboardProyecto.kpis.proyeccionTotal.subtotal)} • IVA: ${formatCurrency(dashboardProyecto.kpis.proyeccionTotal.iva)}`}
+              icon={<DollarSign className="h-4 w-4" />}
+              variant="primary"
+            />
+            <KpiCard
+              title="Cobranza"
+              value={formatCurrency(dashboardProyecto.kpis.cobranza.facturadoYCobrado)}
+              subtitle={`Pendiente: ${formatCurrency(dashboardProyecto.kpis.cobranza.saldoEstimadoPendiente)}`}
+              icon={<Wallet className="h-4 w-4" />}
+              variant="success"
+            />
 
             <Card>
               <CardHeader>
@@ -485,7 +400,7 @@ function DashboardContent() {
                 )}
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold mb-4">
+                <div className="text-2xl font-bold text-amber-600 mb-4">
                   {formatCurrency(dashboardProyecto.kpis.presupuestoGastos.total)}
                 </div>
                 <div className="space-y-4">
@@ -609,40 +524,13 @@ function DashboardContent() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Ejecución Real</CardTitle>
-                {accountsPayableByProject && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Desde Cuentas por Pagar
-                  </p>
-                )}
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-orange-600">
-                  {formatCurrency(dashboardProyecto.kpis.ejecucionReal.pagadoRealErogado)}
-                </div>
-                <div className="mt-2 text-xs text-muted-foreground">
-                  Por Pagar: {formatCurrency(dashboardProyecto.kpis.ejecucionReal.pendientePorPagar)}
-                </div>
-                {accountsPayableByProject && (
-                  <div className="mt-3 pt-3 border-t space-y-1 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">CxP Total:</span>
-                      <span className="font-medium">{formatCurrency(accountsPayableByProject.total)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">CxP Pagado:</span>
-                      <span className="font-medium text-green-600">{formatCurrency(accountsPayableByProject.pagado)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">CxP Pendiente:</span>
-                      <span className="font-medium text-orange-600">{formatCurrency(accountsPayableByProject.pendiente)}</span>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <KpiCard
+              title="Ejecución Real"
+              value={formatCurrency(dashboardProyecto.kpis.ejecucionReal.pagadoRealErogado)}
+              subtitle={`Por Pagar: ${formatCurrency(dashboardProyecto.kpis.ejecucionReal.pendientePorPagar)}${accountsPayableByProject ? ` • CxP: ${formatCurrency(accountsPayableByProject.total)}` : ''}`}
+              icon={<CreditCard className="h-4 w-4" />}
+              variant="danger"
+            />
           </div>
 
           <Card>
@@ -657,22 +545,22 @@ function DashboardContent() {
                     <p className="text-sm font-medium text-muted-foreground mb-1">Rentabilidad Esperada</p>
                     <div
                       className={`text-4xl font-bold ${
-                        dashboardProyecto.kpis.rentabilidad.rentabilidadEsperada >= 0
+                        (dashboardProyecto.kpis.rentabilidad.rentabilidadEsperada ?? 0) >= 0
                           ? "text-green-600"
                           : "text-red-600"
                       }`}
                     >
-                      {formatCurrency(dashboardProyecto.kpis.rentabilidad.rentabilidadEsperada)}
+                      {formatCurrency(dashboardProyecto.kpis.rentabilidad.rentabilidadEsperada ?? 0)}
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Margen Esperado: {formatPercentage(dashboardProyecto.kpis.rentabilidad.margenEsperado)}
+                      Margen Esperado: {formatPercentage(dashboardProyecto.kpis.rentabilidad.margenEsperado ?? 0)}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       (Valor Venta - Presupuesto Total)
                     </p>
                   </div>
                   <div className="text-right">
-                    {dashboardProyecto.kpis.rentabilidad.rentabilidadEsperada >= 0 ? (
+                    {(dashboardProyecto.kpis.rentabilidad.rentabilidadEsperada ?? 0) >= 0 ? (
                       <TrendingUp className="h-12 w-12 text-green-600" />
                     ) : (
                       <TrendingDown className="h-12 w-12 text-red-600" />
@@ -688,15 +576,15 @@ function DashboardContent() {
                       <p className="text-sm font-medium text-muted-foreground mb-1">Flujo actual (Cobrado vs Gastado)</p>
                       <div
                         className={`text-2xl font-semibold ${
-                          dashboardProyecto.kpis.rentabilidad.esFlujoNegativo
+                          (dashboardProyecto.kpis.rentabilidad.esFlujoNegativo ?? false)
                             ? "text-red-600"
                             : "text-green-600"
                         }`}
                       >
-                        {formatCurrency(dashboardProyecto.kpis.rentabilidad.flujoActual)}
+                        {formatCurrency(dashboardProyecto.kpis.rentabilidad.flujoActual ?? 0)}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {dashboardProyecto.kpis.rentabilidad.esFlujoNegativo 
+                        {(dashboardProyecto.kpis.rentabilidad.esFlujoNegativo ?? false)
                           ? "⚠️ Flujo negativo: se ha gastado más de lo cobrado"
                           : "✓ Flujo positivo: se ha cobrado más de lo gastado"
                         }

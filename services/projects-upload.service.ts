@@ -100,6 +100,7 @@ export const projectsUploadService = {
   async obtenerListadoProyectos(filtros?: {
     page?: number
     limit?: number
+    search?: string
   }): Promise<any> {
     const response = await apiClient.get(
       '/carga/proyectos/listado',

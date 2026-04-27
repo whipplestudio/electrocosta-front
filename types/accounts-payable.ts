@@ -39,6 +39,7 @@ export interface Payment {
   paymentMethod: PaymentMethod;
   reference?: string;
   notes?: string;
+  paymentScheduleId?: string;
   createdAt: string;
   createdBy: {
     id: string;
@@ -155,6 +156,16 @@ export interface RegisterPaymentDto {
   gastoId?: string;
   generarGasto?: boolean;
   categoriaGasto?: string;
+  paymentScheduleId?: string;
+}
+
+export interface UpdatePaymentDto {
+  amount?: number;
+  paymentDate?: string;
+  paymentMethod?: PaymentMethod;
+  reference?: string;
+  notes?: string;
+  paymentScheduleId?: string;
 }
 
 export interface CreatePaymentScheduleDto {

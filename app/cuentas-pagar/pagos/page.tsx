@@ -1,15 +1,20 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { ActionButton } from "@/components/ui/action-button"
+import { KpiCard } from "@/components/ui/kpi-card"
+import { DataTable, Column, Action, SelectFilter } from "@/components/ui/data-table"
+import { FloatingInput } from "@/components/ui/floating-input"
+import { FloatingSelect, SelectOption } from "@/components/ui/floating-select"
+import { FloatingDatePicker } from "@/components/ui/floating-date-picker"
 import { Input } from "@/components/ui/input"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Dialog,
   DialogContent,
@@ -18,13 +23,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { CheckCircle, Clock, DollarSign, Search, Calendar as CalendarIcon, Loader2, History, Receipt, CreditCard } from "lucide-react"
+import { CheckCircle, Clock, DollarSign, Search, Calendar as CalendarIcon, Loader2, History, CreditCard, Building2, FileText, CalendarDays, Wallet, Receipt, Banknote, Pencil } from "lucide-react"
 import { accountsPayableService } from "@/services/accounts-payable.service"
 import { paymentSchedulingService, type PaymentSchedule } from "@/services/payment-scheduling.service"
-import type { AccountPayable, RegisterPaymentDto, Payment } from "@/types/accounts-payable"
+import type { AccountPayable, RegisterPaymentDto, UpdatePaymentDto, Payment } from "@/types/accounts-payable"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 
@@ -48,21 +52,35 @@ const formatDateWithoutTimezone = (dateString: string): string => {
 }
 
 export default function AplicacionPagosCuentasPagar() {
-  const [searchTerm, setSearchTerm] = useState("")
+  // Estados para DataTable y paginación backend
+  const [schedules, setSchedules] = useState<Array<PaymentSchedule & { paidAmount?: number; remainingAmount?: number; isFullyPaid?: boolean }>>([])
   const [accounts, setAccounts] = useState<AccountPayable[]>([])
-  const [approvedSchedules, setApprovedSchedules] = useState<Array<PaymentSchedule & { paidAmount?: number; remainingAmount?: number; isFullyPaid?: boolean }>>([])
-  const [paidSchedules, setPaidSchedules] = useState<Array<PaymentSchedule & { paidAmount?: number; remainingAmount?: number; isFullyPaid?: boolean }>>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'pending' | 'paid'>('pending')
+
+  // Paginación server-side
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+
+  // Filtros
+  const [filters, setFilters] = useState({
+    search: "",
+    paymentStatus: "all" as "pending" | "paid" | "all",
+  })
+  const [summary, setSummary] = useState({ totalPending: 0, countPending: 0, totalPaid: 0, countPaid: 0 })
+
+  // Dialogs
   const [showRegisterDialog, setShowRegisterDialog] = useState(false)
   const [showHistoryDialog, setShowHistoryDialog] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<AccountPayable | null>(null)
   const [selectedSchedule, setSelectedSchedule] = useState<PaymentSchedule | null>(null)
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null)
+  const [isEditMode, setIsEditMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [paymentsToday, setPaymentsToday] = useState(0)
-  const [summary, setSummary] = useState({ totalPending: 0, countPending: 0, totalPaid: 0, countPaid: 0 })
 
   // Form state
   const [formData, setFormData] = useState({
@@ -73,73 +91,141 @@ export default function AplicacionPagosCuentasPagar() {
     notes: '',
   })
 
-  // Cargar datos
+  // Cargar datos con paginación backend
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      
-      // 1. Cargar programaciones PENDIENTES de pago (con saldo por pagar)
-      const pendingData = await paymentSchedulingService.getScheduledPaymentsByPaymentStatus('pending', {
-        status: 'completed', // Solo las aprobadas
-        page: 1,
-        limit: 100,
-      })
-      
-      // 2. Cargar programaciones YA PAGADAS
-      const paidData = await paymentSchedulingService.getScheduledPaymentsByPaymentStatus('paid', {
-        status: 'completed',
-        page: 1,
-        limit: 100,
-      })
-      
-      // 3. Extraer todos los accountPayableId únicos
-      const allSchedules = [...pendingData.data, ...paidData.data]
-      const approvedAccountIds = [...new Set(
-        allSchedules.map((s: PaymentSchedule) => s.accountPayableId)
-      )]
-      
-      // 4. Cargar las cuentas relacionadas
-      let accountsWithApprovedSchedules: AccountPayable[] = []
-      if (approvedAccountIds.length > 0) {
+
+      let allData: PaymentSchedule[] = []
+      let combinedSummary = { totalPending: 0, countPending: 0, totalPaid: 0, countPaid: 0 }
+
+      if (filters.paymentStatus === 'all') {
+        // Cargar ambos estados
+        const [pendingResponse, paidResponse] = await Promise.all([
+          paymentSchedulingService.getScheduledPaymentsByPaymentStatus('pending', {
+            status: 'completed',
+            page,
+            limit,
+            ...(filters.search ? { search: filters.search } : {}),
+          }),
+          paymentSchedulingService.getScheduledPaymentsByPaymentStatus('paid', {
+            status: 'completed',
+            page,
+            limit,
+            ...(filters.search ? { search: filters.search } : {}),
+          }),
+        ])
+        allData = [...pendingResponse.data, ...paidResponse.data]
+        combinedSummary = {
+          totalPending: pendingResponse.summary?.totalPending || 0,
+          countPending: pendingResponse.summary?.countPending || 0,
+          totalPaid: paidResponse.summary?.totalPaid || 0,
+          countPaid: paidResponse.summary?.countPaid || 0,
+        }
+      } else {
+        // Cargar solo un estado
+        const response = await paymentSchedulingService.getScheduledPaymentsByPaymentStatus(
+          filters.paymentStatus,
+          {
+            status: 'completed',
+            page,
+            limit,
+            ...(filters.search ? { search: filters.search } : {}),
+          }
+        )
+        allData = response.data
+        if (filters.paymentStatus === 'pending') {
+          combinedSummary.totalPending = response.summary?.totalPending || 0
+          combinedSummary.countPending = response.summary?.countPending || 0
+        } else {
+          combinedSummary.totalPaid = response.summary?.totalPaid || 0
+          combinedSummary.countPaid = response.summary?.countPaid || 0
+        }
+      }
+
+      // Extraer accountPayableIds únicos para cargar las cuentas relacionadas
+      const accountIds = [...new Set(allData.map((s) => s.accountPayableId))]
+
+      let relatedAccounts: AccountPayable[] = []
+      if (accountIds.length > 0) {
         const accountsData = await accountsPayableService.getAll({
           page: 1,
           limit: 100,
           approvalStatus: 'approved',
         })
-        accountsWithApprovedSchedules = accountsData.data.filter(
-          (a: AccountPayable) => approvedAccountIds.includes(a.id)
-        )
+        relatedAccounts = accountsData.data.filter((a) => accountIds.includes(a.id))
       }
-      
-      setApprovedSchedules(pendingData.data)
-      setPaidSchedules(paidData.data)
-      setAccounts(accountsWithApprovedSchedules)
-      setSummary({
-        totalPending: pendingData.summary?.totalPending || 0,
-        countPending: pendingData.summary?.countPending || 0,
-        totalPaid: paidData.summary?.totalPaid || 0,
-        countPaid: paidData.summary?.countPaid || 0,
-      })
-      
-      // Cargar pagos de hoy (opcional, no bloquea la carga)
+
+      // Calcular balances para cada programación
+      const paymentsData: Record<string, Payment[]> = {}
+      for (const account of relatedAccounts) {
+        try {
+          const payments = await accountsPayableService.getPayments(account.id)
+          paymentsData[account.id] = payments
+        } catch {
+          paymentsData[account.id] = []
+        }
+      }
+
+      const schedulesWithBalances = calculateScheduleBalances(allData, paymentsData)
+
+      setSchedules(schedulesWithBalances)
+      setAccounts(relatedAccounts)
+      // Para 'all', usamos un total aproximado (la paginación real requeriría un endpoint diferente)
+      const totalCount = combinedSummary.countPending + combinedSummary.countPaid
+      setTotal(totalCount)
+      setTotalPages(Math.max(1, Math.ceil(totalCount / limit)))
+
+      // Actualizar summary
+      setSummary(combinedSummary)
+
+      // Cargar pagos de hoy (opcional)
       try {
         const todayPaymentsData = await accountsPayableService.getPaymentsToday()
         setPaymentsToday(todayPaymentsData.count)
-      } catch (error) {
-        console.warn('No se pudieron cargar los pagos de hoy:', error)
+      } catch {
         setPaymentsToday(0)
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
-      toast.error('Error al cargar las cuentas por pagar')
+      toast.error('Error al cargar las programaciones de pago')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [page, limit, filters.paymentStatus, filters.search])
 
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  // Callbacks para DataTable
+  const handleSearchChange = useCallback((value: string) => {
+    setFilters((prev) => ({ ...prev, search: value }))
+    setPage(1)
+  }, [])
+
+  const handleFilterChange = useCallback((key: string, value: string | string[]) => {
+    if (key === 'paymentStatus') {
+      // Si el valor está vacío (usuario limpió el filtro), usar 'all' por defecto
+      const statusValue = (value as string) || 'all'
+      setFilters((prev) => ({ ...prev, paymentStatus: statusValue as 'pending' | 'paid' | 'all' }))
+    }
+    setPage(1)
+  }, [])
+
+  const handleClearFilters = useCallback(() => {
+    setFilters({ search: '', paymentStatus: 'all' })
+    setPage(1)
+  }, [])
+
+  const handlePageChange = useCallback((newPage: number) => {
+    setPage(newPage)
+  }, [])
+
+  const handleRowsPerPageChange = useCallback((newLimit: number) => {
+    setLimit(newLimit)
+    setPage(1)
+  }, [])
 
   // Formatear número con separadores de miles (permite punto decimal mientras se escribe)
   const formatNumber = (value: string): string => {
@@ -170,9 +256,9 @@ export default function AplicacionPagosCuentasPagar() {
     setFormData((prev) => ({ ...prev, amount: unformatted }))
   }
 
-  // Registrar pago
+  // Registrar o actualizar pago
   const handleRegisterPayment = async () => {
-    console.log('handleRegisterPayment iniciado')
+    console.log(isEditMode ? 'handleEditPayment iniciado' : 'handleRegisterPayment iniciado')
     
     if (!selectedAccount) {
       console.log('No hay cuenta seleccionada')
@@ -187,7 +273,8 @@ export default function AplicacionPagosCuentasPagar() {
       return
     }
 
-    if (amountValue > Number(selectedAccount.balance)) {
+    // En modo edición, no validamos contra el balance porque el pago ya existe
+    if (!isEditMode && amountValue > Number(selectedAccount.balance)) {
       toast.error('El monto no puede ser mayor al saldo pendiente')
       return
     }
@@ -199,37 +286,83 @@ export default function AplicacionPagosCuentasPagar() {
 
     try {
       setSubmitting(true)
-      console.log('Iniciando proceso de registro...')
       
-      // Registrar el pago
-      console.log('Registrando pago...')
-      const paymentData: RegisterPaymentDto = {
-        amount: parseFloat(formData.amount),
-        paymentMethod: formData.paymentMethod,
-        paymentDate: format(formData.paymentDate, 'yyyy-MM-dd'),
-        reference: formData.reference,
-        notes: formData.notes || undefined,
-      }
+      if (isEditMode && selectedPayment) {
+        // Actualizar pago existente
+        console.log('Actualizando pago...')
+        const paymentData: UpdatePaymentDto = {
+          amount: parseFloat(formData.amount),
+          paymentMethod: formData.paymentMethod,
+          paymentDate: format(formData.paymentDate, 'yyyy-MM-dd'),
+          reference: formData.reference,
+          notes: formData.notes || undefined,
+          paymentScheduleId: selectedSchedule?.id,
+        }
 
-      console.log('Payment data:', paymentData)
-      await accountsPayableService.registerPayment(selectedAccount.id, paymentData)
+        await accountsPayableService.updatePayment(selectedAccount.id, selectedPayment.id, paymentData)
+        
+        toast.success('Pago actualizado exitosamente')
+      } else {
+        // Registrar nuevo pago
+        console.log('Registrando pago...')
+        const paymentData: RegisterPaymentDto = {
+          amount: parseFloat(formData.amount),
+          paymentMethod: formData.paymentMethod,
+          paymentDate: format(formData.paymentDate, 'yyyy-MM-dd'),
+          reference: formData.reference,
+          notes: formData.notes || undefined,
+          paymentScheduleId: selectedSchedule?.id, // Asociar con la programación seleccionada
+        }
+
+        await accountsPayableService.registerPayment(selectedAccount.id, paymentData)
+        
+        toast.success('Pago registrado exitosamente')
+      }
       
-      console.log('Pago registrado exitosamente')
-      toast.success('Pago registrado exitosamente')
       setShowRegisterDialog(false)
+      
+      // Si veníamos del historial de pagos, cerrarlo también
+      if (isEditMode && showHistoryDialog) {
+        setShowHistoryDialog(false)
+      }
+      
       resetForm()
       loadData()
     } catch (error: any) {
-      console.error('Error al registrar pago:', error)
-      toast.error(error?.response?.data?.message || error.message || 'Error al registrar el pago')
+      console.error(isEditMode ? 'Error al actualizar pago:' : 'Error al registrar pago:', error)
+      toast.error(error?.response?.data?.message || error.message || (isEditMode ? 'Error al actualizar el pago' : 'Error al registrar el pago'))
     } finally {
       setSubmitting(false)
     }
   }
 
-  // Ver historial de pagos
+  // Abrir diálogo de edición de pago
+  const handleEditPayment = (payment: Payment) => {
+    setIsEditMode(true)
+    setSelectedPayment(payment)
+    
+    // Encontrar la programación asociada si existe
+    const schedule = schedules.find(s => s.id === payment.paymentScheduleId)
+    if (schedule) {
+      setSelectedSchedule(schedule)
+    }
+    
+    // Pre-llenar el formulario con los datos del pago
+    setFormData({
+      amount: String(payment.amount),
+      paymentMethod: payment.paymentMethod,
+      paymentDate: new Date(payment.paymentDate),
+      reference: payment.reference || '',
+      notes: payment.notes || '',
+    })
+    
+    setShowRegisterDialog(true)
+  }
+
+  // Ver historial de pagos de toda la cuenta
   const handleViewHistory = async (account: AccountPayable) => {
     setSelectedAccount(account)
+    setSelectedSchedule(null) // No hay programación específica seleccionada
     setLoadingHistory(true)
     setShowHistoryDialog(true)
 
@@ -239,6 +372,28 @@ export default function AplicacionPagosCuentasPagar() {
     } catch (error) {
       console.error('Error al cargar historial:', error)
       toast.error('Error al cargar el historial de pagos')
+      setPayments([])
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
+
+  // Ver historial de pagos de una programación específica
+  const handleViewScheduleHistory = async (schedule: PaymentSchedule & { paidAmount?: number; remainingAmount?: number; isFullyPaid?: boolean }) => {
+    if (!schedule.accountPayable) return
+
+    setSelectedAccount(schedule.accountPayable as AccountPayable)
+    setSelectedSchedule(schedule)
+    setLoadingHistory(true)
+    setShowHistoryDialog(true)
+
+    try {
+      // Obtener pagos específicos de esta programación
+      const paymentsData = await paymentSchedulingService.getSchedulePayments(schedule.id)
+      setPayments(paymentsData)
+    } catch (error) {
+      console.error('Error al cargar historial de programación:', error)
+      toast.error('Error al cargar el historial de pagos de la programación')
       setPayments([])
     } finally {
       setLoadingHistory(false)
@@ -327,6 +482,8 @@ export default function AplicacionPagosCuentasPagar() {
   }
 
   const openRegisterDialog = (schedule: PaymentSchedule & { remainingAmount?: number }) => {
+    setIsEditMode(false)
+    setSelectedPayment(null)
     setSelectedSchedule(schedule)
     // Buscar la cuenta relacionada
     const account = accounts.find(a => a.id === schedule.accountPayableId)
@@ -343,19 +500,176 @@ export default function AplicacionPagosCuentasPagar() {
     setShowRegisterDialog(true)
   }
 
-  const currentSchedules = activeTab === 'pending' ? approvedSchedules : paidSchedules
-  
-  const filteredSchedules = currentSchedules.filter(schedule => {
-    const account = accounts.find(a => a.id === schedule.accountPayableId)
-    const supplierName = account?.supplier?.name || (account as any)?.supplierName || '';
-    const invoiceNumber = account?.invoiceNumber || '';
-    const reference = schedule.reference || '';
-    return (
-      supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reference.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  })
+  // Configuración de columnas para DataTable
+  const columns = useMemo<Column<PaymentSchedule & { paidAmount?: number; remainingAmount?: number }>[]>(() => [
+    {
+      key: 'supplier',
+      header: 'Proveedor',
+      render: (row: PaymentSchedule & { paidAmount?: number; remainingAmount?: number }) => {
+        const account = accounts.find((a) => a.id === row.accountPayableId)
+        return (
+          <span className="font-medium">
+            {account?.supplier?.name || (account as any)?.supplierName || 'N/A'}
+          </span>
+        )
+      },
+    },
+    {
+      key: 'amount',
+      header: 'Monto Programado',
+      align: 'right',
+      render: (row: PaymentSchedule & { paidAmount?: number; remainingAmount?: number }) => `$${Number(row.amount).toLocaleString()}`,
+    },
+    {
+      key: 'col-paid',
+      header: 'Pagado',
+      align: 'center',
+      render: (row: PaymentSchedule & { paidAmount?: number; remainingAmount?: number }) => {
+        const isPaidTab = filters.paymentStatus === 'paid' || (row.paidAmount || 0) >= Number(row.amount)
+        const progressPercent = Number(row.amount) > 0 ? ((row.paidAmount || 0) / Number(row.amount)) * 100 : 0
+        return (
+          <div className="flex flex-col items-center gap-1">
+            <span className={isPaidTab ? 'text-green-600 font-bold' : 'text-green-600'}>
+              ${(row.paidAmount || 0).toLocaleString()}
+            </span>
+            <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full ${isPaidTab ? 'bg-green-600' : 'bg-green-500'}`}
+                style={{ width: `${Math.min(progressPercent, 100)}%` }}
+              />
+            </div>
+            <span className="text-xs text-gray-500">{Math.round(progressPercent)}%</span>
+          </div>
+        )
+      },
+    },
+    {
+      key: 'remainingAmount',
+      header: 'Faltante',
+      align: 'right',
+      render: (row: PaymentSchedule & { paidAmount?: number; remainingAmount?: number }) => {
+        const isPaidTab = filters.paymentStatus === 'paid'
+        return (
+          <div className={`font-bold ${isPaidTab ? 'text-green-600' : 'text-red-600'}`}>
+            ${(row.remainingAmount || 0).toLocaleString()}
+            {isPaidTab && <span className="text-xs block font-normal">(Completado)</span>}
+          </div>
+        )
+      },
+    },
+    {
+      key: 'scheduledDate',
+      header: 'Fecha Programada',
+      render: (row: PaymentSchedule & { paidAmount?: number; remainingAmount?: number }) => formatDateWithoutTimezone(row.scheduledDate),
+    },
+    {
+      key: 'paymentMethod',
+      header: 'Método',
+      render: (row: PaymentSchedule & { paidAmount?: number; remainingAmount?: number }) => (
+        <Badge variant="outline">
+          {paymentMethodLabels[row.paymentMethod || 'transfer'] || row.paymentMethod}
+        </Badge>
+      ),
+    },
+  ], [accounts, filters.paymentStatus])
+
+  // Configuración de acciones para DataTable
+  const actions = useMemo<Action<PaymentSchedule & { paidAmount?: number; remainingAmount?: number }>[]>(() => [
+    {
+      label: 'Ver historial',
+      icon: <History className="h-4 w-4" />,
+      onClick: (row: PaymentSchedule & { paidAmount?: number; remainingAmount?: number }) => {
+        // Ver historial de pagos específicos de esta programación
+        handleViewScheduleHistory(row)
+      },
+    },
+    {
+      label: 'Registrar pago',
+      icon: <CreditCard className="h-4 w-4" />,
+      onClick: (row: PaymentSchedule & { paidAmount?: number; remainingAmount?: number }) => openRegisterDialog(row),
+      hidden: (row) => filters.paymentStatus === 'paid' || (row.remainingAmount || 0) === 0,
+    },
+  ], [accounts, filters.paymentStatus, handleViewScheduleHistory])
+
+  // Columnas para el DataTable de historial de pagos (con acción de editar)
+  const historyColumns = useMemo<Column<Payment>[]>(() => [
+    {
+      key: 'paymentDate',
+      header: 'Fecha',
+      render: (row: Payment) => formatDateWithoutTimezone(row.paymentDate),
+    },
+    {
+      key: 'amount',
+      header: 'Monto',
+      align: 'right',
+      render: (row: Payment) => (
+        <span className="font-bold text-green-600">
+          ${Number(row.amount).toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      key: 'paymentMethod',
+      header: 'Método',
+      render: (row: Payment) => paymentMethodLabels[row.paymentMethod] || row.paymentMethod,
+    },
+    {
+      key: 'reference',
+      header: 'Referencia',
+      render: (row: Payment) => (
+        <span className="font-mono text-sm">{row.reference}</span>
+      ),
+    },
+    {
+      key: 'createdBy',
+      header: 'Registrado por',
+      render: (row: Payment) => `${row.createdBy.firstName} ${row.createdBy.lastName}`,
+    },
+    {
+      key: 'actions',
+      header: 'Acciones',
+      align: 'center',
+      render: (row: Payment) => (
+        <button
+          onClick={() => handleEditPayment(row)}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          title="Editar pago"
+        >
+          <Pencil className="h-4 w-4 text-blue-600" />
+        </button>
+      ),
+    },
+  ], [])
+
+  // Configuración de filtros de selección
+  const selectFilters = useMemo<SelectFilter[]>(() => [
+    {
+      key: 'paymentStatus',
+      label: 'Estado de Pago',
+      options: [
+        { value: 'all', label: `Todos` },
+        { value: 'pending', label: `Por Pagar` },
+        { value: 'paid', label: `Ya Pagadas` },
+      ],
+    },
+  ], [summary.countPending, summary.countPaid])
+
+  // Configuración de paginación
+  const pagination = useMemo(() => ({
+    page,
+    limit,
+    total,
+    totalPages,
+  }), [page, limit, total, totalPages])
+
+  const searchFilterConfig = useMemo(() => ({
+    placeholder: 'Buscar por proveedor...',
+    debounceMs: 400,
+  }), [])
+
+  const filterValues = useMemo(() => ({
+    paymentStatus: filters.paymentStatus,
+  }), [filters.paymentStatus])
 
   const getStatusBadge = (status: string) => {
     const config: Record<string, { label: string; className: string }> = {
@@ -380,334 +694,179 @@ export default function AplicacionPagosCuentasPagar() {
 
       {/* Estadísticas */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Por Pagar</CardTitle>
-            <DollarSign className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ${summary.totalPending.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {summary.countPending} programaci{summary.countPending !== 1 ? 'ones' : 'ón'}
-            </p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Por Pagar"
+          value={`$${summary.totalPending.toLocaleString()}`}
+          subtitle={`${summary.countPending} programaci${summary.countPending !== 1 ? 'ones' : 'ón'}`}
+          icon={<DollarSign className="h-4 w-4" />}
+          variant="danger"
+          loading={loading}
+        />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ya Pagado</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ${summary.totalPaid.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {summary.countPaid} programaci{summary.countPaid !== 1 ? 'ones' : 'ón'}
-            </p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Ya Pagado"
+          value={`$${summary.totalPaid.toLocaleString()}`}
+          subtitle={`${summary.countPaid} programaci${summary.countPaid !== 1 ? 'ones' : 'ón'}`}
+          icon={<CheckCircle className="h-4 w-4" />}
+          variant="success"
+          loading={loading}
+        />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Vencidas</CardTitle>
-            <Clock className="h-4 w-4 text-orange-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {approvedSchedules.filter(s => new Date(s.scheduledDate) < new Date()).length}
-            </div>
-            <p className="text-xs text-muted-foreground">Con fecha vencida</p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Vencidas"
+          value={schedules.filter((s: PaymentSchedule) => new Date(s.scheduledDate) < new Date()).length}
+          subtitle="Con fecha vencida"
+          icon={<Clock className="h-4 w-4" />}
+          variant="warning"
+          loading={loading}
+        />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pagos Hoy</CardTitle>
-            <CreditCard className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{paymentsToday}</div>
-            <p className="text-xs text-muted-foreground">Registrados hoy</p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Pagos Hoy"
+          value={paymentsToday}
+          subtitle="Registrados hoy"
+          icon={<CreditCard className="h-4 w-4" />}
+          variant="info"
+          loading={loading}
+        />
       </div>
 
-      {/* Tabs y Tabla */}
-      <Card>
-        <CardHeader className="pb-0">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Pagos Programados</CardTitle>
-              <CardDescription>Programaciones de pago aprobadas</CardDescription>
-            </div>
-          </div>
-          
-          {/* Tabs */}
-          <div className="flex gap-2 mt-4 border-b">
-            <button
-              onClick={() => setActiveTab('pending')}
-              className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
-                activeTab === 'pending' 
-                  ? 'border-blue-600 text-blue-600' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Por Pagar ({summary.countPending})
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab('paid')}
-              className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
-                activeTab === 'paid' 
-                  ? 'border-green-600 text-green-600' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4" />
-                Ya Pagadas ({summary.countPaid})
-              </span>
-            </button>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-4">
-          <div className="mb-4">
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por proveedor, factura o referencia..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Proveedor</TableHead>
-                  <TableHead>Monto Programado</TableHead>
-                  <TableHead>Pagado</TableHead>
-                  <TableHead className="text-right">Faltante</TableHead>
-                  <TableHead>Fecha Programada</TableHead>
-                  <TableHead>Método</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                    </TableCell>
-                  </TableRow>
-                ) : filteredSchedules.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      {searchTerm ? 'No se encontraron programaciones' : activeTab === 'pending' ? 'No hay pagos programados pendientes' : 'No hay pagos programados completados'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredSchedules.map((schedule: any) => {
-                    const account = accounts.find(a => a.id === schedule.accountPayableId);
-                    const progressPercent = Number(schedule.amount) > 0 
-                      ? (schedule.paidAmount / Number(schedule.amount)) * 100 
-                      : 0;
-                    const isPaidTab = activeTab === 'paid';
-                    return (
-                      <TableRow key={schedule.id}>
-                        <TableCell className="font-medium">
-                          {account?.supplier?.name || (account as any)?.supplierName || 'N/A'}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          ${Number(schedule.amount).toLocaleString()}
-                        </TableCell>
-                        <TableCell className={`${isPaidTab ? 'text-green-600 font-bold' : 'text-green-600'}`}>
-                          ${schedule.paidAmount.toLocaleString()}
-                          <div className="w-16 h-1 bg-gray-200 rounded-full mt-1">
-                            <div 
-                              className={`h-1 rounded-full ${isPaidTab ? 'bg-green-600' : 'bg-green-500'}`}
-                              style={{ width: `${progressPercent}%` }}
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell className={`text-right font-bold ${isPaidTab ? 'text-green-600' : 'text-red-600'}`}>
-                          ${schedule.remainingAmount.toLocaleString()}
-                          {isPaidTab && <span className="text-xs block font-normal">(Completado)</span>}
-                        </TableCell>
-                        <TableCell>
-                          {formatDateWithoutTimezone(schedule.scheduledDate)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {paymentMethodLabels[schedule.paymentMethod || 'transfer'] || schedule.paymentMethod}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => account && handleViewHistory(account)}
-                            >
-                              <History className="h-4 w-4 mr-1" />
-                              Historial
-                            </Button>
-                            {!isPaidTab && (
-                              <Button
-                                size="sm"
-                                onClick={() => openRegisterDialog(schedule)}
-                              >
-                                <CreditCard className="h-4 w-4 mr-1" />
-                                Registrar Pago
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      {/* DataTable con paginación y filtros */}
+      <DataTable
+        title="Pagos Programados"
+        columns={columns}
+        data={schedules}
+        keyExtractor={(row) => row.id}
+        actions={actions}
+        loading={loading}
+        emptyMessage={filters.search ? 'No se encontraron programaciones' : filters.paymentStatus === 'pending' ? 'No hay pagos programados pendientes' : 'No hay pagos programados completados'}
+        // Filtros de búsqueda
+        searchFilter={searchFilterConfig}
+        searchValue={filters.search}
+        onSearchChange={handleSearchChange}
+        // Filtros de selección
+        selectFilters={selectFilters}
+        filterValues={filterValues}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
+        // Paginación server-side
+        pagination={pagination}
+        onPageChange={handlePageChange}
+        onRowsPerPageChange={handleRowsPerPageChange}
+        rowsPerPageOptions={[10, 25, 50]}
+      />
 
       {/* Dialog: Registrar Pago */}
       <Dialog open={showRegisterDialog} onOpenChange={setShowRegisterDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Registrar Pago</DialogTitle>
+            <DialogTitle>{isEditMode ? 'Editar Pago' : 'Registrar Pago'}</DialogTitle>
             <DialogDescription>
-              Registra un pago realizado al proveedor
+              {isEditMode ? 'Modifica los datos del pago registrado' : 'Registra un pago realizado al proveedor'}
             </DialogDescription>
           </DialogHeader>
 
           {selectedSchedule && (
-            <div className="space-y-4 py-4">
-              {/* Info de la programación y cuenta */}
-              <div className="rounded-lg bg-muted p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Proveedor:</span>
-                  <span className="font-medium">{selectedAccount?.supplier?.name || (selectedAccount as any)?.supplierName || 'N/A'}</span>
+            <div className="space-y-5 py-4">
+              {/* Info de la programación - Diseño mejorado con cards */}
+              <div className="rounded-xl border bg-gradient-to-br from-gray-50 to-white p-4 space-y-3 shadow-sm">
+                <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+                  <div className="p-2 bg-cyan-100 rounded-lg">
+                    <Building2 className="h-4 w-4 text-cyan-700" />
+                  </div>
+                  <div className="flex-1">
+                    <span className="text-xs text-gray-500 uppercase tracking-wide">Proveedor</span>
+                    <p className="font-semibold text-gray-900">{selectedAccount?.supplier?.name || (selectedAccount as any)?.supplierName || 'N/A'}</p>
+                  </div>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Factura:</span>
-                  <span className="font-medium">{selectedAccount?.invoiceNumber || 'N/A'}</span>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-gray-400" />
+                    <div>
+                      <span className="text-xs text-gray-500 block">Factura</span>
+                      <span className="font-medium text-sm">{selectedAccount?.invoiceNumber || 'N/A'}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="h-4 w-4 text-gray-400" />
+                    <div>
+                      <span className="text-xs text-gray-500 block">Fecha Programada</span>
+                      <span className="font-medium text-sm">{formatDateWithoutTimezone(selectedSchedule.scheduledDate)}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Monto Programado:</span>
-                  <span className="font-medium">
-                    ${Number(selectedSchedule.amount).toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Ya Pagado:</span>
-                  <span className="text-green-600">
-                    ${(selectedSchedule as any).paidAmount?.toLocaleString() || '0'}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm border-t border-gray-300 pt-2 mt-2">
-                  <span className="text-muted-foreground font-semibold">Faltante por Pagar:</span>
-                  <span className="font-bold text-red-600 text-base">
-                    ${(selectedSchedule as any).remainingAmount?.toLocaleString() || Number(selectedSchedule.amount).toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Fecha Programada:</span>
-                  <span className="font-medium">
-                    {formatDateWithoutTimezone(selectedSchedule.scheduledDate)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Método:</span>
-                  <span className="font-medium">
-                    {paymentMethodLabels[selectedSchedule.paymentMethod || 'transfer']}
-                  </span>
+
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+                  <div className="text-center p-2 bg-blue-50 rounded-lg">
+                    <span className="text-xs text-gray-500 block mb-1">Programado</span>
+                    <span className="font-bold text-blue-700">${Number(selectedSchedule.amount).toLocaleString()}</span>
+                  </div>
+                  <div className="text-center p-2 bg-green-50 rounded-lg">
+                    <span className="text-xs text-gray-500 block mb-1">Pagado</span>
+                    <span className="font-bold text-green-700">${(selectedSchedule as any).paidAmount?.toLocaleString() || '0'}</span>
+                  </div>
+                  <div className="text-center p-2 bg-red-50 rounded-lg">
+                    <span className="text-xs text-gray-500 block mb-1">Faltante</span>
+                    <span className="font-bold text-red-700">${(selectedSchedule as any).remainingAmount?.toLocaleString() || Number(selectedSchedule.amount).toLocaleString()}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Formulario */}
+              {/* Formulario con componentes reutilizables */}
               <div className="space-y-4">
-                <div>
-                  <Label htmlFor="amount">Monto del Pago *</Label>
-                  <Input
-                    id="amount"
-                    type="text"
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FloatingInput
+                    label="Monto del Pago *"
                     value={formatNumber(String(formData.amount || ''))}
                     onChange={(e) => handleAmountChange(e.target.value)}
                     placeholder="0"
+                    startAdornment={<DollarSign className="h-4 w-4 text-gray-400" />}
                   />
-                </div>
 
-                <div>
-                  <Label htmlFor="paymentMethod">Método de Pago *</Label>
-                  <Select
+                  <FloatingSelect
+                    label="Método de Pago *"
                     value={formData.paymentMethod}
-                    onValueChange={(value) => setFormData({ ...formData, paymentMethod: value as any })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="transfer">Transferencia</SelectItem>
-                      <SelectItem value="check">Cheque</SelectItem>
-                      <SelectItem value="cash">Efectivo</SelectItem>
-                      <SelectItem value="card">Tarjeta</SelectItem>
-                      <SelectItem value="other">Otro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Fecha de Pago *</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        className={`w-full justify-start text-left font-normal ${!formData.paymentDate ? 'text-muted-foreground' : ''}`}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formData.paymentDate ? format(formData.paymentDate, "dd/MM/yyyy", { locale: es }) : "Seleccionar fecha"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar 
-                        mode="single"
-                        selected={formData.paymentDate}
-                        onSelect={(date) => setFormData({...formData, paymentDate: date || new Date()})}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                <div>
-                  <Label htmlFor="reference">Referencia / Número de Transacción *</Label>
-                  <Input
-                    id="reference"
-                    value={formData.reference}
-                    onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
-                    placeholder="Ej: TRANSF-001, CHEQUE-123"
+                    onChange={(value) => setFormData({ ...formData, paymentMethod: value as any })}
+                    options={[
+                      { value: 'transfer', label: 'Transferencia' },
+                      { value: 'check', label: 'Cheque' },
+                      { value: 'cash', label: 'Efectivo' },
+                      { value: 'card', label: 'Tarjeta' },
+                      { value: 'other', label: 'Otro' },
+                    ]}
+                    placeholder="Selecciona un método"
                   />
                 </div>
 
+                <FloatingDatePicker
+                  label="Fecha de Pago *"
+                  value={formData.paymentDate}
+                  onChange={(date) => {
+                    const selectedDate = date instanceof Date ? date : new Date()
+                    setFormData({ ...formData, paymentDate: selectedDate })
+                  }}
+                  mode="single"
+                  placeholder="Selecciona una fecha"
+                />
+
+                <FloatingInput
+                  label="Referencia / Número de Transacción *"
+                  value={formData.reference}
+                  onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+                  placeholder="Ej: TRANSF-001, CHEQUE-123"
+                  startAdornment={<Receipt className="h-4 w-4 text-gray-400" />}
+                />
+
                 <div>
-                  <Label htmlFor="notes">Notas (Opcional)</Label>
+                  <Label htmlFor="notes" className="text-sm font-medium text-gray-700 mb-1 block">Notas (Opcional)</Label>
                   <Textarea
                     id="notes"
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                     placeholder="Observaciones adicionales..."
                     rows={3}
+                    className="rounded-xl border-gray-200 focus:border-cyan-500 focus:ring-cyan-500"
                   />
                 </div>
               </div>
@@ -716,13 +875,12 @@ export default function AplicacionPagosCuentasPagar() {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRegisterDialog(false)} disabled={submitting}>
+            <ActionButton variant="cancel" onClick={() => setShowRegisterDialog(false)} disabled={submitting}>
               Cancelar
-            </Button>
-            <Button onClick={handleRegisterPayment} disabled={submitting}>
-              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            </ActionButton>
+            <ActionButton variant="primary" onClick={handleRegisterPayment} loading={submitting}>
               Registrar Pago
-            </Button>
+            </ActionButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -731,81 +889,96 @@ export default function AplicacionPagosCuentasPagar() {
       <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Historial de Pagos</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-cyan-600" />
+              {selectedSchedule ? 'Historial de Pagos - Programación' : 'Historial de Pagos'}
+            </DialogTitle>
             <DialogDescription>
-              Pagos registrados para esta cuenta por pagar
+              {selectedSchedule 
+                ? `Pagos registrados para la programación del ${formatDateWithoutTimezone(selectedSchedule.scheduledDate)}` 
+                : 'Pagos registrados para esta cuenta por pagar'}
             </DialogDescription>
           </DialogHeader>
 
           {selectedAccount && (
-            <div className="space-y-4">
-              {/* Info de la cuenta */}
-              <div className="rounded-lg bg-muted p-4 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Proveedor:</span>
-                  <span className="font-medium">{selectedAccount.supplier?.name || (selectedAccount as any).supplierName || 'N/A'}</span>
+            <div className="space-y-5">
+              {/* Info de la cuenta - Diseño mejorado */}
+              <div className="rounded-xl border bg-gradient-to-br from-gray-50 to-white p-4 space-y-3 shadow-sm">
+                <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+                  <div className="p-2 bg-cyan-100 rounded-lg">
+                    <Building2 className="h-4 w-4 text-cyan-700" />
+                  </div>
+                  <div className="flex-1">
+                    <span className="text-xs text-gray-500 uppercase tracking-wide">Proveedor</span>
+                    <p className="font-semibold text-gray-900">{selectedAccount.supplier?.name || (selectedAccount as any).supplierName || 'N/A'}</p>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Factura:</span>
-                  <span className="font-medium">{selectedAccount.invoiceNumber}</span>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-gray-400" />
+                    <div>
+                      <span className="text-xs text-gray-500 block">Factura</span>
+                      <span className="font-medium text-sm">{selectedAccount.invoiceNumber || 'N/A'}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-gray-400" />
+                    <div>
+                      <span className="text-xs text-gray-500 block">Monto Total</span>
+                      <span className="font-medium text-sm">${Number(selectedAccount.amount).toLocaleString()}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Monto Total:</span>
-                  <span className="font-medium">${Number(selectedAccount.amount).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Pagado:</span>
-                  <span className="font-medium text-green-600">
-                    ${Number(selectedAccount.paidAmount).toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Saldo:</span>
-                  <span className="font-bold text-red-600">
-                    ${Number(selectedAccount.balance).toLocaleString()}
-                  </span>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+                  <div className="text-center p-2 bg-green-50 rounded-lg">
+                    <span className="text-xs text-gray-500 block mb-1">Pagado</span>
+                    <span className="font-bold text-green-700">${Number(selectedAccount.paidAmount || 0).toLocaleString()}</span>
+                  </div>
+                  <div className="text-center p-2 bg-red-50 rounded-lg">
+                    <span className="text-xs text-gray-500 block mb-1">Saldo</span>
+                    <span className="font-bold text-red-700">${Number(selectedAccount.balance || 0).toLocaleString()}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Lista de pagos */}
-              {loadingHistory ? (
-                <div className="text-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+              {/* Info de la programación si está seleccionada */}
+              {selectedSchedule && (
+                <div className="rounded-xl border bg-gradient-to-br from-blue-50 to-white p-4 shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <CalendarDays className="h-4 w-4 text-blue-600" />
+                    <span className="font-medium text-blue-900">Información de la Programación</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-sm">
+                    <div className="text-center p-2 bg-white rounded-lg">
+                      <span className="text-xs text-gray-500 block">Monto Programado</span>
+                      <span className="font-bold text-blue-700">${Number(selectedSchedule.amount).toLocaleString()}</span>
+                    </div>
+                    <div className="text-center p-2 bg-white rounded-lg">
+                      <span className="text-xs text-gray-500 block">Pagado</span>
+                      <span className="font-bold text-green-700">${((selectedSchedule as any).paidAmount || 0).toLocaleString()}</span>
+                    </div>
+                    <div className="text-center p-2 bg-white rounded-lg">
+                      <span className="text-xs text-gray-500 block">Restante</span>
+                      <span className="font-bold text-red-700">${((selectedSchedule as any).remainingAmount || Number(selectedSchedule.amount)).toLocaleString()}</span>
+                    </div>
+                  </div>
                 </div>
-              ) : payments.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No hay pagos registrados
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Monto</TableHead>
-                      <TableHead>Método</TableHead>
-                      <TableHead>Referencia</TableHead>
-                      <TableHead>Registrado por</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payments.map((payment) => (
-                      <TableRow key={payment.id}>
-                        <TableCell>
-                          {formatDateWithoutTimezone(payment.paymentDate)}
-                        </TableCell>
-                        <TableCell className="font-bold text-green-600">
-                          ${Number(payment.amount).toLocaleString()}
-                        </TableCell>
-                        <TableCell>{paymentMethodLabels[payment.paymentMethod]}</TableCell>
-                        <TableCell className="font-mono text-sm">{payment.reference}</TableCell>
-                        <TableCell>
-                          {payment.createdBy.firstName} {payment.createdBy.lastName}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
               )}
+
+              {/* DataTable de pagos */}
+              <DataTable
+                title="Pagos Registrados"
+                columns={historyColumns}
+                data={payments}
+                keyExtractor={(row) => row.id}
+                loading={loadingHistory}
+                emptyMessage={selectedSchedule ? "No hay pagos registrados para esta programación" : "No hay pagos registrados para esta cuenta"}
+                showFilters={false}
+                showHeader={false}
+                stickyHeader={false}
+              />
             </div>
           )}
         </DialogContent>

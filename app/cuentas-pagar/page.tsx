@@ -1,18 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, Edit, Trash2, CalendarIcon, TrendingDown, AlertCircle, Clock, CheckCircle, XCircle, Loader2, Upload, FileDown, History, Receipt, CreditCard } from "lucide-react"
+import { Plus, Edit, Trash2, AlertCircle, Clock, CheckCircle, XCircle, Loader2, Upload, FileDown, History, Receipt, CreditCard, DollarSign, Filter } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { toast } from "sonner"
@@ -21,6 +15,14 @@ import { paymentSchedulingService } from "@/services/payment-scheduling.service"
 import { accountsPayableUploadService } from "@/services/accounts-payable-upload.service"
 import type { UploadResponse, ValidacionResultado, ImportacionResultado } from "@/services/accounts-payable-upload.service"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
+import { KpiCard, ExpenseKpiCard, WarningKpiCard, SuccessKpiCard, TotalKpiCard } from "@/components/ui/kpi-card"
+import { ActionButton, CreateButton, CancelButton } from "@/components/ui/action-button"
+import { DataTable, Column, Action, SelectFilter } from "@/components/ui/data-table"
+import { DynamicForm, FormSection } from "@/components/ui/dynamic-form"
+import { FloatingSelect } from "@/components/ui/floating-select"
+import { FloatingDatePicker } from "@/components/ui/floating-date-picker"
+import { FinancialAmountSection } from "@/components/financial"
+import type { IvaType } from "@/components/financial"
 import { suppliersService, type Supplier } from "@/services/suppliers.service"
 import { categoriesService, type Category } from "@/services/categories.service"
 import { projectsService, type Project } from "@/services/projects.service"
@@ -42,6 +44,7 @@ export default function CuentasPagarPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [projects, setProjects] = useState<Pick<Project, 'id' | 'name' | 'code'>[]>([])
+  console.log("🚀 ~ CuentasPagarPage ~ projects:", projects)
   const [loading, setLoading] = useState(true)
   const [loadingSelects, setLoadingSelects] = useState(false)
   const [applyingFilters, setApplyingFilters] = useState(false)
@@ -53,6 +56,12 @@ export default function CuentasPagarPage() {
     approvalStatus: "all" as string,
     search: ""
   })
+
+  // Estados para paginación server-side (DataTable)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<AccountPayable | null>(null)
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false)
@@ -92,30 +101,35 @@ export default function CuentasPagarPage() {
   const [importacionResultado, setImportacionResultado] = useState<ImportacionResultado | null>(null)
   const [downloadingTemplate, setDownloadingTemplate] = useState(false)
 
-  const fetchAccounts = useCallback(async (filterParams?: any) => {
+  const fetchAccounts = useCallback(async () => {
     try {
       setLoading(true)
-      const params: any = { page: 1, limit: 100 }
-      
-      if (filterParams?.status && filterParams.status !== "all") {
-        params.status = filterParams.status
+      const params: any = {
+        page,
+        limit,
       }
-      if (filterParams?.approvalStatus && filterParams.approvalStatus !== "all") {
-        params.approvalStatus = filterParams.approvalStatus
+
+      if (filters.status && filters.status !== "all") {
+        params.status = filters.status
       }
-      if (filterParams?.search) {
-        params.search = filterParams.search
+      if (filters.approvalStatus && filters.approvalStatus !== "all") {
+        params.approvalStatus = filters.approvalStatus
       }
-      
+      if (filters.search) {
+        params.search = filters.search
+      }
+
       const response = await accountsPayableService.getAll(params)
       setAccounts(response.data)
+      setTotal(response.total)
+      setTotalPages(response.totalPages)
     } catch (error) {
       console.error("Error al cargar cuentas por pagar:", error)
       toast.error("Error al cargar las cuentas por pagar")
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [page, limit, filters])
 
   // Calcular métricas del dashboard basadas en las cuentas (filtradas o totales)
   const calculateDashboardMetrics = useCallback((accountsData: AccountPayable[]) => {
@@ -305,15 +319,15 @@ export default function CuentasPagarPage() {
     setIsDialogOpen(true)
   }
 
-  const handleEditarCuenta = (cuenta: AccountPayable) => {
+  const handleEditarCuenta = useCallback((cuenta: AccountPayable) => {
     console.log("🚀 ~ handleEditarCuenta ~ cuenta:", cuenta)
     setSelectedAccount(cuenta)
-    
+
     // Detectar tipo de IVA basándose en el valor
     // Heurística: si IVA <= 100 → porcentaje, si IVA > 100 → monto fijo
     const ivaValue = parseFloat(cuenta.iva?.toString() || '16')
     const detectedIvaType: 'percentage' | 'amount' = ivaValue <= 100 ? 'percentage' : 'amount'
-    
+
     setFormData({
       supplierId: cuenta.supplierId || "",
       supplierName: cuenta.supplier?.name || cuenta.supplierName || "",
@@ -330,7 +344,7 @@ export default function CuentasPagarPage() {
       description: cuenta.description || "",
     })
     setIsDialogOpen(true)
-  }
+  }, [])
 
   const handleSubmitForm = async () => {
     // Validar campos obligatorios
@@ -378,7 +392,7 @@ export default function CuentasPagarPage() {
         toast.success("Cuenta creada exitosamente")
       }
       setIsDialogOpen(false)
-      fetchAccounts(filters)
+      fetchAccounts()
       fetchDashboard()
     } catch (error: any) {
       console.error("Error al guardar cuenta:", error)
@@ -390,17 +404,17 @@ export default function CuentasPagarPage() {
     }
   }
 
-  const handleEliminarCuenta = async (id: string) => {
+  const handleEliminarCuenta = useCallback(async (id: string) => {
     if (!confirm("¿Estás seguro de eliminar esta cuenta?")) return
     try {
       await accountsPayableService.delete(id)
       toast.success("Cuenta eliminada")
-      fetchAccounts(filters)
+      fetchAccounts()
       fetchDashboard()
     } catch (error) {
       toast.error("Error al eliminar")
     }
-  }
+  }, [fetchAccounts, fetchDashboard])
 
   const handleAprobar = async (id: string) => {
     if (approvingId || rejectingId) return
@@ -408,7 +422,7 @@ export default function CuentasPagarPage() {
       setApprovingId(id)
       await accountsPayableService.approve(id)
       toast.success("Cuenta aprobada")
-      fetchAccounts(filters)
+      fetchAccounts()
       fetchDashboard()
     } catch (error) {
       toast.error("Error al aprobar")
@@ -425,7 +439,7 @@ export default function CuentasPagarPage() {
       setRejectingId(id)
       await accountsPayableService.reject(id, { reason })
       toast.success("Cuenta rechazada")
-      fetchAccounts(filters)
+      fetchAccounts()
       fetchDashboard()
     } catch (error) {
       toast.error("Error al rechazar")
@@ -434,7 +448,7 @@ export default function CuentasPagarPage() {
     }
   }
 
-  const handleVerHistorial = async (account: AccountPayable) => {
+  const handleVerHistorial = useCallback(async (account: AccountPayable) => {
     setSelectedAccount(account)
     setLoadingHistory(true)
     setIsHistoryDialogOpen(true)
@@ -451,32 +465,56 @@ export default function CuentasPagarPage() {
     } finally {
       setLoadingHistory(false)
     }
-  }
+  }, [])
 
-  const handleApplyFilters = async () => {
-    setApplyingFilters(true)
-    try {
-      await fetchAccounts(filters)
-      toast.success('Filtros aplicados correctamente')
-    } catch (error) {
-      toast.error('Error al aplicar filtros')
-    } finally {
-      setApplyingFilters(false)
-    }
-  }
-
-  const handleClearFilters = async () => {
+  const handleClearFilters = useCallback(async () => {
     setFilters({ status: "all", approvalStatus: "all", search: "" })
-    setApplyingFilters(true)
-    try {
-      await fetchAccounts()
-      toast.success('Filtros limpiados')
-    } catch (error) {
-      toast.error('Error al limpiar filtros')
-    } finally {
-      setApplyingFilters(false)
-    }
-  }
+    setPage(1)
+    // El useEffect se encargará de hacer el fetch automáticamente
+    toast.success('Filtros limpiados')
+  }, [])
+
+  // Callbacks para DataTable - memoizados para evitar bucles infinitos
+  const handleSearchChange = useCallback((value: string) => {
+    setFilters((prev) => ({ ...prev, search: value }))
+    setPage(1)
+  }, [])
+
+  const handleFilterChange = useCallback((key: string, value: string | string[]) => {
+    setFilters((prev) => ({ ...prev, [key]: value as string }))
+    setPage(1)
+  }, [])
+
+  const handlePageChange = useCallback((newPage: number) => {
+    setPage(newPage)
+  }, [])
+
+  const handleRowsPerPageChange = useCallback((newLimit: number) => {
+    setLimit(newLimit)
+    setPage(1)
+  }, [])
+
+  // Valores memoizados para DataTable (evitar re-renders infinitos)
+  const keyExtractor = useCallback((row: AccountPayable) => row.id, [])
+
+  const searchFilterConfig = useMemo(() => ({
+    placeholder: 'Buscar proveedor, factura o descripción...',
+    debounceMs: 400,
+  }), [])
+
+  const filterValues = useMemo(() => ({
+    status: filters.status,
+    approvalStatus: filters.approvalStatus,
+  }), [filters.status, filters.approvalStatus])
+
+  const pagination = useMemo(() => ({
+    page,
+    limit,
+    total,
+    totalPages,
+  }), [page, limit, total, totalPages])
+
+  const rowsPerPageOptions = useMemo(() => [10, 25, 50], [])
 
   // Funciones de carga masiva
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -523,7 +561,7 @@ export default function CuentasPagarPage() {
       const resultado = await accountsPayableUploadService.importarDatos(uploadResponse.uploadId)
       setImportacionResultado(resultado)
       toast.success(`${resultado.registrosImportados} cuentas por pagar importadas`)
-      fetchAccounts(filters)
+      fetchAccounts()
       fetchDashboard()
     } catch (error: any) {
       toast.error(error.message || 'Error al importar datos')
@@ -565,6 +603,167 @@ export default function CuentasPagarPage() {
     filters.search !== ""
   ].filter(Boolean).length
 
+  // Configuración de columnas para el DataTable - memoizada para estabilidad
+  const columns = useMemo<Column<AccountPayable>[]>(() => [
+    {
+      key: 'supplier',
+      header: 'Proveedor',
+      render: (row) => (
+        <span className="font-medium">{row.supplier?.name || row.supplierName || 'N/A'}</span>
+      ),
+    },
+    {
+      key: 'project',
+      header: 'Proyecto',
+      render: (row) => (
+        <span className="text-sm text-muted-foreground">
+          {row.project?.name || 'Sin proyecto'}
+        </span>
+      ),
+    },
+    {
+      key: 'invoiceNumber',
+      header: 'Factura',
+    },
+    {
+      key: 'macroClasificacion',
+      header: 'Clasificación',
+      render: (row) => (
+        <span className="text-xs">
+          {row.macroClasificacion === 'MATERIALES' && '💎 Materiales'}
+          {row.macroClasificacion === 'MANO_DE_OBRA' && '👷 Mano de Obra'}
+          {row.macroClasificacion === 'OTROS' && '📦 Otros'}
+          {!row.macroClasificacion && <span className="text-muted-foreground">Sin clasificar</span>}
+        </span>
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'Monto Total',
+      align: 'right',
+      render: (row) => `$${parseFloat(row.amount).toLocaleString()}`,
+    },
+    {
+      key: 'paidAmount',
+      header: 'Pagado',
+      align: 'right',
+      render: (row) => (
+        <span className="text-green-600">${parseFloat(row.paidAmount || '0').toLocaleString()}</span>
+      ),
+    },
+    {
+      key: 'balance',
+      header: 'Faltante',
+      align: 'right',
+      render: (row) => (
+        <span className="font-medium text-red-600">${parseFloat(row.balance || '0').toLocaleString()}</span>
+      ),
+    },
+    {
+      key: 'dueDate',
+      header: 'Vencimiento',
+      render: (row) =>
+        row.dueDate
+          ? formatDateWithoutTimezone(row.dueDate)
+          : <span className="text-muted-foreground">Sin vencimiento</span>,
+    },
+    {
+      key: 'status',
+      header: 'Estado',
+      align: 'center',
+      render: (row) => getEstadoBadge(row.status),
+    },
+    {
+      key: 'approvalStatus',
+      header: 'Aprobación',
+      align: 'center',
+      render: (row) => getAprobacionBadge(row.approvalStatus),
+    },
+    {
+      key: 'inlineActions',
+      header: 'Acciones',
+      align: 'center',
+      render: (row) => (
+        <div className="flex gap-1 justify-center">
+          {row.approvalStatus === "pending" && (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleAprobar(row.id)}
+                disabled={approvingId === row.id || rejectingId === row.id}
+              >
+                {approvingId === row.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-green-600" />
+                ) : (
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleRechazar(row.id)}
+                disabled={approvingId === row.id || rejectingId === row.id}
+              >
+                {rejectingId === row.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-red-600" />
+                ) : (
+                  <XCircle className="h-4 w-4 text-red-600" />
+                )}
+              </Button>
+            </>
+          )}
+        </div>
+      ),
+    },
+  ], [approvingId, rejectingId])
+
+  // Configuración de acciones para el DataTable - memoizada
+  const actions = useMemo<Action<AccountPayable>[]>(() => [
+    {
+      label: 'Ver historial',
+      icon: <Clock className="h-4 w-4" />,
+      onClick: (row) => handleVerHistorial(row),
+    },
+    {
+      label: 'Editar',
+      icon: <Edit className="h-4 w-4" />,
+      onClick: (row) => handleEditarCuenta(row),
+    },
+    {
+      label: 'Eliminar',
+      icon: <Trash2 className="h-4 w-4" />,
+      onClick: (row) => handleEliminarCuenta(row.id),
+    },
+  ], [handleVerHistorial, handleEditarCuenta, handleEliminarCuenta])
+
+  // Configuración de filtros de selección para el DataTable - memoizada (estática)
+  const selectFilters = useMemo<SelectFilter[]>(() => [
+    {
+      key: 'status',
+      label: 'Estado',
+      options: [
+        { value: 'all', label: 'Todos' },
+        { value: 'pending', label: 'Pendiente' },
+        { value: 'partial', label: 'Parcial' },
+        { value: 'paid', label: 'Pagado' },
+        { value: 'overdue', label: 'Vencido' },
+        { value: 'scheduled', label: 'Programado' },
+        { value: 'cancelled', label: 'Cancelado' },
+      ],
+    },
+    {
+      key: 'approvalStatus',
+      label: 'Aprobación',
+      options: [
+        { value: 'all', label: 'Todos' },
+        { value: 'pending', label: 'Pendiente' },
+        { value: 'approved', label: 'Aprobado' },
+        { value: 'rejected', label: 'Rechazado' },
+      ],
+    },
+  ], [])
+
   const getEstadoBadge = (status: AccountPayableStatus) => {
     const styles = {
       pending: "bg-yellow-100 text-yellow-800",
@@ -602,24 +801,15 @@ export default function CuentasPagarPage() {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button 
+                <ActionButton 
                   variant="outline" 
-                  onClick={handleDownloadTemplate}
+                  onClick={handleDownloadTemplate} 
                   disabled={downloadingTemplate}
-                  className="gap-2"
+                  size="sm"
+                  startIcon={downloadingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
                 >
-                  {downloadingTemplate ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Descargando...
-                    </>
-                  ) : (
-                    <>
-                      <FileDown className="h-4 w-4" />
-                      Plantilla Excel
-                    </>
-                  )}
-                </Button>
+                  {downloadingTemplate ? 'Descargando...' : 'Plantilla Excel'}
+                </ActionButton>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
                 <div className="space-y-1">
@@ -634,9 +824,14 @@ export default function CuentasPagarPage() {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" onClick={() => setBulkUploadOpen(true)}>
-                  <Upload className="mr-2 h-4 w-4" /> Carga Masiva
-                </Button>
+                <ActionButton 
+                  variant="outline"
+                  onClick={() => setBulkUploadOpen(true)}
+                  size="sm"
+                  startIcon={<Upload className="h-4 w-4" />}
+                >
+                  Carga Masiva
+                </ActionButton>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
                 <div className="space-y-1">
@@ -648,448 +843,277 @@ export default function CuentasPagarPage() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <Button onClick={handleNuevaCuenta}>
-            <Plus className="mr-2 h-4 w-4" /> Nueva Cuenta
-          </Button>
+          <ActionButton variant="create" onClick={handleNuevaCuenta} size="sm">
+            Nueva Cuenta
+          </ActionButton>
         </div>
       </div>
 
-      {/* Dashboard Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Pendiente</CardTitle>
-            <TrendingDown className="h-4 w-4 text-orange-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${(dashboardData.totalPendiente || 0).toLocaleString()}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Vencido</CardTitle>
-            <AlertCircle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">${(dashboardData.totalVencido || 0).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">{dashboardData.cuentasVencidas || 0} cuentas</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Próximas a Vencer</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{dashboardData.proximasVencer || 0}</div>
-            <p className="text-xs text-muted-foreground">Próximos 7 días</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pendientes Aprobación</CardTitle>
-            <Clock className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{dashboardData.pendientesAprobacion || 0}</div>
-          </CardContent>
-        </Card>
+      {/* Dashboard KPI Cards */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <TotalKpiCard
+          title="Total Pendiente"
+          value={`$${(dashboardData.totalPendiente || 0).toLocaleString()}`}
+          subtitle="Monto total por pagar"
+          icon={<DollarSign className="h-4 w-4" />}
+          loading={loading}
+        />
+        <ExpenseKpiCard
+          title="Total Vencido"
+          value={`$${(dashboardData.totalVencido || 0).toLocaleString()}`}
+          subtitle={`${dashboardData.cuentasVencidas || 0} cuentas vencidas`}
+          icon={<AlertCircle className="h-4 w-4" />}
+          loading={loading}
+        />
+        <WarningKpiCard
+          title="Próximas a Vencer"
+          value={dashboardData.proximasVencer || 0}
+          subtitle="Próximos 7 días"
+          icon={<Clock className="h-4 w-4" />}
+          loading={loading}
+        />
+        <SuccessKpiCard
+          title="Pendientes Aprobación"
+          value={dashboardData.pendientesAprobacion || 0}
+          subtitle="Por aprobar o rechazar"
+          icon={<CheckCircle className="h-4 w-4" />}
+          loading={loading}
+        />
       </div>
 
-      {/* Filtros */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Filtros</CardTitle>
-            {activeFiltersCount > 0 && (
-              <p className="text-sm text-muted-foreground mt-1">
-                {activeFiltersCount} filtro{activeFiltersCount > 1 ? 's' : ''} activo{activeFiltersCount > 1 ? 's' : ''}
-              </p>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
-            <div>
-              <Label>Buscar</Label>
-              <Input
-                placeholder="Proveedor o factura..."
-                value={filters.search}
-                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Estado</Label>
-              <Select 
-                value={filters.status} 
-                onValueChange={(value) => setFilters({ ...filters, status: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="pending">Pendiente</SelectItem>
-                  <SelectItem value="partial">Parcial</SelectItem>
-                  <SelectItem value="paid">Pagado</SelectItem>
-                  <SelectItem value="overdue">Vencido</SelectItem>
-                  <SelectItem value="scheduled">Programado</SelectItem>
-                  <SelectItem value="cancelled">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Aprobación</Label>
-              <Select 
-                value={filters.approvalStatus} 
-                onValueChange={(value) => setFilters({ ...filters, approvalStatus: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="pending">Pendiente</SelectItem>
-                  <SelectItem value="approved">Aprobado</SelectItem>
-                  <SelectItem value="rejected">Rechazado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end gap-2">
-              <Button 
-                className="flex-1" 
-                onClick={handleApplyFilters}
-                disabled={applyingFilters || loading}
-              >
-                {applyingFilters && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Aplicar Filtros
-              </Button>
-              <Button 
-                variant="outline"
-                onClick={handleClearFilters}
-                disabled={applyingFilters || loading || activeFiltersCount === 0}
-              >
-                Limpiar
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* DataTable de Cuentas por Pagar */}
+      <DataTable
+        title="Listado de Cuentas por Pagar"
+        columns={columns}
+        data={accounts}
+        keyExtractor={keyExtractor}
+        actions={actions}
+        loading={loading}
+        emptyMessage="No se encontraron cuentas por pagar"
+        // Filtros de búsqueda
+        searchFilter={searchFilterConfig}
+        searchValue={filters.search}
+        onSearchChange={handleSearchChange}
+        // Filtros de selección
+        selectFilters={selectFilters}
+        filterValues={filterValues}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
+        // Paginación server-side
+        pagination={pagination}
+        onPageChange={handlePageChange}
+        onRowsPerPageChange={handleRowsPerPageChange}
+        rowsPerPageOptions={rowsPerPageOptions}
+      />
 
-      {/* Tabla */}
-      <Card>
-        <CardContent className="pt-6">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Proveedor</TableHead>
-                <TableHead>Proyecto</TableHead>
-                <TableHead>Factura</TableHead>
-                <TableHead>Clasificación</TableHead>
-                <TableHead>Monto Total</TableHead>
-                <TableHead>Pagado</TableHead>
-                <TableHead>Faltante</TableHead>
-                <TableHead>Vencimiento</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Aprobación</TableHead>
-                <TableHead>Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={11} className="text-center">Cargando...</TableCell>
-                </TableRow>
-              ) : accounts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={11} className="text-center">No hay cuentas por pagar</TableCell>
-                </TableRow>
-              ) : (
-                accounts.map((cuenta) => (
-                  <TableRow key={cuenta.id}>
-                    <TableCell>{cuenta.supplier?.name || cuenta.supplierName || 'N/A'}</TableCell>
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground">
-                        {cuenta.project?.nombreProyecto || 'Sin proyecto'}
-                      </span>
-                    </TableCell>
-                    <TableCell>{cuenta.invoiceNumber}</TableCell>
-                    <TableCell>
-                      <span className="text-xs">
-                        {cuenta.macroClasificacion === 'MATERIALES' && '💎 Materiales'}
-                        {cuenta.macroClasificacion === 'MANO_DE_OBRA' && '👷 Mano de Obra'}
-                        {cuenta.macroClasificacion === 'OTROS' && '📦 Otros'}
-                        {!cuenta.macroClasificacion && <span className="text-muted-foreground">Sin clasificar</span>}
-                      </span>
-                    </TableCell>
-                    <TableCell>${parseFloat(cuenta.amount).toLocaleString()}</TableCell>
-                    <TableCell className="text-green-600">
-                      ${parseFloat(cuenta.paidAmount || '0').toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-red-600 font-medium">
-                      ${parseFloat(cuenta.balance || '0').toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      {cuenta.dueDate ? formatDateWithoutTimezone(cuenta.dueDate) : <span className="text-muted-foreground">Sin vencimiento</span>}
-                    </TableCell>
-                    <TableCell>{getEstadoBadge(cuenta.status)}</TableCell>
-                    <TableCell>{getAprobacionBadge(cuenta.approvalStatus)}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        {cuenta.approvalStatus === "pending" && (
-                          <>
-                            <Button 
-                              size="sm" 
-                              variant="ghost" 
-                              onClick={() => handleAprobar(cuenta.id)}
-                              disabled={approvingId === cuenta.id || rejectingId === cuenta.id}
-                            >
-                              {approvingId === cuenta.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin text-green-600" />
-                              ) : (
-                                <CheckCircle className="h-4 w-4 text-green-600" />
-                              )}
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="ghost" 
-                              onClick={() => handleRechazar(cuenta.id)}
-                              disabled={approvingId === cuenta.id || rejectingId === cuenta.id}
-                            >
-                              {rejectingId === cuenta.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin text-red-600" />
-                              ) : (
-                                <XCircle className="h-4 w-4 text-red-600" />
-                              )}
-                            </Button>
-                          </>
-                        )}
-                        <Button size="sm" variant="ghost" onClick={() => handleVerHistorial(cuenta)} title="Ver historial de pagos">
-                          <Clock className="h-4 w-4 text-blue-600" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleEditarCuenta(cuenta)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleEliminarCuenta(cuenta.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Dialog Crear/Editar */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{selectedAccount ? "Editar Cuenta" : "Nueva Cuenta por Pagar"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Proveedor *</Label>
-              <Input
-                value={formData.supplierName}
-                onChange={(e) => setFormData({ ...formData, supplierName: e.target.value })}
-                placeholder="Nombre del proveedor"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Proyecto (Opcional)</Label>
-              <Select value={formData.projectId} onValueChange={(v) => setFormData({ ...formData, projectId: v })} disabled={loadingSelects}>
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingSelects ? "Cargando..." : projects.length === 0 ? "No hay proyectos" : "Selecciona proyecto (opcional)"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground">No hay proyectos disponibles</div>
-                  ) : (
-                    <>
-                      <SelectItem value="none">Sin proyecto</SelectItem>
-                      {projects.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.code} - {p.name}</SelectItem>
-                      ))}
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Número de Factura</Label>
-              <Input
-                placeholder="FAC-2024-XXX"
-                value={formData.invoiceNumber}
-                onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })}
-              />
-            </div>
-            {/* Campos de IVA y Monto */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-primary">💰 Monto e Impuestos</h3>
-              
-              {/* Selector de Tipo de IVA */}
-              <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg border">
-                <Label className="text-sm font-medium">Tipo de IVA:</Label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="ivaType"
-                      value="percentage"
-                      checked={formData.ivaType === 'percentage'}
-                      onChange={(e) => handlePresupuestoChange('ivaType', e.target.value)}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm">Porcentaje (%)</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="ivaType"
-                      value="amount"
-                      checked={formData.ivaType === 'amount'}
-                      onChange={(e) => handlePresupuestoChange('ivaType', e.target.value)}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm">Monto Fijo ($)</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="subtotal">Subtotal (sin IVA) *</Label>
-                  <Input 
-                    id="subtotal"
-                    type="text" 
-                    placeholder="0"
-                    value={formatNumber(formData.subtotal)}
-                    onChange={(e) => handlePresupuestoChange('subtotal', e.target.value)}
+      {/* Formulario de Cuenta por Pagar usando DynamicForm */}
+      <DynamicForm
+        isOpen={isDialogOpen}
+        onOpenChange={(open) => {
+          setIsDialogOpen(open)
+          if (!open) {
+            setSelectedAccount(null)
+            setFormData({
+              supplierId: "",
+              supplierName: "",
+              projectId: "",
+              invoiceNumber: "",
+              iva: "16",
+              ivaType: 'percentage',
+              subtotal: "",
+              amount: "",
+              categoryId: "",
+              macroClasificacion: "",
+              issueDate: undefined,
+              dueDate: undefined,
+              description: "",
+            })
+          }
+        }}
+        title={selectedAccount ? "Editar Cuenta por Pagar" : "Nueva Cuenta por Pagar"}
+        description={selectedAccount ? "Modifica los datos de la cuenta" : "Registra una nueva cuenta por pagar"}
+        mode={selectedAccount ? 'edit' : 'create'}
+        maxWidth="2xl"
+        data={formData}
+        onChange={setFormData}
+        onSubmit={handleSubmitForm}
+        loading={savingAccount}
+        sections={[
+          {
+            columns: 1,
+            fields: [
+              {
+                name: 'supplierName',
+                type: 'text',
+                label: 'Proveedor',
+                required: true,
+                placeholder: 'Nombre del proveedor',
+                colSpan: 'full',
+              },
+            ],
+          },
+          {
+            columns: 1,
+            fields: [
+              {
+                name: 'projectId',
+                type: 'custom',
+                label: 'Proyecto (Opcional)',
+                render: ({ value, onChange }) => (
+                  <FloatingSelect
+                    label="Proyecto (Opcional)"
+                    value={value || ''}
+                    onChange={(newValue) => onChange(newValue as string)}
+                    options={loadingSelects
+                      ? [{ label: 'Cargando...', value: 'loading', disabled: true }]
+                      : projects.length === 0
+                        ? [{ label: 'No hay proyectos disponibles', value: 'empty', disabled: true }]
+                        : [
+                            { label: 'Sin proyecto', value: 'none' },
+                            ...projects.map((p) => ({
+                              label: `${p.code} - ${p.name}`,
+                              value: p.id,
+                            }))
+                          ]
+                    }
+                    placeholder={loadingSelects ? "Cargando..." : "Seleccionar proyecto"}
+                    disabled={loadingSelects}
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Monto sin IVA
-                  </p>
-                </div>
-                <div>
-                  <Label htmlFor="iva">
-                    {formData.ivaType === 'percentage' ? 'IVA (%)' : 'IVA ($)'} *
-                  </Label>
-                  <Input 
-                    id="iva"
-                    type="text" 
-                    placeholder={formData.ivaType === 'percentage' ? '16' : '0'}
-                    value={formData.ivaType === 'percentage' ? formData.iva : formatNumber(formData.iva)}
-                    onChange={(e) => handlePresupuestoChange('iva', e.target.value)}
+                ),
+                colSpan: 'full',
+              },
+            ],
+          },
+          {
+            columns: 1,
+            fields: [
+              {
+                name: 'invoiceNumber',
+                type: 'text',
+                label: 'Número de Factura',
+                placeholder: 'FAC-2024-XXX',
+                colSpan: 'full',
+              },
+            ],
+          },
+          {
+            fields: [
+              {
+                name: 'ivaSection',
+                type: 'custom',
+                label: '',
+                colSpan: 'full',
+                render: () => (
+                  <FinancialAmountSection
+                    title="💰 Compra"
+                    iva={formData.ivaType === 'percentage' ? formData.iva : formatNumber(formData.iva)}
+                    ivaType={formData.ivaType as IvaType}
+                    subtotal={formatNumber(formData.subtotal)}
+                    total={formatNumber(formData.amount)}
+                    onIvaChange={(value: string) => handlePresupuestoChange('iva', value)}
+                    onIvaTypeChange={(type: IvaType) => handlePresupuestoChange('ivaType', type)}
+                    onSubtotalChange={(value: string) => handlePresupuestoChange('subtotal', value)}
+                    subtotalLabel="Subtotal (sin IVA) *"
+                    totalLabel="Total Compra (con IVA)"
+                    subtotalPlaceholder="Ej: 100,000"
+                    subtotalHelperText="Monto sin IVA"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {formData.ivaType === 'percentage' ? 'Porcentaje de IVA' : 'Monto fijo de IVA'}
-                  </p>
-                </div>
-                <div>
-                  <Label htmlFor="amount">Total (con IVA)</Label>
-                  <Input 
-                    id="amount"
-                    type="text" 
-                    value={formatCurrency(formData.amount)}
-                    readOnly
-                    className="bg-muted font-semibold text-green-600"
+                ),
+              },
+            ],
+          },
+          {
+            columns: 1,
+            fields: [
+              {
+                name: 'categoryId',
+                type: 'select',
+                label: 'Categoría',
+                placeholder: loadingSelects ? "Cargando..." : "Selecciona una categoría (opcional)",
+                options: loadingSelects
+                  ? [{ label: 'Cargando...', value: 'loading', disabled: true }]
+                  : categories.length === 0
+                    ? [{ label: 'No hay categorías de tipo "Egreso". Ve a /categorias para crear una.', value: 'empty', disabled: true }]
+                    : categories.map((c) => ({
+                        label: c.name,
+                        value: c.id,
+                      })),
+                disabled: loadingSelects,
+                colSpan: 'full',
+              },
+            ],
+          },
+          {
+            columns: 1,
+            fields: [
+              {
+                name: 'macroClasificacion',
+                type: 'select',
+                label: 'Clasificación Financiera',
+                required: true,
+                placeholder: 'Selecciona clasificación',
+                options: [
+                  { label: '💎 Materiales', value: 'MATERIALES' },
+                  { label: '👷 Mano de Obra', value: 'MANO_DE_OBRA' },
+                  { label: '📦 Otros Gastos', value: 'OTROS' },
+                ],
+                colSpan: 'full',
+              },
+            ],
+          },
+          {
+            columns: 2,
+            fields: [
+              {
+                name: 'issueDate',
+                type: 'custom',
+                label: 'Fecha de Emisión',
+                required: true,
+                render: ({ value, onChange }) => (
+                  <FloatingDatePicker
+                    label="Fecha de Emisión *"
+                    value={value}
+                    onChange={(date) => onChange(date)}
+                    placeholder="Seleccionar fecha"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Subtotal + IVA (calculado)
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label>Categoría</Label>
-              <Select value={formData.categoryId} onValueChange={(v) => setFormData({ ...formData, categoryId: v })} disabled={loadingSelects}>
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingSelects ? "Cargando..." : categories.length === 0 ? "No hay categorías de egreso" : "Selecciona categoría (opcional)"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground">No hay categorías de tipo "Egreso". Ve a /categorias para crear una.</div>
-                  ) : (
-                    categories.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Clasificación Financiera *</Label>
-              <Select 
-                value={formData.macroClasificacion} 
-                onValueChange={(v) => setFormData({ ...formData, macroClasificacion: v as "" | "MATERIALES" | "MANO_DE_OBRA" | "OTROS" })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona clasificación" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="MATERIALES">💎 Materiales</SelectItem>
-                  <SelectItem value="MANO_DE_OBRA">👷 Mano de Obra</SelectItem>
-                  <SelectItem value="OTROS">📦 Otros Gastos</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Esta clasificación determina cómo se agrupa el gasto en el Dashboard financiero
-              </p>
-            </div>
-            <div className="grid gap-2">
-              <Label>Fecha de Emisión *</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-start text-left font-normal">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formData.issueDate ? format(formData.issueDate, "PPP", { locale: es }) : "Seleccionar"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={formData.issueDate} onSelect={(d) => setFormData({ ...formData, issueDate: d })} locale={es} />
-                </PopoverContent>
-              </Popover>
-            </div>
-            <div className="grid gap-2">
-              <Label>Fecha de Vencimiento</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-start text-left font-normal">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formData.dueDate ? format(formData.dueDate, "PPP", { locale: es }) : "Seleccionar"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={formData.dueDate} onSelect={(d) => setFormData({ ...formData, dueDate: d })} locale={es} />
-                </PopoverContent>
-              </Popover>
-            </div>
-            <div className="grid gap-2">
-              <Label>Descripción</Label>
-              <Input
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={savingAccount}>Cancelar</Button>
-            <Button onClick={handleSubmitForm} disabled={savingAccount}>
-              {savingAccount ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {selectedAccount ? "Actualizando..." : "Creando..."}
-                </>
-              ) : (
-                selectedAccount ? "Actualizar" : "Crear"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                ),
+                colSpan: 1,
+              },
+              {
+                name: 'dueDate',
+                type: 'custom',
+                label: 'Fecha de Vencimiento',
+                render: ({ value, onChange }) => (
+                  <FloatingDatePicker
+                    label="Fecha de Vencimiento"
+                    value={value}
+                    onChange={(date) => onChange(date)}
+                    placeholder="Seleccionar fecha"
+                  />
+                ),
+                colSpan: 1,
+              },
+            ],
+          },
+          {
+            columns: 1,
+            fields: [
+              {
+                name: 'description',
+                type: 'textarea',
+                label: 'Descripción',
+                placeholder: 'Descripción de la cuenta',
+                rows: 3,
+                colSpan: 'full',
+              },
+            ],
+          },
+        ]}
+        submitLabel="Crear Cuenta"
+        submitLabelEditing="Guardar Cambios"
+        loadingLabel="Creando..."
+        loadingLabelEditing="Guardando..."
+      />
 
       {/* Diálogo de Historial de Pagos - Material Design 3 */}
       <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
@@ -1325,13 +1349,13 @@ export default function CuentasPagarPage() {
           ) : null}
 
           <DialogFooter className="px-6 py-4 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-800">
-            <Button
-              variant="outline"
+            <ActionButton
+              variant="close"
               onClick={() => setIsHistoryDialogOpen(false)}
-              className="rounded-full px-6 h-11 font-medium border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+              size="md"
             >
               Cerrar
-            </Button>
+            </ActionButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -120,7 +120,21 @@ function DashboardContent() {
     try {
       setLoading(true)
       const response = await apiClient.get("/reports/dashboard/general")
-      setDashboardGeneral(response.data)
+      const data = response.data
+
+      // Mapear proyectos si vienen con nombres de campos diferentes
+      if (data.proyectos && Array.isArray(data.proyectos)) {
+        data.proyectos = data.proyectos.map((p: any) => ({
+          id: p.id,
+          codigo: p.codigo || p.codigoProyecto || p.id.slice(0, 8).toUpperCase(),
+          nombre: p.nombre || p.nombreProyecto,
+          presupuesto: p.presupuesto || 0,
+          gastoReal: p.gastoReal || 0,
+          estado: p.estado || '',
+        }))
+      }
+
+      setDashboardGeneral(data)
     } catch (error) {
       console.error("Error al cargar dashboard general:", error)
       toast.error("Error al cargar el dashboard general")

@@ -20,6 +20,7 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { FloatingInput } from '@/components/ui/floating-input';
 import { FloatingSelect } from '@/components/ui/floating-select';
+import { FloatingDatePicker } from '@/components/ui/floating-date-picker';
 import { FormFieldConfig, FieldType } from './form-types';
 
 interface DynamicFormFieldProps {
@@ -227,35 +228,22 @@ export function DynamicFormField({
 
       case 'date':
         return (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                disabled={field.disabled}
-                className={cn(
-                  baseClasses,
-                  'justify-start text-left font-normal',
-                  !value && 'text-muted-foreground'
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {value ? (
-                  format(new Date(value), 'PPP', { locale: es })
-                ) : (
-                  field.placeholder || 'Selecciona una fecha'
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={value ? new Date(value) : undefined}
-                onSelect={(date) => onChange(date?.toISOString())}
-                disabled={field.disabled}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
+          <FloatingDatePicker
+            label={field.label + (field.required ? ' *' : '')}
+            value={value ? new Date(value) : undefined}
+            onChange={(date) => {
+              if (date instanceof Date) {
+                onChange(date.toISOString());
+              } else if (date && 'from' in date && date.from) {
+                onChange(date.from.toISOString());
+              } else {
+                onChange(undefined);
+              }
+            }}
+            mode="single"
+            placeholder={field.placeholder || 'Seleccionar fecha'}
+            disabled={field.disabled}
+          />
         );
 
       case 'datetime':
@@ -460,23 +448,7 @@ export function DynamicFormField({
       control={control}
       render={({ field: formField, fieldState: { error } }) => (
         <div className={cn(densityClasses[density], field.className)}>
-          {/* Only show external label for fields without floating labels */}
-          {!hasFloatingLabel && field.type !== 'checkbox' && field.type !== 'switch' && (
-            <div className="flex items-center justify-between">
-              <Label
-                htmlFor={field.name}
-                className={cn(
-                  'font-semibold transition-colors',
-                  error ? 'text-destructive' : 'text-foreground',
-                  density === 'compact' && 'text-sm',
-                  density === 'spacious' && 'text-base'
-                )}
-              >
-                {field.label}
-                {field.required && <span className="text-destructive ml-1">*</span>}
-              </Label>
-            </div>
-          )}
+
 
           {/* Only show description for fields without floating labels */}
           {field.description && !hasFloatingLabel && field.type !== 'checkbox' && field.type !== 'switch' && (

@@ -18,6 +18,7 @@ import {
   Box,
   Typography,
   Skeleton,
+  ClickAwayListener,
 } from '@mui/material'
 import {
   MoreVert as MoreVertIcon,
@@ -198,22 +199,29 @@ function MD3TablePagination({
 function ActionsMenu<T>({ actions, row }: { actions: Action<T>[]; row: T }) {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null)
   const open = Boolean(anchorEl)
+  const menuRef = React.useRef<HTMLDivElement>(null)
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation()
     setAnchorEl(event.currentTarget)
   }
 
-  const handleClose = (event?: React.MouseEvent | {}, reason?: string) => {
-    if (event && 'stopPropagation' in event) {
-      (event as React.MouseEvent).stopPropagation()
-    }
+  const handleClose = () => {
     setAnchorEl(null)
   }
 
-  const handleAction = (action: Action<T>) => {
-    handleClose()
+  const handleAction = (action: Action<T>, event: React.MouseEvent) => {
+    event.stopPropagation()
     action.onClick(row)
+    handleClose()
+  }
+
+  const handleClickAway = (event: MouseEvent | TouchEvent) => {
+    // Solo cerrar si el click no fue en el botón de menú
+    const target = event.target as HTMLElement
+    if (!target.closest('button[aria-label="more"]')) {
+      handleClose()
+    }
   }
 
   const visibleActions = actions.filter((action) => !action.hidden?.(row))
@@ -225,6 +233,7 @@ function ActionsMenu<T>({ actions, row }: { actions: Action<T>[]; row: T }) {
       <IconButton
         size="small"
         onClick={handleClick}
+        aria-label="more"
         sx={{
           color: SYSTEM_COLORS.foregroundMuted,
           '&:hover': { backgroundColor: SYSTEM_COLORS.muted },
@@ -232,63 +241,69 @@ function ActionsMenu<T>({ actions, row }: { actions: Action<T>[]; row: T }) {
       >
         <MoreVertIcon fontSize="small" />
       </IconButton>
-      <Menu
-        anchorEl={anchorEl}
-        open={open}
-        onClose={handleClose}
-        onClick={(e) => e.stopPropagation()}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-        PaperProps={{
-          sx: {
-            backgroundColor: SYSTEM_COLORS.background,
-            borderRadius: '8px',
-            boxShadow: '0px 4px 12px rgba(0,0,0,0.08)',
-            minWidth: '140px',
-            mt: 0.5,
-            border: `1px solid ${SYSTEM_COLORS.border}`,
-          },
-        }}
-        MenuListProps={{
-          dense: true,
-        }}
-      >
-        {visibleActions.map((action, index) => (
-          <MenuItem
-            key={index}
-            onClick={() => handleAction(action)}
-            disabled={action.disabled?.(row) ?? false}
-            sx={{
-              py: 1,
-              px: 2,
-              fontSize: '14px',
-              color: SYSTEM_COLORS.foreground,
-              borderRadius: '8px',
-              mx: 0.5,
-              my: 0.25,
-              '&:hover': {
-                backgroundColor: SYSTEM_COLORS.muted,
+      <ClickAwayListener onClickAway={handleClickAway}>
+        <Menu
+          anchorEl={anchorEl}
+          open={open}
+          onClose={handleClose}
+          anchorOrigin={{
+            vertical: 'bottom',
+            horizontal: 'right',
+          }}
+          transformOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+          slotProps={{
+            paper: {
+              ref: menuRef,
+              sx: {
+                backgroundColor: SYSTEM_COLORS.background,
+                borderRadius: '8px',
+                boxShadow: '0px 4px 12px rgba(0,0,0,0.15)',
+                minWidth: '140px',
+                mt: 0.5,
+                border: `1px solid ${SYSTEM_COLORS.border}`,
               },
-              '&.Mui-disabled': {
-                color: SYSTEM_COLORS.borderHover,
-              },
-            }}
-          >
-            {action.icon && (
-              <Box component="span" sx={{ mr: 1.5, display: 'flex', alignItems: 'center' }}>
-                {action.icon}
-              </Box>
-            )}
-            {action.label}
-          </MenuItem>
-        ))}
-      </Menu>
+            },
+          }}
+          MenuListProps={{
+            dense: true,
+          }}
+        >
+          {visibleActions.map((action, index) => (
+            <MenuItem
+              key={index}
+              onClick={(e) => handleAction(action, e)}
+              disabled={action.disabled?.(row) ?? false}
+              sx={{
+                py: 1,
+                px: 2,
+                fontSize: '14px',
+                color: SYSTEM_COLORS.foreground,
+                borderRadius: '8px',
+                mx: 0.5,
+                my: 0.25,
+                pointerEvents: 'auto',
+                cursor: 'pointer',
+                '&:hover': {
+                  backgroundColor: SYSTEM_COLORS.muted,
+                },
+                '&.Mui-disabled': {
+                  color: SYSTEM_COLORS.borderHover,
+                },
+              }}
+            >
+              {action.icon && (
+                <Box component="span" sx={{ mr: 1.5, display: 'flex', alignItems: 'center' }}>
+                  {action.icon}
+                </Box>
+              )}
+              {action.label}
+            </MenuItem>
+          ))}
+        </Menu>
+      </ClickAwayListener>
     </>
   )
 }

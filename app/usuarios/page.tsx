@@ -1,29 +1,24 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog"
-import { Switch } from "@/components/ui/switch"
-import { Plus, Edit, Trash2, Shield, Loader2, Eye, EyeOff } from "lucide-react"
+import { Plus, Edit, Trash2, Shield, User as UserIcon, Mail, BadgeCheck, Clock } from "lucide-react"
+import { ActionButton, CreateButton } from "@/components/ui"
 import { usersService } from "@/services/users.service"
 import { rolesService } from "@/services/roles.service"
 import { authService } from "@/services/auth.service"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from 'sonner'
+import { cn } from "@/lib/utils"
 import type { User, Role, UserStatus, CreateUserDto, UpdateUserDto } from "@/types/users"
 import { RouteProtection } from "@/components/route-protection"
+import { DynamicForm, FormFieldConfig } from "@/components/forms"
+import { DataTable, Column, Action, SelectFilter } from "@/components/ui/data-table"
 
 // Los permisos ahora se cargan dinámicamente desde la API
 
@@ -36,7 +31,6 @@ export default function UsuariosPage() {
 }
 
 function UsuariosPageContent() {
-  const { toast } = useToast()
   const [users, setUsers] = useState<User[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false)
@@ -44,498 +38,449 @@ function UsuariosPageContent() {
   const [loading, setLoading] = useState(true)
   const [savingUser, setSavingUser] = useState(false)
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [filterRole, setFilterRole] = useState<string>("")
-  const [filterStatus, setFilterStatus] = useState<UserStatus | "all">("all")
-  const [formData, setFormData] = useState<Partial<CreateUserDto>>({})
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
-  const [showPassword, setShowPassword] = useState(false)
+
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState("")
+  const [filterStatus, setFilterStatus] = useState<string>("")
 
   // Cargar datos iniciales
   useEffect(() => {
-    loadUsers()
     loadRoles()
-    
+
     // Obtener rol del usuario actual
     const currentUser = authService.getCurrentUser()
-    console.log("👤 Usuario actual:", currentUser)
-    
     if (currentUser?.role?.name) {
-      // Usuario guardado en localStorage (tiene rol completo)
-      console.log("✅ Rol detectado:", currentUser.role.name)
       setCurrentUserRole(currentUser.role.name)
-    } else {
-      console.warn("⚠️ No se pudo detectar el rol. Por favor, cierra sesión e inicia sesión nuevamente.")
     }
   }, [])
 
-  const loadUsers = async () => {
+  // Cargar usuarios cuando cambian filtros o paginación
+  useEffect(() => {
+    loadUsers()
+  }, [page, limit, searchQuery, filterStatus])
+
+  const loadUsers = useCallback(async () => {
     try {
       setLoading(true)
       const response = await usersService.getAll({
+        page,
+        limit,
         search: searchQuery || undefined,
-        role: filterRole || undefined,
-        status: filterStatus !== "all" ? filterStatus : undefined,
+        status: (filterStatus as UserStatus) || undefined,
       })
       setUsers(response.data)
+      setTotal(response.total)
+      setTotalPages(response.pages)
     } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Error al cargar usuarios",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : 'Error al cargar usuarios')
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, limit, searchQuery, filterStatus])
 
   const loadRoles = async () => {
     try {
       const data = await rolesService.getAll()
       setRoles(data)
     } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Error al cargar roles",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : 'Error al cargar roles')
     }
   }
 
 
-  const handleRestoreUser = async (userId: string) => {
+  const handleRestoreUser = async (user: User) => {
     try {
-      setUpdatingUserId(userId)
-      await usersService.restore(userId)
-      toast({
-        title: "Usuario habilitado",
-        description: "El usuario ha sido habilitado exitosamente",
-      })
+      setUpdatingUserId(user.id)
+      await usersService.restore(user.id)
+      toast.success('El usuario ha sido habilitado exitosamente')
       loadUsers()
     } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Error al habilitar usuario",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : 'Error al habilitar usuario')
     } finally {
       setUpdatingUserId(null)
     }
   }
 
-  const handleDeleteUser = async (userId: string) => {
+  const handleDeleteUser = async (user: User) => {
     if (!confirm("¿Estás seguro de eliminar este usuario?")) return
-    
+
     try {
-      setUpdatingUserId(userId)
-      await usersService.delete(userId)
-      toast({
-        title: "Usuario eliminado",
-        description: "El usuario ha sido eliminado exitosamente",
-      })
+      setUpdatingUserId(user.id)
+      await usersService.delete(user.id)
+      toast.success('El usuario ha sido eliminado exitosamente')
       loadUsers()
     } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Error al eliminar usuario",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : 'Error al eliminar usuario')
     } finally {
       setUpdatingUserId(null)
     }
   }
 
-  // Recargar usuarios cuando cambien los filtros
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      loadUsers()
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [searchQuery, filterRole, filterStatus])
+
+  // Configuración de campos del formulario de usuario
+  const userFormFields: FormFieldConfig[] = useMemo(() => [
+    {
+      name: 'firstName',
+      label: 'Nombre',
+      type: 'text',
+      placeholder: 'Nombre',
+      required: true,
+    },
+    {
+      name: 'lastName',
+      label: 'Apellido',
+      type: 'text',
+      placeholder: 'Apellido',
+      required: true,
+    },
+    {
+      name: 'email',
+      label: 'Email',
+      type: 'email',
+      placeholder: 'usuario@electrocosta.com',
+      required: true,
+      autocomplete: 'email',
+    },
+    {
+      name: 'password',
+      label: selectedUser ? 'Nueva Contraseña (opcional)' : 'Contraseña',
+      type: 'password',
+      placeholder: selectedUser ? 'Dejar vacío para no cambiar' : '********',
+      required: !selectedUser,
+      minLength: 8,
+      visibleWhen: () => !selectedUser || currentUserRole === 'super_admin',
+    },
+    {
+      name: 'empresa',
+      label: 'Empresa',
+      type: 'text',
+      placeholder: 'Nombre de la empresa',
+      required: true,
+    },
+    {
+      name: 'roleId',
+      label: 'Rol',
+      type: 'select',
+      placeholder: 'Selecciona un rol',
+      required: true,
+      options: roles.map((role) => ({ label: role.name, value: role.id })),
+    },
+    {
+      name: 'status',
+      label: 'Usuario activo',
+      type: 'switch',
+    },
+  ], [roles, selectedUser, currentUserRole])
+
+  const getDefaultFormValues = () => {
+    if (selectedUser) {
+      return {
+        firstName: selectedUser.firstName,
+        lastName: selectedUser.lastName,
+        email: selectedUser.email,
+        password: '',
+        empresa: selectedUser.empresa,
+        roleId: selectedUser.roleId,
+        status: selectedUser.status === 'activo',
+      }
+    }
+    return {
+      firstName: '',
+      lastName: '',
+      email: '',
+      password: '',
+      empresa: '',
+      roleId: '',
+      status: true,
+    }
+  }
 
   const handleCreateUser = () => {
     setSelectedUser(null)
-    setFormData({})
-    setShowPassword(false)
     setIsUserDialogOpen(true)
   }
 
   const handleEditUser = (user: User) => {
     setSelectedUser(user)
-    setFormData({
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      empresa: user.empresa,
-      phone: user.phone || "",
-      cargo: user.cargo || "",
-      roleId: user.roleId,
-      departmentId: user.departmentId,
-      status: user.status,
-      password: "", // Limpiar contraseña al editar
-    })
-    setShowPassword(false)
     setIsUserDialogOpen(true)
   }
 
-  const handleSaveUser = async () => {
+  const handleSaveUser = async (data: Record<string, any>) => {
     try {
       setSavingUser(true)
+      
+      const payload: any = {
+        ...data,
+        status: data.status ? 'activo' : 'inactivo',
+      }
+      
       if (selectedUser) {
-        // Editar
-        const { email: _email, cargo: _cargo, ...updatePayload } = formData
+        // Editar - eliminar email del payload de actualización
+        delete payload.email
         
         // Si la contraseña está vacía, eliminarla del payload
-        if (!updatePayload.password) {
-          delete updatePayload.password
+        if (!payload.password) {
+          delete payload.password
         }
         
-        await usersService.update(selectedUser.id, updatePayload as UpdateUserDto)
-        toast({
-          title: "Usuario actualizado",
-          description: "El usuario ha sido actualizado exitosamente",
-        })
+        await usersService.update(selectedUser.id, payload as UpdateUserDto)
+        toast.success('El usuario ha sido actualizado exitosamente')
       } else {
         // Crear
-        if (!formData.password) {
-          toast({
-            title: "Error",
-            description: "La contraseña es requerida",
-            variant: "destructive",
-          })
-          return
-        }
-        if (!formData.roleId) {
-          toast({
-            title: "Error",
-            description: "El rol es requerido",
-            variant: "destructive",
-          })
-          return
-        }
-        if (!formData.firstName || !formData.lastName || !formData.email || !formData.empresa) {
-          toast({
-            title: "Error",
-            description: "Todos los campos son requeridos",
-            variant: "destructive",
-          })
-          return
-        }
-        await usersService.create(formData as CreateUserDto)
-        toast({
-          title: "Usuario creado",
-          description: "El usuario ha sido creado exitosamente",
-        })
+        await usersService.create(payload as CreateUserDto)
+        toast.success('El usuario ha sido creado exitosamente')
       }
       setIsUserDialogOpen(false)
-      setShowPassword(false)
       loadUsers()
     } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Error al guardar usuario",
-        variant: "destructive",
-      })
-    }
-    finally {
+      toast.error(error instanceof Error ? error.message : 'Error al guardar usuario')
+    } finally {
       setSavingUser(false)
     }
   }
 
 
-  const getRoleColor = (role: string) => {
+  const getRoleBadgeStyles = (role: string): { bg: string; text: string; border: string } => {
     switch (role) {
       case "Administrador":
-        return "bg-red-100 text-red-800"
+        return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' }
       case "Contador":
-        return "bg-blue-100 text-blue-800"
+        return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' }
       case "Vendedor":
-        return "bg-green-100 text-green-800"
+        return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' }
       case "Tesorero":
-        return "bg-purple-100 text-purple-800"
+        return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' }
       default:
-        return "bg-gray-100 text-gray-800"
+        return { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' }
     }
   }
 
-  return (
-    <div className="container mx-auto p-6 space-y-8">
-      {/* Header mejorado con Material Design 3 */}
-      <div className="space-y-2">
-        <h1 className="text-4xl font-bold tracking-tight text-foreground">Usuarios</h1>
-        <p className="text-lg text-muted-foreground">Gestiona los usuarios del sistema y sus accesos</p>
-      </div>
+  const getStatusBadgeStyles = (status: string): { bg: string; text: string; border: string; label: string } => {
+    switch (status) {
+      case 'activo':
+        return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', label: 'Activo' }
+      case 'inactivo':
+        return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', label: 'Inactivo' }
+      case 'pendiente':
+        return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', label: 'Pendiente' }
+      default:
+        return { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', label: status }
+    }
+  }
 
-      {/* Controles con mejor diseño */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-card/50 p-4 rounded-xl border shadow-sm">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
-          <Input 
-            placeholder="Buscar usuarios..." 
-            className="w-full sm:w-80 h-11" 
-            value={searchQuery} 
-            onChange={(e) => setSearchQuery(e.target.value)} 
-          />
-          <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as UserStatus | "all")}>
-            <SelectTrigger className="w-full sm:w-44 h-11">
-              <SelectValue placeholder="Estado" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="activo">Activo</SelectItem>
-              <SelectItem value="inactivo">Inactivo</SelectItem>
-              <SelectItem value="pendiente">Pendiente</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <Button 
-          onClick={handleCreateUser}
-          size="lg"
-          className="w-full sm:w-auto bg-primary hover:bg-primary/90 shadow-md hover:shadow-lg transition-all"
-        >
-          <Plus className="h-5 w-5 mr-2" />
-          Nuevo Usuario
-        </Button>
-      </div>
-
-      {/* Card de tabla con mejor diseño */}
-      <Card className="shadow-md border-0">
-        <CardHeader className="space-y-1 pb-6">
-          <CardTitle className="text-2xl font-semibold">Lista de Usuarios</CardTitle>
-          <CardDescription className="text-base">Gestiona los usuarios del sistema y sus accesos</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="font-semibold">Usuario</TableHead>
-                  <TableHead className="font-semibold">Email</TableHead>
-                  <TableHead className="font-semibold">Rol</TableHead>
-                  <TableHead className="font-semibold">Estado</TableHead>
-                  <TableHead className="font-semibold">Último Acceso</TableHead>
-                  <TableHead className="font-semibold text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12">
-                      <div className="flex flex-col items-center gap-3">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        <p className="text-sm text-muted-foreground">Cargando usuarios...</p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : users.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12">
-                      <p className="text-base text-muted-foreground">No se encontraron usuarios</p>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  users.map((user) => (
-                    <TableRow key={user.id} className="hover:bg-muted/30 transition-colors">
-                      <TableCell className="font-semibold">{user.firstName} {user.lastName}</TableCell>
-                      <TableCell className="text-muted-foreground">{user.email}</TableCell>
-                      <TableCell>
-                        <Badge className={`${getRoleColor(user.role.name)} font-medium`}>{user.role.name}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant={user.status === "activo" ? "default" : "secondary"}
-                          className="font-medium"
-                        >
-                          {user.status === "activo" ? "Activo" : user.status === "inactivo" ? "Inactivo" : "Pendiente"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {user.lastLogin ? new Date(user.lastLogin).toLocaleString("es-MX") : "Nunca"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditUser(user)}
-                            disabled={!!updatingUserId}
-                            className="h-9 w-9 p-0 hover:bg-primary/10 hover:text-primary transition-all"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          {user.deletedAt ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRestoreUser(user.id)}
-                              disabled={updatingUserId === user.id}
-                              className="h-9 w-9 p-0 hover:bg-green-100 hover:text-green-700 transition-all"
-                            >
-                              {updatingUserId === user.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Shield className="h-4 w-4" />
-                              )}
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteUser(user.id)}
-                              disabled={updatingUserId === user.id}
-                              className="h-9 w-9 p-0 hover:bg-destructive/10 hover:text-destructive transition-all"
-                            >
-                              {updatingUserId === user.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+  // DataTable columns configuration
+  const columns: Column<User>[] = useMemo(() => [
+    {
+      key: 'name',
+      header: 'Usuario',
+      render: (user) => (
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-[#f0fdf4] flex items-center justify-center">
+            <UserIcon className="h-4 w-4 text-[#164e63]" />
           </div>
-        </CardContent>
-      </Card>
+          <span className="font-medium text-[#374151]">
+            {user.firstName} {user.lastName}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'email',
+      header: 'Email',
+      render: (user) => (
+        <div className="flex items-center gap-2 text-[#6b7280]">
+          <Mail className="h-4 w-4" />
+          {user.email}
+        </div>
+      ),
+    },
+    {
+      key: 'role',
+      header: 'Rol',
+      render: (user) => {
+        const styles = getRoleBadgeStyles(user.role.name)
+        return (
+          <div className="flex items-center gap-2">
+            <BadgeCheck className="h-4 w-4 text-[#6b7280]" />
+            <span className={cn(
+              "inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium border",
+              styles.bg,
+              styles.text,
+              styles.border
+            )}>
+              {user.role.name}
+            </span>
+          </div>
+        )
+      },
+    },
+    {
+      key: 'status',
+      header: 'Estado',
+      render: (user) => {
+        const styles = getStatusBadgeStyles(user.status)
+        return (
+          <span className={cn(
+            "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border",
+            styles.bg,
+            styles.text,
+            styles.border
+          )}>
+            <span className={cn("w-1.5 h-1.5 rounded-full mr-1.5", styles.text.replace('text-', 'bg-'))} />
+            {styles.label}
+          </span>
+        )
+      },
+    },
+    {
+      key: 'lastLogin',
+      header: 'Último Acceso',
+      render: (user) => (
+        <div className="flex items-center gap-2 text-[#6b7280] text-sm">
+          <Clock className="h-4 w-4" />
+          {user.lastLogin ? new Date(user.lastLogin).toLocaleString('es-MX', {
+            dateStyle: 'short',
+            timeStyle: 'short',
+          }) : 'Nunca'}
+        </div>
+      ),
+    },
+  ], [])
 
-      {/* Dialog mejorado con Material Design 3 */}
+  // DataTable actions configuration
+  const actions = useMemo((): Action<User>[] => [
+    {
+      label: 'Editar',
+      icon: <Edit size={16} />,
+      onClick: (user: User) => handleEditUser(user),
+    },
+    {
+      label: 'Eliminar',
+      icon: <Trash2 size={16} />,
+      onClick: (user: User) => handleDeleteUser(user),
+      disabled: (user: User) => updatingUserId === user.id,
+      hidden: (user: User) => !!user.deletedAt,
+    },
+    {
+      label: 'Habilitar',
+      icon: <Shield size={16} />,
+      onClick: (user: User) => handleRestoreUser(user),
+      disabled: (user: User) => updatingUserId === user.id,
+      hidden: (user: User) => !user.deletedAt,
+    },
+  ], [updatingUserId])
+
+  // Select filters configuration
+  const selectFilters: SelectFilter[] = useMemo(() => [
+    {
+      key: 'status',
+      label: 'Estado',
+      options: [
+        { value: 'activo', label: 'Activo' },
+        { value: 'inactivo', label: 'Inactivo' },
+        { value: 'pendiente', label: 'Pendiente' },
+      ],
+    },
+  ], [])
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage)
+  }
+
+  const handleRowsPerPageChange = (newLimit: number) => {
+    setLimit(newLimit)
+    setPage(1) // Reset to first page when changing limit
+  }
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header - Material Design 3 */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#e5e7eb]">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-[#374151]">Usuarios</h1>
+          <p className="text-[#6b7280]">Gestiona los usuarios del sistema y sus accesos</p>
+        </div>
+        <CreateButton onClick={handleCreateUser}>
+          Nuevo Usuario
+        </CreateButton>
+      </div>
+
+      {/* DataTable with filters and pagination */}
+      <DataTable
+        title="Lista de Usuarios"
+        columns={columns}
+        data={users}
+        keyExtractor={(user) => user.id}
+        actions={actions}
+        loading={loading}
+        emptyMessage="No se encontraron usuarios"
+        // Filters
+        searchFilter={{
+          placeholder: 'Buscar por nombre o email...',
+          debounceMs: 400,
+        }}
+        searchValue={searchQuery}
+        onSearchChange={(value) => {
+          setSearchQuery(value)
+          setPage(1) // Reset to first page on search
+        }}
+        selectFilters={selectFilters}
+        filterValues={{ status: filterStatus }}
+        onFilterChange={(key, value) => {
+          setFilterStatus(value as string)
+          setPage(1) // Reset to first page on filter change
+        }}
+        onClearFilters={() => {
+          setSearchQuery('')
+          setFilterStatus('')
+          setPage(1)
+        }}
+        // Pagination
+        pagination={{
+          page,
+          limit,
+          total,
+          totalPages,
+        }}
+        onPageChange={handlePageChange}
+        onRowsPerPageChange={handleRowsPerPageChange}
+        rowsPerPageOptions={[5, 10, 25, 50]}
+      />
+
+      {/* Dialog - Material Design 3 */}
       <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-xl">
           <DialogHeader className="space-y-2 pb-4">
-            <DialogTitle className="text-2xl font-semibold">
+            <DialogTitle className="text-2xl font-semibold text-[#374151]">
               {selectedUser ? "Editar Usuario" : "Nuevo Usuario"}
             </DialogTitle>
-            <DialogDescription className="text-base">
+            <DialogDescription className="text-base text-[#6b7280]">
               {selectedUser ? "Modifica los datos del usuario" : "Crea un nuevo usuario en el sistema"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-5 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="firstName" className="text-sm font-semibold">Nombre *</Label>
-                <Input 
-                  id="firstName" 
-                  placeholder="Nombre" 
-                  className="h-11"
-                  value={formData.firstName || ""} 
-                  onChange={(e) => setFormData({...formData, firstName: e.target.value})} 
-                  required 
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lastName" className="text-sm font-semibold">Apellido *</Label>
-                <Input 
-                  id="lastName" 
-                  placeholder="Apellido" 
-                  className="h-11"
-                  value={formData.lastName || ""} 
-                  onChange={(e) => setFormData({...formData, lastName: e.target.value})} 
-                  required 
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-semibold">Email *</Label>
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="usuario@electrocosta.com" 
-                className="h-11"
-                value={formData.email || ""} 
-                onChange={(e) => setFormData({...formData, email: e.target.value})} 
-                required 
-              />
-            </div>
-            {(!selectedUser || currentUserRole === 'super_admin') && (
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-semibold">
-                  {selectedUser ? "Nueva Contraseña (opcional)" : "Contraseña *"}
-                </Label>
-                <div className="relative">
-                  <Input 
-                    id="password" 
-                    type={showPassword ? "text" : "password"}
-                    placeholder={selectedUser ? "Dejar vacío para no cambiar" : "********"} 
-                    value={formData.password || ""} 
-                    onChange={(e) => setFormData({...formData, password: e.target.value})} 
-                    required={!selectedUser}
-                    className="pr-10 h-11"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-5 w-5" />
-                    ) : (
-                      <Eye className="h-5 w-5" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="empresa" className="text-sm font-semibold">Empresa *</Label>
-              <Input 
-                id="empresa" 
-                placeholder="Nombre de la empresa" 
-                className="h-11"
-                value={formData.empresa || ""} 
-                onChange={(e) => setFormData({...formData, empresa: e.target.value})} 
-                required 
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="role" className="text-sm font-semibold">Rol *</Label>
-              <Select value={formData.roleId} onValueChange={(value) => setFormData({...formData, roleId: value})}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Selecciona un rol" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((role) => (
-                    <SelectItem key={role.id} value={role.id}>
-                      {role.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center space-x-3 p-4 bg-muted/30 rounded-lg">
-              <Switch 
-                id="active" 
-                checked={formData.status === "activo"} 
-                onCheckedChange={(checked) => setFormData({...formData, status: checked ? "activo" : "inactivo"})} 
-              />
-              <Label htmlFor="active" className="text-sm font-medium cursor-pointer">Usuario activo</Label>
-            </div>
-          </div>
-          <DialogFooter className="gap-3 pt-6">
-            <Button 
-              variant="outline" 
-              size="lg"
-              className="font-medium"
-              onClick={() => {
-                setIsUserDialogOpen(false)
-                setShowPassword(false)
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button 
-              onClick={handleSaveUser} 
-              disabled={savingUser}
-              size="lg"
-              className="bg-primary hover:bg-primary/90 font-semibold shadow-md hover:shadow-lg transition-all"
-            >
-              {savingUser && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-              {selectedUser ? (savingUser ? "Guardando..." : "Guardar Cambios") : (savingUser ? "Creando..." : "Crear Usuario")}
-            </Button>
-          </DialogFooter>
+          <DynamicForm
+            config={{
+              fields: userFormFields,
+              columns: 2,
+              gap: 'medium',
+              variant: 'outlined',
+              density: 'comfortable',
+              defaultValues: getDefaultFormValues(),
+            }}
+            onSubmit={handleSaveUser}
+            onCancel={() => setIsUserDialogOpen(false)}
+            submitLabel={selectedUser ? "Guardar Cambios" : "Crear Usuario"}
+            cancelLabel="Cancelar"
+            loading={savingUser}
+            asDialog
+          />
         </DialogContent>
       </Dialog>
     </div>

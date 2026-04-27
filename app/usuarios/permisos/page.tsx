@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { Shield, Key, Loader2 } from "lucide-react"
+import { Shield, Key, Loader2, Lock, Users, CheckCircle2, XCircle } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { rolesService } from "@/services/roles.service"
 import { permissionsService, type Permission } from "@/services/permissions.service"
 import { useToast } from "@/hooks/use-toast"
@@ -120,6 +120,23 @@ function PermisosPageContent() {
     registrar: "Registrar",
   }
 
+  const getModuleIcon = (module: string) => {
+    return <Shield className="h-4 w-4 text-[#164e63]" />
+  }
+
+  const getModuleColor = (module: string): string => {
+    const colors: Record<string, string> = {
+      usuarios: 'bg-blue-50 text-blue-700 border-blue-200',
+      cuentas_cobrar: 'bg-green-50 text-green-700 border-green-200',
+      cuentas_pagar: 'bg-red-50 text-red-700 border-red-200',
+      reportes: 'bg-purple-50 text-purple-700 border-purple-200',
+      dashboard: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+      carga_informacion: 'bg-amber-50 text-amber-700 border-amber-200',
+      clientes: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    }
+    return colors[module] || 'bg-gray-50 text-gray-700 border-gray-200'
+  }
+
   const handleTogglePermission = async (roleId: string, permissionCode: string, checked: boolean) => {
     const permissionKey = `${roleId}-${permissionCode}`
     
@@ -159,57 +176,112 @@ function PermisosPageContent() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Permisos</h1>
-          <p className="text-muted-foreground">Gestiona la matriz de permisos por rol</p>
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header - Material Design 3 */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#e5e7eb]">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-[#374151]">Permisos</h1>
+          <p className="text-[#6b7280]">Gestiona la matriz de permisos por rol y módulo</p>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Matriz de Permisos</CardTitle>
-          <CardDescription>Gestiona los permisos por rol organizados por módulos</CardDescription>
+      {/* Stats summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl border border-[#e5e7eb] p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#f0fdf4] flex items-center justify-center">
+            <Users className="h-5 w-5 text-[#164e63]" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-[#374151]">{roles.length}</p>
+            <p className="text-xs text-[#6b7280]">Roles configurados</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-[#e5e7eb] p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#f0fdf4] flex items-center justify-center">
+            <Lock className="h-5 w-5 text-[#164e63]" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-[#374151]">{permissions.length}</p>
+            <p className="text-xs text-[#6b7280]">Permisos totales</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-[#e5e7eb] p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
+            <CheckCircle2 className="h-5 w-5 text-green-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-[#374151]">
+              {roles.reduce((acc, role) => acc + (role.permissions?.length || 0), 0)}
+            </p>
+            <p className="text-xs text-[#6b7280]">Asignaciones activas</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-[#e5e7eb] p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+            <Shield className="h-5 w-5 text-blue-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-[#374151]">{Object.keys(groupedPermissions).length}</p>
+            <p className="text-xs text-[#6b7280]">Módulos</p>
+          </div>
+        </div>
+      </div>
+
+      <Card className="border-[#e5e7eb]">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-[#374151]">Matriz de Permisos</CardTitle>
+          <CardDescription className="text-[#6b7280]">Gestiona los permisos por rol organizados por módulos</CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Encabezado de roles */}
-          <div className="mb-4 flex gap-2 items-center">
-            <div className="flex-1 font-semibold text-sm">Permiso</div>
+          {/* Encabezado de roles - MD3 Style */}
+          <div className="mb-4 flex gap-2 items-center bg-[#f9fafb] rounded-xl p-3">
+            <div className="flex-1 font-semibold text-sm text-[#374151]">Permiso / Recurso</div>
             {roles.map((role) => (
               <div key={role.id} className="w-24 text-center">
-                <Badge variant="outline" className="text-xs">
+                <span className={cn(
+                  "inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium border",
+                  role.name === 'super_admin' 
+                    ? 'bg-red-50 text-red-700 border-red-200' 
+                    : 'bg-[#f0fdf4] text-[#164e63] border-[#164e63]/20'
+                )}>
                   {role.name}
-                </Badge>
+                </span>
               </div>
             ))}
           </div>
 
-          {/* Acordeones por módulo */}
-          <Accordion type="multiple" className="w-full">
+          {/* Acordeones por módulo - MD3 Style */}
+          <Accordion type="multiple" className="w-full space-y-2">
             {Object.entries(groupedPermissions).map(([module, resources]) => (
-              <AccordionItem key={module} value={module}>
-                <AccordionTrigger className="hover:no-underline">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-4 w-4" />
-                    <span className="font-semibold">{moduleNames[module] || module}</span>
-                    <Badge variant="secondary" className="ml-2">
+              <AccordionItem key={module} value={module} className="border border-[#e5e7eb] rounded-xl overflow-hidden data-[state=open]:border-[#164e63]/30">
+                <AccordionTrigger className="hover:no-underline px-4 py-3 hover:bg-[#f9fafb] transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", getModuleColor(module).split(' ')[0])}>
+                      {getModuleIcon(module)}
+                    </div>
+                    <span className="font-semibold text-[#374151]">{moduleNames[module] || module}</span>
+                    <span className={cn(
+                      "ml-2 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border",
+                      getModuleColor(module)
+                    )}>
                       {Object.values(resources).flat().length} permisos
-                    </Badge>
+                    </span>
                   </div>
                 </AccordionTrigger>
-                <AccordionContent>
-                  <div className="space-y-4 pt-2">
+                <AccordionContent className="px-4 pb-4">
+                  <div className="space-y-3 pt-2">
                     {Object.entries(resources).map(([resource, perms]) => (
-                      <div key={resource} className="border rounded-lg p-4">
-                        <h4 className="font-medium mb-3 text-sm flex items-center gap-2">
-                          <Key className="h-3 w-3" />
+                      <div key={resource} className="border border-[#e5e7eb] rounded-xl p-4 bg-[#f9fafb]/50">
+                        <h4 className="font-medium mb-3 text-sm flex items-center gap-2 text-[#374151]">
+                          <div className="w-6 h-6 rounded-md bg-[#164e63]/10 flex items-center justify-center">
+                            <Key className="h-3 w-3 text-[#164e63]" />
+                          </div>
                           {resourceNames[resource] || resource}
                         </h4>
                         <div className="space-y-2">
                           {perms.map((permission) => (
-                            <div key={permission.id} className="flex items-center gap-2 py-1">
-                              <div className="flex-1 text-sm text-muted-foreground">
+                            <div key={permission.id} className="flex items-center gap-2 py-2 hover:bg-white rounded-lg px-2 -mx-2 transition-colors">
+                              <div className="flex-1 text-sm text-[#6b7280]">
                                 {actionNames[permission.action] || permission.action}
                               </div>
                               {roles.map((role) => {
@@ -223,7 +295,7 @@ function PermisosPageContent() {
                                 return (
                                   <div key={role.id} className="w-24 flex justify-center items-center">
                                     {isUpdating ? (
-                                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                      <Loader2 className="h-4 w-4 animate-spin text-[#164e63]" />
                                     ) : (
                                       <Switch
                                         checked={isChecked}
@@ -231,7 +303,10 @@ function PermisosPageContent() {
                                         onCheckedChange={(checked) => {
                                           handleTogglePermission(role.id, permission.code, checked)
                                         }}
-                                        className={isSuperAdmin ? "opacity-50 cursor-not-allowed" : ""}
+                                        className={cn(
+                                          isSuperAdmin && "opacity-50 cursor-not-allowed",
+                                          "data-[state=checked]:bg-[#164e63]"
+                                        )}
                                       />
                                     )}
                                   </div>

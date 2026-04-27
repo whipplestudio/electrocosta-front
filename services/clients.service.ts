@@ -6,13 +6,7 @@ export interface Client {
   taxId: string;
   email?: string | null;
   phone?: string | null;
-  address?: string | null;
-  city?: string | null;
-  state?: string | null;
-  zipCode?: string | null;
   contactPerson?: string | null;
-  creditLimit?: number | null;
-  paymentTerms?: number | null;
   notes?: string | null;
   status: string;
   createdAt: string;
@@ -40,6 +34,7 @@ export interface ClientSimple {
   taxId: string;
   email?: string | null;
   phone?: string | null;
+  contactPerson?: string | null;
 }
 
 export const clientsService = {
@@ -154,14 +149,7 @@ export interface CreateClientDto {
   taxId: string;
   email?: string;
   phone?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  country?: string;
   contactPerson?: string;
-  creditLimit?: number;
-  paymentTerms?: number;
   notes?: string;
   status?: string;
 }

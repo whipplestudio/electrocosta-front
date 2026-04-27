@@ -2,19 +2,18 @@
 
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Edit, Building, Mail, Phone, MapPin, CreditCard, Calendar, FileText, Loader2 } from "lucide-react"
+import { Building2, Mail, Phone, Calendar, FileText, Loader2, User, Hash, FileDigit } from "lucide-react"
 import Link from "next/link"
 import { clientsService, Client } from "@/services/clients.service"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
+import { ActionButton } from "@/components/ui"
 
 export default function ClienteDetallePage() {
   const router = useRouter()
   const params = useParams()
-  const { toast } = useToast()
   const [client, setClient] = useState<Client | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -26,11 +25,7 @@ export default function ClienteDetallePage() {
         const clientData = await clientsService.getById(id)
         setClient(clientData)
       } catch (error) {
-        toast({
-          title: "Error",
-          description: "No se pudo cargar la información del cliente",
-          variant: "destructive",
-        })
+        toast.error("No se pudo cargar la información del cliente")
         router.push('/clientes')
       } finally {
         setLoading(false)
@@ -44,8 +39,11 @@ export default function ClienteDetallePage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-10 w-10 animate-spin text-[#164e63]" />
+          <p className="text-sm text-[#475569]">Cargando información del cliente...</p>
+        </div>
       </div>
     )
   }
@@ -55,207 +53,200 @@ export default function ClienteDetallePage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
           <Link href="/clientes">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
+            <ActionButton variant="back" size="sm">
               Volver
-            </Button>
+            </ActionButton>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold">{client.name}</h1>
-            <p className="text-muted-foreground">Información del cliente</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-[#0f172a]">{client.name}</h1>
+            <p className="text-sm text-[#64748b]">Información del cliente</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.push(`/clientes/${client.id}/editar`)}>
-            <Edit className="h-4 w-4 mr-2" />
-            Editar
-          </Button>
-          <Badge variant={client.status === "active" ? "default" : "destructive"} className="h-9 px-4">
-            {client.status === "active" ? "Activo" : "Inactivo"}
-          </Badge>
-        </div>
+        <Badge 
+          variant={client.status === "active" ? "default" : "secondary"} 
+          className={`h-9 px-4 py-2 text-sm font-medium ${
+            client.status === "active" 
+              ? "bg-[#164e63] text-white hover:bg-[#164e63]/90" 
+              : "bg-[#94a3b8] text-white"
+          }`}
+        >
+          {client.status === "active" ? "Activo" : "Inactivo"}
+        </Badge>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Información General */}
         <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building className="h-5 w-5" />
+          <Card className="border-[#e2e8f0] shadow-sm">
+            <CardHeader className="pb-3 border-b border-[#f1f5f9]">
+              <CardTitle className="flex items-center gap-2 text-lg text-[#0f172a]">
+                <div className="p-1.5 rounded-md bg-[#164e63]/10">
+                  <Building2 className="h-5 w-5 text-[#164e63]" />
+                </div>
                 Información General
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Razón Social</label>
-                  <p className="text-base font-medium">{client.name}</p>
+            <CardContent className="pt-5 space-y-5">
+              {/* Razón Social y RFC */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b] flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5" />
+                    Razón Social
+                  </label>
+                  <p className="text-base font-medium text-[#0f172a]">{client.name}</p>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">RFC / Tax ID</label>
-                  <p className="text-base font-mono">{client.taxId}</p>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex items-start gap-3">
-                  <Mail className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Email</label>
-                    <p className="text-base">{client.email || "No especificado"}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Phone className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Teléfono</label>
-                    <p className="text-base">{client.phone || "No especificado"}</p>
-                  </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b] flex items-center gap-1.5">
+                    <Hash className="h-3.5 w-3.5" />
+                    RFC / Tax ID
+                  </label>
+                  <p className="text-base font-mono text-[#334155] bg-[#f8fafc] px-2 py-1 rounded inline-block">
+                    {client.taxId}
+                  </p>
                 </div>
               </div>
 
+              <Separator className="bg-[#e2e8f0]" />
+
+              {/* Email y Teléfono */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b] flex items-center gap-1.5">
+                    <Mail className="h-3.5 w-3.5" />
+                    Email
+                  </label>
+                  <p className="text-base text-[#334155]">
+                    {client.email ? (
+                      <a href={`mailto:${client.email}`} className="text-[#164e63] hover:underline">
+                        {client.email}
+                      </a>
+                    ) : (
+                      <span className="text-[#94a3b8] italic">No especificado</span>
+                    )}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b] flex items-center gap-1.5">
+                    <Phone className="h-3.5 w-3.5" />
+                    Teléfono
+                  </label>
+                  <p className="text-base text-[#334155]">
+                    {client.phone ? (
+                      <a href={`tel:${client.phone}`} className="text-[#164e63] hover:underline">
+                        {client.phone}
+                      </a>
+                    ) : (
+                      <span className="text-[#94a3b8] italic">No especificado</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Persona de Contacto */}
               {client.contactPerson && (
                 <>
-                  <Separator />
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Persona de Contacto</label>
-                    <p className="text-base font-medium">{client.contactPerson}</p>
+                  <Separator className="bg-[#e2e8f0]" />
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b] flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5" />
+                      Persona de Contacto
+                    </label>
+                    <p className="text-base font-medium text-[#0f172a]">{client.contactPerson}</p>
                   </div>
                 </>
               )}
             </CardContent>
           </Card>
 
-          {/* Dirección */}
-          {(client.address || client.city || client.state) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  Dirección
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {client.address && (
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Dirección</label>
-                    <p className="text-base">{client.address}</p>
-                  </div>
-                )}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {client.city && (
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">Ciudad</label>
-                      <p className="text-base">{client.city}</p>
-                    </div>
-                  )}
-                  {client.state && (
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">Estado</label>
-                      <p className="text-base">{client.state}</p>
-                    </div>
-                  )}
-                  {client.zipCode && (
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">Código Postal</label>
-                      <p className="text-base">{client.zipCode}</p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           {/* Notas */}
           {client.notes && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
+            <Card className="border-[#e2e8f0] shadow-sm">
+              <CardHeader className="pb-3 border-b border-[#f1f5f9]">
+                <CardTitle className="flex items-center gap-2 text-lg text-[#0f172a]">
+                  <div className="p-1.5 rounded-md bg-[#0ea5e9]/10">
+                    <FileText className="h-5 w-5 text-[#0ea5e9]" />
+                  </div>
                   Notas
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-base whitespace-pre-wrap">{client.notes}</p>
+              <CardContent className="pt-5">
+                <div className="bg-[#f8fafc] rounded-lg p-4 border border-[#e2e8f0]">
+                  <p className="text-sm text-[#334155] whitespace-pre-wrap leading-relaxed">
+                    {client.notes}
+                  </p>
+                </div>
               </CardContent>
             </Card>
           )}
         </div>
 
-        {/* Información Comercial */}
+        {/* Información del Sistema */}
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5" />
-                Información Comercial
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Límite de Crédito</label>
-                <p className="text-2xl font-bold text-primary">
-                  {client.creditLimit ? `$${client.creditLimit.toLocaleString()}` : "Sin límite"}
-                </p>
-              </div>
-              
-              <Separator />
-
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Días de Crédito</label>
-                <p className="text-xl font-semibold">
-                  {client.paymentTerms ? `${client.paymentTerms} días` : "N/A"}
-                </p>
-              </div>
-
-              <Separator />
-
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Estado</label>
-                <div className="mt-2">
-                  <Badge variant={client.status === "active" ? "default" : "destructive"}>
-                    {client.status === "active" ? "Activo" : "Inactivo"}
-                  </Badge>
+          <Card className="border-[#e2e8f0] shadow-sm">
+            <CardHeader className="pb-3 border-b border-[#f1f5f9]">
+              <CardTitle className="flex items-center gap-2 text-lg text-[#0f172a]">
+                <div className="p-1.5 rounded-md bg-[#64748b]/10">
+                  <Calendar className="h-5 w-5 text-[#64748b]" />
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
                 Información del Sistema
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Fecha de Registro</label>
-                <p className="text-sm">
-                  {new Date(client.createdAt).toLocaleDateString('es-MX', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
-                </p>
+            <CardContent className="pt-5 space-y-4">
+              {/* Estado */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">
+                  Estado
+                </label>
+                <div>
+                  <Badge 
+                    variant={client.status === "active" ? "default" : "secondary"}
+                    className={`text-sm font-medium ${
+                      client.status === "active" 
+                        ? "bg-[#164e63] text-white hover:bg-[#164e63]/90" 
+                        : "bg-[#94a3b8] text-white"
+                    }`}
+                  >
+                    {client.status === "active" ? "● Activo" : "● Inactivo"}
+                  </Badge>
+                </div>
               </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Última Actualización</label>
-                <p className="text-sm">
-                  {new Date(client.updatedAt).toLocaleDateString('es-MX', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
-                </p>
+
+              <Separator className="bg-[#e2e8f0]" />
+
+              {/* Fechas */}
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b] flex items-center gap-1.5">
+                    <FileDigit className="h-3.5 w-3.5" />
+                    Fecha de Registro
+                  </label>
+                  <p className="text-sm font-medium text-[#334155]">
+                    {new Date(client.createdAt).toLocaleDateString('es-MX', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b] flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5" />
+                    Última Actualización
+                  </label>
+                  <p className="text-sm font-medium text-[#334155]">
+                    {new Date(client.updatedAt).toLocaleDateString('es-MX', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>

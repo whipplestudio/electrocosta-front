@@ -1,24 +1,22 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Plus, Edit, Trash2 } from "lucide-react"
+import { Plus, Edit, Trash2, Shield, Users, Layers } from "lucide-react"
+import { ActionButton, CreateButton } from "@/components/ui"
+import { cn } from "@/lib/utils"
 import { rolesService } from "@/services/roles.service"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from 'sonner'
 import type { Role } from "@/types/users"
 import { RouteProtection } from "@/components/route-protection"
+import { DynamicForm, FormFieldConfig } from "@/components/forms"
 
 export default function RolesPage() {
   return (
@@ -29,11 +27,10 @@ export default function RolesPage() {
 }
 
 function RolesPageContent() {
-  const { toast } = useToast()
   const [roles, setRoles] = useState<Role[]>([])
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false)
   const [selectedRole, setSelectedRole] = useState<Role | null>(null)
-  const [roleFormData, setRoleFormData] = useState<{name?: string; description?: string; level?: number}>({ level: 1 })
+  const [savingRole, setSavingRole] = useState(false)
 
   useEffect(() => {
     loadRoles()
@@ -44,53 +41,77 @@ function RolesPageContent() {
       const data = await rolesService.getAll()
       setRoles(data)
     } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Error al cargar roles",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : 'Error al cargar roles')
+    }
+  }
+
+  // Configuración de campos del formulario de roles
+  const roleFormFields: FormFieldConfig[] = useMemo(() => [
+    {
+      name: 'name',
+      label: 'Nombre del rol',
+      type: 'text',
+      placeholder: 'Ej: Supervisor de Ventas',
+      required: true,
+    },
+    {
+      name: 'description',
+      label: 'Descripción',
+      type: 'text',
+      placeholder: 'Describe las responsabilidades del rol',
+    },
+    {
+      name: 'level',
+      label: 'Nivel',
+      type: 'number',
+      placeholder: '1-10',
+      required: true,
+      min: 1,
+      max: 10,
+    },
+  ], [])
+
+  const getDefaultFormValues = () => {
+    if (selectedRole) {
+      return {
+        name: selectedRole.name,
+        description: selectedRole.description || '',
+        level: selectedRole.level,
+      }
+    }
+    return {
+      name: '',
+      description: '',
+      level: 1,
     }
   }
 
   const handleCreateRole = () => {
     setSelectedRole(null)
-    setRoleFormData({ level: 1 })
     setIsRoleDialogOpen(true)
   }
 
   const handleEditRole = (role: Role) => {
     setSelectedRole(role)
-    setRoleFormData({
-      name: role.name,
-      description: role.description,
-      level: role.level,
-    })
     setIsRoleDialogOpen(true)
   }
 
-  const handleSaveRole = async () => {
+  const handleSaveRole = async (data: Record<string, any>) => {
     try {
+      setSavingRole(true)
       if (selectedRole) {
-        await rolesService.update(selectedRole.id, roleFormData as any)
-        toast({
-          title: "Rol actualizado",
-          description: "El rol ha sido actualizado exitosamente",
-        })
+        await rolesService.update(selectedRole.id, data as any)
+        toast.success('El rol ha sido actualizado exitosamente')
       } else {
-        await rolesService.create(roleFormData as any)
-        toast({
-          title: "Rol creado",
-          description: "El rol ha sido creado exitosamente",
-        })
+        await rolesService.create(data as any)
+        toast.success('El rol ha sido creado exitosamente')
       }
       setIsRoleDialogOpen(false)
       loadRoles()
     } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Error al guardar rol",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : 'Error al guardar rol')
+    } finally {
+      setSavingRole(false)
     }
   }
 
@@ -99,102 +120,134 @@ function RolesPageContent() {
     
     try {
       await rolesService.delete(roleId)
-      toast({
-        title: "Rol eliminado",
-        description: "El rol ha sido eliminado exitosamente",
-      })
+      toast.success('El rol ha sido eliminado exitosamente')
       loadRoles()
     } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Error al eliminar rol",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : 'Error al eliminar rol')
     }
   }
 
+  const getRoleCardStyles = (level: number) => {
+    if (level >= 8) return { iconBg: 'bg-red-50', iconColor: 'text-red-600', border: 'border-red-100' }
+    if (level >= 5) return { iconBg: 'bg-purple-50', iconColor: 'text-purple-600', border: 'border-purple-100' }
+    if (level >= 3) return { iconBg: 'bg-blue-50', iconColor: 'text-blue-600', border: 'border-blue-100' }
+    return { iconBg: 'bg-green-50', iconColor: 'text-green-600', border: 'border-green-100' }
+  }
+
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Roles</h1>
-          <p className="text-muted-foreground">Gestiona los roles del sistema</p>
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header - Material Design 3 */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#e5e7eb]">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-[#374151]">Roles</h1>
+          <p className="text-[#6b7280]">Gestiona los roles y permisos del sistema</p>
         </div>
       </div>
 
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Input placeholder="Buscar roles..." className="w-80" />
+            {/* Search removed - can be added back with FloatingInput if needed */}
           </div>
-          <Button onClick={handleCreateRole}>
-            <Plus className="h-4 w-4 mr-2" />
+          <CreateButton onClick={handleCreateRole}>
             Nuevo Rol
-          </Button>
+          </CreateButton>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {roles.map((role) => (
-            <Card key={role.id}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">{role.name}</CardTitle>
-                  <Badge variant="outline">{role._count?.users || 0} usuarios</Badge>
-                </div>
-                <CardDescription>{role.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-sm font-medium">Nivel:</Label>
-                    <p className="text-sm text-muted-foreground mt-1">Nivel {role.level}</p>
+          {roles.map((role) => {
+            const styles = getRoleCardStyles(role.level)
+            return (
+              <Card key={role.id} className={cn("overflow-hidden border", styles.border)}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", styles.iconBg)}>
+                        <Shield className={cn("h-5 w-5", styles.iconColor)} />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg text-[#374151]">{role.name}</CardTitle>
+                        {role.description && (
+                          <CardDescription className="text-sm mt-0.5 line-clamp-1">
+                            {role.description}
+                          </CardDescription>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => handleEditRole(role)}>
-                      <Edit className="h-4 w-4 mr-1" />
-                      Editar
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleDeleteRole(role.id)}>
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Eliminar
-                    </Button>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-4">
+                    {/* Stats row */}
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1.5 text-sm text-[#6b7280]">
+                        <Users className="h-4 w-4" />
+                        <span className="font-medium text-[#374151]">{role._count?.users || 0}</span>
+                        <span>usuarios</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-sm text-[#6b7280]">
+                        <Layers className="h-4 w-4" />
+                        <span>Nivel</span>
+                        <span className={cn("font-medium px-2 py-0.5 rounded-md text-xs", styles.iconBg, styles.iconColor)}>
+                          {role.level}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Actions */}
+                    <div className="flex gap-2 pt-2">
+                      <ActionButton
+                        variant="edit"
+                        size="sm"
+                        onClick={() => handleEditRole(role)}
+                        fullWidth
+                      >
+                        Editar
+                      </ActionButton>
+                      <ActionButton
+                        variant="delete"
+                        size="sm"
+                        onClick={() => handleDeleteRole(role.id)}
+                        fullWidth
+                      >
+                        Eliminar
+                      </ActionButton>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       </div>
 
-      {/* Dialog para crear/editar rol */}
+      {/* Dialog - Material Design 3 */}
       <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{selectedRole ? "Editar Rol" : "Nuevo Rol"}</DialogTitle>
-            <DialogDescription>
-              {selectedRole ? "Modifica los permisos del rol" : "Crea un nuevo rol con permisos específicos"}
+        <DialogContent className="sm:max-w-lg rounded-xl">
+          <DialogHeader className="space-y-2 pb-4">
+            <DialogTitle className="text-2xl font-semibold text-[#374151]">
+              {selectedRole ? "Editar Rol" : "Nuevo Rol"}
+            </DialogTitle>
+            <DialogDescription className="text-base text-[#6b7280]">
+              {selectedRole ? "Modifica los datos del rol" : "Crea un nuevo rol con nivel de acceso específico"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="roleName">Nombre del rol</Label>
-              <Input id="roleName" placeholder="Ej: Supervisor de Ventas" value={roleFormData.name || ""} onChange={(e) => setRoleFormData({...roleFormData, name: e.target.value})} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="roleDescription">Descripción</Label>
-              <Input id="roleDescription" placeholder="Describe las responsabilidades del rol" value={roleFormData.description || ""} onChange={(e) => setRoleFormData({...roleFormData, description: e.target.value})} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="roleLevel">Nivel</Label>
-              <Input id="roleLevel" type="number" placeholder="1-10" value={roleFormData.level || 1} onChange={(e) => setRoleFormData({...roleFormData, level: parseInt(e.target.value) || 1})} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsRoleDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSaveRole}>{selectedRole ? "Guardar Cambios" : "Crear Rol"}</Button>
-          </DialogFooter>
+          <DynamicForm
+            config={{
+              fields: roleFormFields,
+              columns: 1,
+              gap: 'medium',
+              variant: 'outlined',
+              density: 'comfortable',
+              defaultValues: getDefaultFormValues(),
+            }}
+            onSubmit={handleSaveRole}
+            onCancel={() => setIsRoleDialogOpen(false)}
+            submitLabel={selectedRole ? "Guardar Cambios" : "Crear Rol"}
+            cancelLabel="Cancelar"
+            loading={savingRole}
+            asDialog
+          />
         </DialogContent>
       </Dialog>
     </div>

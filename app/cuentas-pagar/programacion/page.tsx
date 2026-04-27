@@ -1,15 +1,10 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useToast } from "@/components/ui/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { DataTable, Column, Action, SelectFilter } from "@/components/ui/data-table"
 import {
   Dialog,
   DialogContent,
@@ -18,14 +13,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Calendar as CalendarIcon, Plus, Search, CheckCircle, Loader2, X, Edit } from "lucide-react"
+import { Calendar as CalendarIcon, Plus, Search, CheckCircle, Loader2, X, Edit, Clock, Ban, CheckCircle2, DollarSign } from "lucide-react"
+import { KpiCard } from "@/components/ui/kpi-card"
+import { ActionButton, CreateButton, CancelButton, EditButton } from "@/components/ui/action-button"
 import { paymentSchedulingService, SchedulePaymentDto, PaymentSchedule } from "@/services/payment-scheduling.service"
 import { accountsPayableService } from "@/services/accounts-payable.service"
 import type { AccountPayable } from "@/types/accounts-payable"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Calendar } from "@/components/ui/calendar"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import { FloatingInput } from "@/components/ui/floating-input"
+import { FloatingSelect, SelectOption } from "@/components/ui/floating-select"
+import { FloatingDatePicker } from "@/components/ui/floating-date-picker"
 
 // Helper para traducir método de pago
 const getPaymentMethodLabel = (method: string | null | undefined) => {
@@ -58,10 +56,23 @@ const formatDateWithoutTimezone = (dateString: string): string => {
 
 export default function ProgramacionPagosPage() {
   const { toast } = useToast()
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filterStatus, setFilterStatus] = useState("all")
   const [loading, setLoading] = useState(true)
   const [schedules, setSchedules] = useState<PaymentSchedule[]>([])
+
+  // Ref para prevenir loop durante montaje inicial
+  const isInitialMount = useRef(true)
+
+  // Estados para paginación server-side (DataTable)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+
+  // Estados para filtros (DataTable)
+  const [filters, setFilters] = useState({
+    search: '',
+    status: 'all' as string,
+  })
   const [availableAccounts, setAvailableAccounts] = useState<AccountPayable[]>([])
   const [showScheduleDialog, setShowScheduleDialog] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -100,29 +111,54 @@ export default function ProgramacionPagosPage() {
     checkNumber?: string
   }>({})
 
-  // Cargar datos
+  // Cargar cuentas disponibles (solo una vez al montar el componente)
+  const loadAvailableAccounts = useCallback(async () => {
+    try {
+      const accountsData = await accountsPayableService.getAll({
+        page: 1,
+        limit: 100,
+        hasBalance: true,
+        approvalStatus: 'approved'
+      })
+      setAvailableAccounts(accountsData.data)
+    } catch (error) {
+      console.error('Error al cargar cuentas disponibles:', error)
+    }
+  }, [])
+
+  // Cargar schedules con paginación y filtros server-side
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [schedulesData, accountsData] = await Promise.all([
-        paymentSchedulingService.getScheduledPayments({ page: 1, limit: 100 }),
-        accountsPayableService.getAll({ page: 1, limit: 100, hasBalance: true, approvalStatus: 'approved' }),
-      ])
+      const params: any = {
+        page,
+        limit,
+      }
+
+      if (filters.status && filters.status !== 'all') {
+        params.status = filters.status
+      }
+      if (filters.search) {
+        params.search = filters.search
+      }
+
+      const schedulesData = await paymentSchedulingService.getScheduledPayments(params)
+      console.log("🚀 ~ ProgramacionPagosPage ~ schedulesData:", schedulesData)
 
       setSchedules(schedulesData.data)
+      setTotal(schedulesData.total)
+      setTotalPages(Math.ceil(schedulesData.total / limit) || 1)
+
       if (schedulesData.summary) {
         setSummary({
-          totalScheduled: schedulesData.summary.totalScheduled || 0,
-          totalCompleted: schedulesData.summary.totalCompleted || 0,
-          totalCancelled: schedulesData.summary.totalCancelled || 0,
+          totalScheduled: Number(schedulesData.summary.totalScheduled) || 0,
+          totalCompleted: Number(schedulesData.summary.totalCompleted) || 0,
+          totalCancelled: Number(schedulesData.summary.totalCancelled) || 0,
           countScheduled: schedulesData.summary.countScheduled || 0,
           countCompleted: schedulesData.summary.countCompleted || 0,
           countCancelled: schedulesData.summary.countCancelled || 0,
         })
       }
-
-      // Usar directamente las cuentas del backend (ya filtradas por hasBalance y approvalStatus)
-      setAvailableAccounts(accountsData.data)
     } catch (error) {
       console.error('Error al cargar datos:', error)
       toast({
@@ -133,11 +169,24 @@ export default function ProgramacionPagosPage() {
     } finally {
       setLoading(false)
     }
+  }, [page, limit, filters.status, filters.search])
+
+  // Cargar cuentas disponibles solo al montar el componente
+  useEffect(() => {
+    loadAvailableAccounts()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Cargar schedules cuando cambian filtros o paginación (dependencias primitivas)
   useEffect(() => {
     loadData()
-  }, [loadData])
+    // Marcar que ya pasó el montaje inicial después del primer load
+    const timer = setTimeout(() => {
+      isInitialMount.current = false
+    }, 500)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, limit, filters.status, filters.search])
 
   // Formatear número con separadores de miles (permite punto decimal mientras se escribe)
   const formatNumber = (value: string): string => {
@@ -413,21 +462,48 @@ export default function ProgramacionPagosPage() {
     }
   }
 
-  // Filtrar pagos
-  const filteredSchedules = schedules.filter((schedule) => {
-    const supplierName = schedule.accountPayable?.supplier?.name || (schedule.accountPayable as any)?.supplierName || '';
-    const matchesSearch =
-      supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      schedule.accountPayable?.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      schedule.reference?.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesStatus = filterStatus === "all" || schedule.status === filterStatus
-    
-    return matchesSearch && matchesStatus
-  })
+  // Callbacks para DataTable - memoizados para evitar bucles infinitos
+  const handleSearchChange = useCallback((value: string) => {
+    if (isInitialMount.current) return // Ignorar durante montaje inicial
+    setFilters((prev) => ({ ...prev, search: value }))
+    setPage(1)
+  }, [])
 
-  // Calcular totales filtrados
-  const totalProgramado = filteredSchedules.reduce((sum, s) => sum + Number(s.amount), 0)
+  const handleFilterChange = useCallback((key: string, value: string | string[]) => {
+    if (isInitialMount.current) return // Ignorar durante montaje inicial
+    setFilters((prev) => ({ ...prev, [key]: value as string }))
+    setPage(1)
+  }, [])
+
+  const handleClearFilters = useCallback(() => {
+    if (isInitialMount.current) return // Ignorar durante montaje inicial
+    setFilters({ search: '', status: 'all' })
+    setPage(1)
+    toast({
+      title: 'Filtros limpiados',
+      description: 'Se han restablecido los filtros de búsqueda'
+    })
+  }, [])
+
+  const handlePageChange = useCallback((newPage: number) => {
+    if (isInitialMount.current) return // Ignorar durante montaje inicial
+    setPage(newPage)
+  }, [])
+
+  const handleRowsPerPageChange = useCallback((newLimit: number) => {
+    if (isInitialMount.current) return // Ignorar durante montaje inicial
+    setLimit(newLimit)
+    setPage(1)
+  }, [])
+
+  // Handler para cerrar el dialog y limpiar el formulario
+  const handleCloseDialog = useCallback((open: boolean) => {
+    if (!open) {
+      // Se está cerrando el dialog (clic fuera o botón cerrar)
+      resetForm()
+    }
+    setShowScheduleDialog(open)
+  }, [])
 
   // Badge de estado
   const getStatusBadge = (status: string) => {
@@ -443,7 +519,122 @@ export default function ProgramacionPagosPage() {
     }
   }
 
-  if (loading) {
+  // Configuración de columnas para el DataTable - memoizada para estabilidad
+  const columns = useMemo<Column<PaymentSchedule>[]>(() => [
+    {
+      key: 'supplier',
+      header: 'Proveedor',
+      render: (row) => (
+        <div>
+          <div className="font-medium">
+            {row.accountPayable?.supplier?.name || (row.accountPayable as any)?.supplierName || 'N/A'}
+          </div>
+          {row.reference && (
+            <div className="text-sm text-muted-foreground">Ref: {row.reference}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'invoice',
+      header: 'Factura',
+      render: (row) => (
+        <span className="font-medium">{row.accountPayable?.invoiceNumber || 'N/A'}</span>
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'Monto',
+      render: (row) => (
+        <span className="font-medium">{formatCurrency(row.amount)}</span>
+      ),
+    },
+    {
+      key: 'scheduledDate',
+      header: 'Fecha Programada',
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+          {formatDateWithoutTimezone(row.scheduledDate)}
+        </div>
+      ),
+    },
+    {
+      key: 'paymentMethod',
+      header: 'Método',
+      render: (row) => (
+        <div>
+          <div className="text-sm font-medium">{getPaymentMethodLabel(row.paymentMethod)}</div>
+          {row.bankAccount && (
+            <div className="text-xs text-muted-foreground">{row.bankAccount}</div>
+          )}
+          {row.checkNumber && (
+            <div className="text-xs text-muted-foreground">CHK: {row.checkNumber}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Estado',
+      render: (row) => getStatusBadge(row.status),
+    },
+  ], [])
+
+  // Configuración de acciones para el DataTable
+  const actions = useMemo<Action<PaymentSchedule>[]>(() => [
+    {
+      label: 'Editar',
+      icon: <Edit className="h-4 w-4" />,
+      onClick: (row) => handleEditSchedule(row),
+      hidden: (row) => row.status !== 'scheduled',
+      disabled: (row) => cancellingId === row.id || loadingSchedule,
+    },
+    {
+      label: 'Cancelar',
+      icon: <X className="h-4 w-4" />,
+      onClick: (row) => handleCancelSchedule(row.id),
+      hidden: (row) => row.status !== 'scheduled',
+      disabled: (row) => cancellingId === row.id,
+    },
+  ], [cancellingId, loadingSchedule, handleEditSchedule, handleCancelSchedule])
+
+  // Configuración de filtros de selección para el DataTable
+  const selectFilters = useMemo<SelectFilter[]>(() => [
+    {
+      key: 'status',
+      label: 'Estado',
+      options: [
+        { value: 'all', label: 'Todos los estados' },
+        { value: 'scheduled', label: 'Programado' },
+        { value: 'completed', label: 'Ejecutado' },
+        { value: 'cancelled', label: 'Cancelado' },
+      ],
+    },
+  ], [])
+
+  // Valores memoizados para DataTable (evitar re-renders infinitos)
+  const keyExtractor = useCallback((row: PaymentSchedule) => row.id, [])
+
+  const searchFilterConfig = useMemo(() => ({
+    placeholder: 'Buscar por proveedor, factura o referencia...',
+    debounceMs: 400,
+  }), [])
+
+  const filterValues = useMemo(() => ({
+    status: filters.status,
+  }), [filters.status])
+
+  const pagination = useMemo(() => ({
+    page,
+    limit,
+    total,
+    totalPages,
+  }), [page, limit, total, totalPages])
+
+  const rowsPerPageOptions = useMemo(() => [10, 25, 50], [])
+
+  if (loading && schedules.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -458,203 +649,71 @@ export default function ProgramacionPagosPage() {
           <h1 className="text-3xl font-bold">Programación de Pagos</h1>
           <p className="text-muted-foreground">Gestión y seguimiento de pagos programados</p>
         </div>
-        <Button onClick={() => setShowScheduleDialog(true)}>
-          <Plus className="h-4 w-4 mr-2" />
+        <CreateButton onClick={() => setShowScheduleDialog(true)}>
           Programar Pago
-        </Button>
+        </CreateButton>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs - usar totales del summary ya que son globales, no de la página actual */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Total Programado</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalProgramado)}</div>
-            <p className="text-xs text-muted-foreground">{filteredSchedules.length} pagos</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Pendientes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {formatCurrency(summary.totalScheduled)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {summary.countScheduled} pagos
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Cancelados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(summary.totalCancelled)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {summary.countCancelled} pagos
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Ejecutados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(summary.totalCompleted)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {summary.countCompleted} pagos
-            </p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Total Programado"
+          value={formatCurrency(summary.totalScheduled + summary.totalCompleted + summary.totalCancelled)}
+          subtitle={`${summary.countScheduled + summary.countCompleted + summary.countCancelled} pagos`}
+          icon={<DollarSign className="h-4 w-4" />}
+          variant="default"
+        />
+        <KpiCard
+          title="Pendientes"
+          value={formatCurrency(summary.totalScheduled)}
+          subtitle={`${summary.countScheduled} pagos`}
+          icon={<Clock className="h-4 w-4" />}
+          variant="info"
+        />
+        <KpiCard
+          title="Cancelados"
+          value={formatCurrency(summary.totalCancelled)}
+          subtitle={`${summary.countCancelled} pagos`}
+          icon={<Ban className="h-4 w-4" />}
+          variant="danger"
+        />
+        <KpiCard
+          title="Ejecutados"
+          value={formatCurrency(summary.totalCompleted)}
+          subtitle={`${summary.countCompleted} pagos`}
+          icon={<CheckCircle2 className="h-4 w-4" />}
+          variant="success"
+        />
       </div>
 
-      {/* Tabla */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Pagos Programados</CardTitle>
-          <CardDescription>Lista de pagos programados y su estado actual</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="Buscar por proveedor, factura o referencia..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los estados</SelectItem>
-                <SelectItem value="scheduled">Programado</SelectItem>
-                <SelectItem value="completed">Ejecutado</SelectItem>
-                <SelectItem value="cancelled">Cancelado</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Proveedor</TableHead>
-                  <TableHead>Factura</TableHead>
-                  <TableHead>Monto</TableHead>
-                  <TableHead>Fecha Programada</TableHead>
-                  <TableHead>Método</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredSchedules.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      No se encontraron pagos programados
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredSchedules.map((schedule) => (
-                    <TableRow key={schedule.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{schedule.accountPayable?.supplier?.name || (schedule.accountPayable as any)?.supplierName || 'N/A'}</div>
-                          {schedule.reference && (
-                            <div className="text-sm text-muted-foreground">Ref: {schedule.reference}</div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {schedule.accountPayable?.invoiceNumber || 'N/A'}
-                      </TableCell>
-                      <TableCell className="font-medium">${Number(schedule.amount).toLocaleString()}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                          {formatDateWithoutTimezone(schedule.scheduledDate)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="text-sm font-medium">{getPaymentMethodLabel(schedule.paymentMethod)}</div>
-                          {schedule.bankAccount && (
-                            <div className="text-xs text-muted-foreground">{schedule.bankAccount}</div>
-                          )}
-                          {schedule.checkNumber && (
-                            <div className="text-xs text-muted-foreground">CHK: {schedule.checkNumber}</div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{getStatusBadge(schedule.status)}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          {schedule.status === "scheduled" && (
-                            <>
-                              <Button 
-                                size="sm" 
-                                variant="ghost"
-                                onClick={() => handleEditSchedule(schedule)}
-                                disabled={cancellingId === schedule.id || loadingSchedule}
-                              >
-                                {loadingSchedule ? (
-                                  <>
-                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                    Cargando...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Edit className="h-4 w-4 mr-1" />
-                                    Editar
-                                  </>
-                                )}
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => handleCancelSchedule(schedule.id)}
-                                disabled={cancellingId === schedule.id}
-                              >
-                                {cancellingId === schedule.id ? (
-                                  <>
-                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                    Cancelando...
-                                  </>
-                                ) : (
-                                  <>
-                                    <X className="h-4 w-4 mr-1" />
-                                    Cancelar
-                                  </>
-                                )}
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      {/* DataTable de Pagos Programados */}
+      <DataTable
+        title="Pagos Programados"
+        columns={columns}
+        data={schedules}
+        keyExtractor={keyExtractor}
+        actions={actions}
+        loading={loading}
+        emptyMessage="No se encontraron pagos programados"
+        // Filtros de búsqueda
+        searchFilter={searchFilterConfig}
+        searchValue={filters.search}
+        onSearchChange={handleSearchChange}
+        // Filtros de selección
+        selectFilters={selectFilters}
+        filterValues={filterValues}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
+        // Paginación server-side
+        pagination={pagination}
+        onPageChange={handlePageChange}
+        onRowsPerPageChange={handleRowsPerPageChange}
+        rowsPerPageOptions={rowsPerPageOptions}
+      />
 
       {/* Dialog Programar Pago */}
-      <Dialog open={showScheduleDialog} onOpenChange={setShowScheduleDialog}>
-        <DialogContent className="max-w-md">
+      <Dialog open={showScheduleDialog} onOpenChange={handleCloseDialog}>
+        <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>{isEditing ? 'Editar Pago Programado' : 'Programar Nuevo Pago'}</DialogTitle>
             <DialogDescription>
@@ -663,46 +722,41 @@ export default function ProgramacionPagosPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Cuenta por Pagar *</Label>
-              <Select 
+              <FloatingSelect
+                label="Cuenta por Pagar *"
                 value={formData.accountPayableId}
-                onValueChange={handleSelectAccount}
-              >
-                <SelectTrigger className={errors.accountPayableId ? "border-red-500" : ""}>
-                  <SelectValue placeholder="Seleccionar cuenta" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableAccounts.map(account => (
-                    <SelectItem key={account.id} value={account.id}>
-                      {account.invoiceNumber} - {account.supplier?.name || (account as any).supplierName || 'N/A'} - ${Number(account.amount).toLocaleString()}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.accountPayableId && (
-                <p className="text-sm text-red-500 mt-1">{errors.accountPayableId}</p>
-              )}
-              
-              {/* Info de montos de la cuenta seleccionada */}
+                onChange={(value) => handleSelectAccount(value as string)}
+                options={availableAccounts.map(account => ({
+                  value: account.id,
+                  label: `${account.invoiceNumber} - ${account.supplier?.name || (account as any).supplierName || 'N/A'} - ${formatCurrency(account.amount)}`
+                }))}
+                error={errors.accountPayableId}
+                placeholder="Seleccionar cuenta"
+                searchable
+                searchPlaceholder="Buscar factura o proveedor..."
+              />
+
+              {/* Info de montos de la cuenta seleccionada - UI mejorada */}
               {selectedAccountInfo && (
-                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    <div className="text-center">
-                      <p className="text-muted-foreground">Total</p>
-                      <p className="font-semibold text-blue-900">
-                        ${selectedAccountInfo.totalAmount.toLocaleString()}
+                <div className="mt-3 p-4 bg-gradient-to-r from-[#f0fdf4] to-white border border-[#164e63]/20 rounded-xl shadow-sm">
+                  <p className="text-xs font-medium text-[#164e63] uppercase tracking-wide mb-3">Resumen de la Cuenta</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="text-center p-2 bg-white rounded-lg border border-gray-100">
+                      <p className="text-xs text-muted-foreground mb-1">Total</p>
+                      <p className="font-semibold text-[#374151]">
+                        {formatCurrency(selectedAccountInfo.totalAmount)}
                       </p>
                     </div>
-                    <div className="text-center border-l border-blue-200">
-                      <p className="text-muted-foreground">Programado</p>
-                      <p className="font-semibold text-amber-600">
-                        ${selectedAccountInfo.scheduledAmount.toLocaleString()}
+                    <div className="text-center p-2 bg-amber-50/50 rounded-lg border border-amber-100">
+                      <p className="text-xs text-amber-600 mb-1">Programado</p>
+                      <p className="font-semibold text-amber-700">
+                        {formatCurrency(selectedAccountInfo.scheduledAmount)}
                       </p>
                     </div>
-                    <div className="text-center border-l border-blue-200">
-                      <p className="text-muted-foreground">Restante</p>
-                      <p className="font-semibold text-green-600">
-                        ${selectedAccountInfo.remainingAmount.toLocaleString()}
+                    <div className="text-center p-2 bg-green-50/50 rounded-lg border border-green-100">
+                      <p className="text-xs text-green-600 mb-1">Restante</p>
+                      <p className="font-semibold text-green-700">
+                        {formatCurrency(selectedAccountInfo.remainingAmount)}
                       </p>
                     </div>
                   </div>
@@ -711,147 +765,92 @@ export default function ProgramacionPagosPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Monto *</Label>
-                <Input 
-                  type="text"
-                  value={formatNumber(String(formData.scheduledAmount || ''))}
-                  onChange={(e) => handleAmountChange(e.target.value)}
-                  className={errors.scheduledAmount ? "border-red-500" : ""}
-                />
-                {errors.scheduledAmount && (
-                  <p className="text-sm text-red-500 mt-1">{errors.scheduledAmount}</p>
-                )}
-              </div>
-              <div>
-                <Label>Fecha de Pago *</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      className={`w-full justify-start text-left font-normal ${!formData.scheduledDate ? 'text-muted-foreground' : ''} ${errors.scheduledDate ? 'border-red-500' : ''}`}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {formData.scheduledDate ? format(formData.scheduledDate, "dd/MM/yyyy", { locale: es }) : "Seleccionar fecha"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar 
-                      mode="single"
-                      selected={formData.scheduledDate}
-                      onSelect={(date) => {
-                        setFormData({...formData, scheduledDate: date || new Date()})
-                        setErrors(prev => ({ ...prev, scheduledDate: undefined }))
-                      }}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                {errors.scheduledDate && (
-                  <p className="text-sm text-red-500 mt-1">{errors.scheduledDate}</p>
-                )}
-              </div>
+              <FloatingInput
+                label="Monto *"
+                type="text"
+                value={formatNumber(String(formData.scheduledAmount || ''))}
+                onChange={(e) => handleAmountChange(e.target.value)}
+                error={errors.scheduledAmount}
+                startAdornment={<DollarSign className="h-4 w-4" />}
+              />
+              <FloatingDatePicker
+                label="Fecha de Pago *"
+                value={formData.scheduledDate}
+                onChange={(date) => {
+                  setFormData({...formData, scheduledDate: date as Date || new Date()})
+                  setErrors(prev => ({ ...prev, scheduledDate: undefined }))
+                }}
+                mode="single"
+                error={errors.scheduledDate}
+              />
             </div>
 
-            <div>
-              <Label>Método de Pago *</Label>
-              <Select 
-                value={formData.paymentMethod}
-                onValueChange={(value: any) => setFormData({ ...formData, paymentMethod: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="transfer">Transferencia bancaria</SelectItem>
-                  <SelectItem value="check">Cheque</SelectItem>
-                  <SelectItem value="cash">Efectivo</SelectItem>
-                  <SelectItem value="card">Tarjeta</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <FloatingSelect
+              label="Método de Pago *"
+              value={formData.paymentMethod}
+              onChange={(value) => setFormData({ ...formData, paymentMethod: value as 'transfer' | 'check' | 'cash' })}
+              options={[
+                { value: 'transfer', label: 'Transferencia bancaria' },
+                { value: 'check', label: 'Cheque' },
+                { value: 'cash', label: 'Efectivo' },
+                { value: 'card', label: 'Tarjeta' },
+              ]}
+            />
 
             {formData.paymentMethod === 'transfer' && (
-              <div>
-                <Label>Cuenta Bancaria *</Label>
-                <Input 
-                  value={formData.bankAccount}
-                  onChange={(e) => {
-                    setFormData({ ...formData, bankAccount: e.target.value })
-                    setErrors(prev => ({ ...prev, bankAccount: undefined }))
-                  }}
-                  placeholder="Ej: 1234567890 o CLABE"
-                  className={errors.bankAccount ? "border-red-500" : ""}
-                />
-                {errors.bankAccount && (
-                  <p className="text-sm text-red-500 mt-1">{errors.bankAccount}</p>
-                )}
-              </div>
+              <FloatingInput
+                label="Cuenta Bancaria *"
+                value={formData.bankAccount}
+                onChange={(e) => {
+                  setFormData({ ...formData, bankAccount: e.target.value })
+                  setErrors(prev => ({ ...prev, bankAccount: undefined }))
+                }}
+                placeholder="Ej: 1234567890 o CLABE"
+                error={errors.bankAccount}
+              />
             )}
 
             {formData.paymentMethod === 'check' && (
-              <div>
-                <Label>Número de Cheque *</Label>
-                <Input 
-                  value={formData.checkNumber}
-                  onChange={(e) => {
-                    setFormData({ ...formData, checkNumber: e.target.value })
-                    setErrors(prev => ({ ...prev, checkNumber: undefined }))
-                  }}
-                  placeholder="Ej: CHK-001 o 123456"
-                  className={errors.checkNumber ? "border-red-500" : ""}
-                />
-                {errors.checkNumber && (
-                  <p className="text-sm text-red-500 mt-1">{errors.checkNumber}</p>
-                )}
-              </div>
+              <FloatingInput
+                label="Número de Cheque *"
+                value={formData.checkNumber}
+                onChange={(e) => {
+                  setFormData({ ...formData, checkNumber: e.target.value })
+                  setErrors(prev => ({ ...prev, checkNumber: undefined }))
+                }}
+                placeholder="Ej: CHK-001 o 123456"
+                error={errors.checkNumber}
+              />
             )}
 
-            <div>
-              <Label>Referencia</Label>
-              <Input 
-                value={formData.reference}
-                onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
-                placeholder="Ej: REF-PAY-001 (opcional)"
-              />
-            </div>
+            <FloatingInput
+              label="Referencia"
+              value={formData.reference}
+              onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+              placeholder="Ej: REF-PAY-001 (opcional)"
+            />
 
-            <div>
-              <Label>Notas</Label>
-              <Textarea 
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Ingrese notas o comentarios adicionales (opcional)"
-                rows={3}
-              />
-            </div>
+            <FloatingInput
+              label="Notas"
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              placeholder="Ingrese notas o comentarios adicionales (opcional)"
+            />
           </div>
           <DialogFooter>
-            <Button 
-              type="button"
-              variant="outline" 
+            <CancelButton
               disabled={submitting}
-              onClick={() => {
-                setShowScheduleDialog(false)
-                resetForm()
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button 
-              type="button"
-              onClick={handleSchedulePayment} 
+              onClick={() => setShowScheduleDialog(false)}
+            />
+            <ActionButton
+              variant={isEditing ? 'save' : 'create'}
+              onClick={handleSchedulePayment}
               disabled={submitting}
+              loading={submitting}
+              loadingText={isEditing ? 'Actualizando...' : 'Programando...'}
             >
-              {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {isEditing ? 'Actualizando...' : 'Programando...'}
-                </>
-              ) : (
-                isEditing ? 'Actualizar Pago' : 'Programar Pago'
-              )}
-            </Button>
+              {isEditing ? 'Actualizar Pago' : 'Programar Pago'}
+            </ActionButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

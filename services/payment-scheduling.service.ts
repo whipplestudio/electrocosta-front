@@ -1,4 +1,5 @@
 import apiClient from '@/lib/api-client';
+import type { Payment } from '@/types/accounts-payable';
 
 export interface SchedulePaymentDto {
   scheduledDate: string;
@@ -115,6 +116,13 @@ export const paymentSchedulingService = {
   async getScheduleById(scheduleId: string): Promise<PaymentSchedule> {
     const response = await apiClient.get<PaymentSchedule>(
       `/payment-schedules/${scheduleId}`
+    );
+    return response.data;
+  },
+
+  async getSchedulePayments(scheduleId: string): Promise<Payment[]> {
+    const response = await apiClient.get<Payment[]>(
+      `/payment-schedules/${scheduleId}/payments`
     );
     return response.data;
   },

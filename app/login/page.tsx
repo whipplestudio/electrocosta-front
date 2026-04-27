@@ -1,17 +1,34 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { DollarSign, Mail, Lock, Eye, EyeOff } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { DollarSign } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
 import { authService } from "@/services/auth.service"
+import { DynamicForm, FormFieldConfig } from "@/components/forms"
+
+// Configuración de campos del formulario de login
+const loginFields: FormFieldConfig[] = [
+  {
+    name: 'email',
+    label: 'Correo Electrónico',
+    type: 'email',
+    placeholder: 'usuario@electrocosta.com',
+    required: true,
+    autocomplete: 'email',
+  },
+  {
+    name: 'password',
+    label: 'Contraseña',
+    type: 'password',
+    placeholder: 'Ingresa tu contraseña',
+    required: true,
+    minLength: 8,
+    autocomplete: 'current-password',
+  },
+]
 
 // Componente separado que usa useSearchParams
 function LoginErrorHandler() {
@@ -33,21 +50,15 @@ function LoginErrorHandler() {
 
 function LoginForm() {
   const router = useRouter()
-  const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  })
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (data: Record<string, any>) => {
     setIsLoading(true)
 
     try {
       const response = await authService.login({
-        email: formData.email,
-        password: formData.password,
+        email: data.email,
+        password: data.password,
       })
 
       toast.success(`¡Bienvenido, ${response.user.firstName}!`)
@@ -83,69 +94,31 @@ function LoginForm() {
             </div>
           </CardHeader>
 
-          <form onSubmit={handleSubmit}>
-            {/* Contenido del formulario mejorado */}
-            <CardContent className="space-y-6 px-8">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-semibold">Correo Electrónico</Label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="usuario@electrocoasta.com"
-                    className="pl-12 h-12 text-base"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password" className="text-sm font-semibold">Contraseña</Label>
-                  <Link 
-                    href="/recuperar-password" 
-                    className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
-                  >
-                    ¿Olvidaste tu contraseña?
-                  </Link>
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Ingresa tu contraseña"
-                    className="pl-12 pr-12 h-12 text-base"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
-              </div>
-            </CardContent>
-
-            {/* Footer con botón mejorado */}
-            <CardFooter className="flex flex-col space-y-4 px-8 pb-8 pt-2">
-              <Button 
-                type="submit" 
-                className="w-full h-12 text-base font-semibold bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all" 
-                size="lg" 
-                disabled={isLoading}
-              >
-                {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
-              </Button>
-            </CardFooter>
-          </form>
+          <CardContent className="px-8 pb-8">
+            {/* Formulario usando DynamicForm */}
+            <DynamicForm
+              config={{
+                fields: loginFields,
+                columns: 1,
+                gap: 'medium',
+                variant: 'outlined',
+                density: 'comfortable',
+              }}
+              onSubmit={handleSubmit}
+              loading={isLoading}
+              submitLabel="Iniciar Sesión"
+              showCancel={false}
+              footerClassName="pt-4"
+              extraButtons={
+                <Link
+                  href="/recuperar-password"
+                  className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+                >
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              }
+            />
+          </CardContent>
         </Card>
       </div>
     </>

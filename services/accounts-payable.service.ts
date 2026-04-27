@@ -7,10 +7,12 @@ import type {
   ApproveAccountPayableDto,
   RejectAccountPayableDto,
   RegisterPaymentDto,
+  UpdatePaymentDto,
   CreatePaymentScheduleDto,
   AccountPayableFiltersDto,
   DashboardData,
   PaymentSummary,
+  Payment,
 } from '@/types/accounts-payable';
 
 export const accountsPayableService = {
@@ -86,7 +88,19 @@ export const accountsPayableService = {
       const response = await apiClient.post<AccountPayable>(`/accounts-payable/${id}/payments`, data);
       return response.data;
     } catch (error) {
-      throw new Error(handleApiError(error));
+      throw handleApiError(error);
+    }
+  },
+
+  async updatePayment(accountId: string, paymentId: string, data: UpdatePaymentDto): Promise<{ payment: Payment; message: string }> {
+    try {
+      const response = await apiClient.patch<{ payment: Payment; message: string }>(
+        `/accounts-payable/${accountId}/payments/${paymentId}`,
+        data
+      );
+      return response.data;
+    } catch (error) {
+      throw handleApiError(error);
     }
   },
 

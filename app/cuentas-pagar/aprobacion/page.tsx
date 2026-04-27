@@ -1,15 +1,11 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { toast } from "sonner"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { DataTable, Column, Action } from "@/components/ui/data-table"
 import {
   Dialog,
   DialogContent,
@@ -18,13 +14,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { CheckCircle, XCircle, Clock, Search, Loader2, AlertCircle } from "lucide-react"
+import { CheckCircle, XCircle, Clock, Loader2, AlertCircle, DollarSign } from "lucide-react"
+import { KpiCard } from "@/components/ui/kpi-card"
+import { ActionButton, CancelButton } from "@/components/ui/action-button"
 import { paymentApprovalService, type PendingApproval } from "@/services/payment-approval.service"
 
 export default function AprobacionPage() {
   const [loading, setLoading] = useState(true)
   const [approvals, setApprovals] = useState<PendingApproval[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
   const [selectedApproval, setSelectedApproval] = useState<PendingApproval | null>(null)
   const [showApproveDialog, setShowApproveDialog] = useState(false)
   const [showRejectDialog, setShowRejectDialog] = useState(false)
@@ -39,12 +36,37 @@ export default function AprobacionPage() {
     countApproved: 0,
   })
 
-  // Cargar datos
+  // Ref para prevenir loop durante montaje inicial
+  const isInitialMount = useRef(true)
+
+  // Estados para paginación server-side (DataTable)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+
+  // Estados para filtros (DataTable)
+  const [filters, setFilters] = useState({
+    search: '',
+  })
+
+  // Cargar datos con paginación y filtros server-side
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const data = await paymentApprovalService.getPendingApprovals({ page: 1, limit: 100 })
+      const params: any = {
+        page,
+        limit,
+      }
+
+      if (filters.search) {
+        params.search = filters.search
+      }
+
+      const data = await paymentApprovalService.getPendingApprovals(params)
       setApprovals(data.data || [])
+      setTotal(data.total || 0)
+      setTotalPages(data.totalPages || Math.ceil(data.total / limit) || 1)
       setSummary({
         totalPending: Number(data.summary?.totalPending) || 0,
         countPending: Number(data.summary?.countPending) || 0,
@@ -55,14 +77,19 @@ export default function AprobacionPage() {
       const errorMessage = error.response?.data?.message || error.message || "Error al cargar las solicitudes de aprobación"
       toast.error(errorMessage)
     } finally {
-      console.log('Finalizando carga de datos')
       setLoading(false)
     }
-  }, [])
+  }, [page, limit, filters.search])
 
+  // Cargar datos cuando cambian filtros o paginación
   useEffect(() => {
     loadData()
-  }, [loadData])
+    const timer = setTimeout(() => {
+      isInitialMount.current = false
+    }, 500)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, limit, filters.search])
 
   // Aprobar pago
   const handleApprove = (approval: PendingApproval) => {
@@ -155,16 +182,30 @@ export default function AprobacionPage() {
     }
   }
 
-  // Filtrar aprobaciones
-  const filteredApprovals = approvals.filter(approval => {
-    const supplierName = approval.accountPayable.supplier?.name || (approval.accountPayable as any).supplierName || '';
-    const description = approval.accountPayable.description || '';
-    const matchSearch = 
-      supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      approval.accountPayable.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      description.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchSearch
-  })
+  // Callbacks para DataTable - memoizados para evitar bucles infinitos
+  const handleSearchChange = useCallback((value: string) => {
+    if (isInitialMount.current) return
+    setFilters((prev) => ({ ...prev, search: value }))
+    setPage(1)
+  }, [])
+
+  const handlePageChange = useCallback((newPage: number) => {
+    if (isInitialMount.current) return
+    setPage(newPage)
+  }, [])
+
+  const handleRowsPerPageChange = useCallback((newLimit: number) => {
+    if (isInitialMount.current) return
+    setLimit(newLimit)
+    setPage(1)
+  }, [])
+
+  const handleClearFilters = useCallback(() => {
+    if (isInitialMount.current) return
+    setFilters({ search: '' })
+    setPage(1)
+    toast.success('Filtros limpiados')
+  }, [])
 
   // Formato de fecha sin conversión de zona horaria
   const formatDate = (dateString: string) => {
@@ -191,6 +232,135 @@ export default function AprobacionPage() {
     other: 'Otro'
   }
 
+  // Configuración de columnas para el DataTable - memoizada para estabilidad
+  const columns = useMemo<Column<PendingApproval>[]>(() => [
+    {
+      key: 'supplier',
+      header: 'Proveedor / Factura',
+      render: (row) => (
+        <div>
+          <div className="font-medium">
+            {row.accountPayable.supplier?.name || (row.accountPayable as any).supplierName || 'N/A'}
+          </div>
+          <div className="text-sm text-muted-foreground">
+            Factura: {row.accountPayable.invoiceNumber}
+          </div>
+          {row.accountPayable.description && (
+            <div className="text-xs text-muted-foreground max-w-xs truncate mt-1">
+              {row.accountPayable.description}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'Monto',
+      render: (row) => (
+        <div>
+          <div className="font-medium">
+            ${Number(row.amount).toLocaleString()}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            de ${Number(row.accountPayable.amount).toLocaleString()}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'scheduledDate',
+      header: 'Fecha Programada',
+      render: (row) => formatDate(row.scheduledDate),
+    },
+    {
+      key: 'paymentMethod',
+      header: 'Método de Pago',
+      render: (row) => (
+        <div>
+          <Badge variant="outline" className="mb-1">
+            {row.paymentMethod ? (paymentMethodLabels[row.paymentMethod] || row.paymentMethod) : 'N/A'}
+          </Badge>
+          {row.bankAccount && (
+            <div className="text-xs text-muted-foreground mt-1">
+              Cuenta: {row.bankAccount}
+            </div>
+          )}
+          {row.checkNumber && (
+            <div className="text-xs text-muted-foreground mt-1">
+              Cheque: {row.checkNumber}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'reference',
+      header: 'Referencia / Detalles',
+      render: (row) => (
+        <div>
+          {row.reference && (
+            <div className="text-sm font-medium mb-1">
+              {row.reference}
+            </div>
+          )}
+          {row.notes && (
+            <div className="text-xs text-muted-foreground max-w-xs truncate">
+              {row.notes}
+            </div>
+          )}
+          {!row.reference && !row.notes && (
+            <span className="text-xs text-muted-foreground">Sin detalles</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'createdBy',
+      header: 'Solicitado Por',
+      render: (row) => (
+        <div>
+          <div className="text-sm">
+            {row.createdBy.firstName} {row.createdBy.lastName}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {formatDate(row.createdAt)}
+          </div>
+        </div>
+      ),
+    },
+  ], [])
+
+  // Configuración de acciones para el DataTable
+  const actions = useMemo<Action<PendingApproval>[]>(() => [
+    {
+      label: 'Aprobar',
+      icon: <CheckCircle className="h-4 w-4" />,
+      onClick: (row) => handleApprove(row),
+    },
+    {
+      label: 'Rechazar',
+      icon: <XCircle className="h-4 w-4" />,
+      onClick: (row) => handleReject(row),
+    },
+  ], [handleApprove, handleReject])
+
+  // Valores memoizados para DataTable (evitar re-renders infinitos)
+  const keyExtractor = useCallback((row: PendingApproval) => row.id, [])
+
+  const searchFilterConfig = useMemo(() => ({
+    placeholder: 'Buscar proveedor o factura...',
+    debounceMs: 400,
+  }), [])
+
+  const pagination = useMemo(() => ({
+    page,
+    limit,
+    total,
+    totalPages,
+  }), [page, limit, total, totalPages])
+
+  const rowsPerPageOptions = useMemo(() => [10, 25, 50], [])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -209,220 +379,64 @@ export default function AprobacionPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4 text-yellow-600" />
-              Pendientes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
-              ${(summary.totalPending || 0).toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {summary.countPending || 0} solicitudes
-            </p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Pendientes"
+          value={`$${(summary.totalPending || 0).toLocaleString()}`}
+          subtitle={`${summary.countPending || 0} solicitudes`}
+          icon={<Clock className="h-4 w-4" />}
+          variant="warning"
+        />
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              Aprobados Hoy
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              ${(summary.totalApproved || 0).toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {summary.countApproved || 0} pagos
-            </p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Aprobados Hoy"
+          value={`$${(summary.totalApproved || 0).toLocaleString()}`}
+          subtitle={`${summary.countApproved || 0} pagos`}
+          icon={<CheckCircle className="h-4 w-4" />}
+          variant="success"
+        />
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-orange-600" />
-              Requieren Atención
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">
-              {filteredApprovals.length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              solicitudes visibles
-            </p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Requieren Atención"
+          value={total.toString()}
+          subtitle="solicitudes visibles"
+          icon={<AlertCircle className="h-4 w-4" />}
+          variant="danger"
+        />
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">
-              Total
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-900">
-              ${((summary.totalPending || 0) + (summary.totalApproved || 0)).toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {(summary.countPending || 0) + (summary.countApproved || 0)} en total
-            </p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Total"
+          value={`$${((summary.totalPending || 0) + (summary.totalApproved || 0)).toLocaleString()}`}
+          subtitle={`${(summary.countPending || 0) + (summary.countApproved || 0)} en total`}
+          icon={<DollarSign className="h-4 w-4" />}
+          variant="default"
+        />
       </div>
 
-      {/* Tabla */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <CardTitle>Solicitudes Pendientes</CardTitle>
-              <CardDescription>Lista de pagos que requieren tu aprobación</CardDescription>
-            </div>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-              <Input
-                type="search"
-                placeholder="Buscar..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Proveedor / Factura</TableHead>
-                  <TableHead>Monto</TableHead>
-                  <TableHead>Fecha Programada</TableHead>
-                  <TableHead>Método de Pago</TableHead>
-                  <TableHead>Referencia / Detalles</TableHead>
-                  <TableHead>Solicitado Por</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredApprovals.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                      No hay solicitudes pendientes de aprobación
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredApprovals.map((approval) => (
-                    <TableRow key={approval.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">
-                            {approval.accountPayable.supplier?.name || (approval.accountPayable as any).supplierName || 'N/A'}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            Factura: {approval.accountPayable.invoiceNumber}
-                          </div>
-                          {approval.accountPayable.description && (
-                            <div className="text-xs text-gray-400 max-w-xs truncate mt-1">
-                              {approval.accountPayable.description}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">
-                          ${Number(approval.amount).toLocaleString()}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          de ${Number(approval.accountPayable.amount).toLocaleString()}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {formatDate(approval.scheduledDate)}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <Badge variant="outline" className="mb-1">
-                            {approval.paymentMethod ? (paymentMethodLabels[approval.paymentMethod] || approval.paymentMethod) : 'N/A'}
-                          </Badge>
-                          {approval.bankAccount && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              Cuenta: {approval.bankAccount}
-                            </div>
-                          )}
-                          {approval.checkNumber && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              Cheque: {approval.checkNumber}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          {approval.reference && (
-                            <div className="text-sm font-medium mb-1">
-                              {approval.reference}
-                            </div>
-                          )}
-                          {approval.notes && (
-                            <div className="text-xs text-gray-500 max-w-xs truncate">
-                              {approval.notes}
-                            </div>
-                          )}
-                          {!approval.reference && !approval.notes && (
-                            <span className="text-xs text-gray-400">Sin detalles</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {approval.createdBy.firstName} {approval.createdBy.lastName}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {formatDate(approval.createdAt)}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-green-600 hover:bg-green-50"
-                            onClick={() => handleApprove(approval)}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-1" />
-                            Aprobar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600 hover:bg-red-50"
-                            onClick={() => handleReject(approval)}
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Rechazar
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      {/* DataTable de Solicitudes Pendientes */}
+      <DataTable
+        title="Solicitudes Pendientes"
+        columns={columns}
+        data={approvals}
+        keyExtractor={keyExtractor}
+        actions={actions}
+        loading={loading}
+        emptyMessage="No hay solicitudes pendientes de aprobación"
+        // Filtros de búsqueda
+        searchFilter={searchFilterConfig}
+        searchValue={filters.search}
+        onSearchChange={handleSearchChange}
+        // Limpiar filtros
+        onClearFilters={handleClearFilters}
+        // Paginación server-side
+        pagination={pagination}
+        onPageChange={handlePageChange}
+        onRowsPerPageChange={handleRowsPerPageChange}
+        rowsPerPageOptions={rowsPerPageOptions}
+      />
 
       {/* Dialog Aprobar */}
       <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Aprobar Pago</DialogTitle>
             <DialogDescription>
@@ -462,44 +476,35 @@ export default function AprobacionPage() {
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button
-              type="button"
+          <DialogFooter className="gap-2">
+            <ActionButton
               variant="outline"
-              disabled={submitting}
               onClick={() => {
                 setShowApproveDialog(false)
                 setSelectedApproval(null)
                 setApproveNotes("")
               }}
+              disabled={submitting}
             >
               Cancelar
-            </Button>
-            <Button
-              type="button"
+            </ActionButton>
+            <ActionButton
+              variant="confirm"
               onClick={confirmApprove}
               disabled={submitting}
-              className="bg-green-600 hover:bg-green-700"
+              loading={submitting}
+              loadingText="Aprobando..."
+              startIcon={<CheckCircle className="h-4 w-4" />}
             >
-              {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Aprobando...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Aprobar Pago
-                </>
-              )}
-            </Button>
+              Aprobar Pago
+            </ActionButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Dialog Rechazar */}
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Rechazar Pago</DialogTitle>
             <DialogDescription>
@@ -545,38 +550,29 @@ export default function AprobacionPage() {
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button
-              type="button"
+          <DialogFooter className="gap-2">
+            <ActionButton
               variant="outline"
-              disabled={submitting}
               onClick={() => {
                 setShowRejectDialog(false)
                 setSelectedApproval(null)
                 setRejectReason("")
                 setRejectNotes("")
               }}
+              disabled={submitting}
             >
               Cancelar
-            </Button>
-            <Button
-              type="button"
+            </ActionButton>
+            <ActionButton
+              variant="danger"
               onClick={confirmReject}
               disabled={submitting}
-              variant="destructive"
+              loading={submitting}
+              loadingText="Rechazando..."
+              startIcon={<XCircle className="h-4 w-4" />}
             >
-              {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Rechazando...
-                </>
-              ) : (
-                <>
-                  <XCircle className="mr-2 h-4 w-4" />
-                  Rechazar Pago
-                </>
-              )}
-            </Button>
+              Rechazar Pago
+            </ActionButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

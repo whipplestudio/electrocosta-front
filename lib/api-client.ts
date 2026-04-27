@@ -81,11 +81,15 @@ export default apiClient;
 // Helper para manejar errores de API
 export const handleApiError = (error: unknown): string => {
   if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError<{ message: string; error: string; statusCode: number }>;
+    const axiosError = error as AxiosError<{ message: string | string[]; error: string; statusCode: number }>;
     
-    // Priorizar el campo 'message' del backend, que contiene el error específico
+    // Priorizar el campo 'message' del backend, que puede ser string o array
     const backendMessage = axiosError.response?.data?.message;
     if (backendMessage) {
+      // Si es un array, unir los mensajes con punto y coma
+      if (Array.isArray(backendMessage)) {
+        return backendMessage.join('; ');
+      }
       return backendMessage;
     }
     

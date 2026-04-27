@@ -18,7 +18,6 @@ import {
   Building2,
   LayoutDashboard,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { permissionsService } from "@/services/permissions.service"
 
@@ -28,7 +27,7 @@ interface SidebarProps {
 
 interface MenuItem {
   title: string
-  icon: any
+  icon?: any
   href: string
   requiredPermissionCodes?: string[]
   submenu?: MenuItem[]
@@ -70,18 +69,7 @@ const menuItems: MenuItem[] = [
     icon: Users,
     href: "/clientes",
     requiredPermissionCodes: ["clientes.clientes.ver"],
-    submenu: [
-      { 
-        title: "Gestión de Clientes", 
-        href: "/clientes",
-        requiredPermissionCodes: ["clientes.clientes.ver"]
-      },
-      { 
-        title: "Nuevo Cliente", 
-        href: "/clientes/nuevo",
-        requiredPermissionCodes: ["clientes.clientes.crear"]
-      },
-    ],
+    submenu: [],
   },
   {
     title: "Categorías",
@@ -228,36 +216,34 @@ export function AppSidebar({ className }: SidebarProps) {
   return (
     <div
       className={cn(
-        "relative flex flex-col bg-card border-r border-border transition-all duration-300 shadow-sm",
+        "relative flex flex-col bg-white border-r border-[#e5e7eb] transition-all duration-300",
         collapsed ? "w-16" : "w-64",
         className,
       )}
     >
-      {/* Header con mejor diseño */}
-      <div className="flex items-center justify-between px-4 py-5 border-b border-border bg-gradient-to-b from-card to-card/95">
+      {/* Header - Material Design 3 */}
+      <div className="flex items-center justify-between px-4 py-5 border-b border-[#e5e7eb]">
         {!collapsed && (
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-md transition-transform hover:scale-105">
-              <DollarSign className="h-6 w-6 text-primary-foreground" />
+            <div className="w-10 h-10 bg-[#164e63] rounded-xl flex items-center justify-center shadow-sm transition-transform hover:scale-105">
+              <DollarSign className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h2 className="font-bold text-base tracking-tight">Grupo BARREDA</h2>
-              <p className="text-xs text-muted-foreground font-medium">ERP Financiero</p>
+              <h2 className="font-bold text-base tracking-tight text-[#374151]">Grupo BARREDA</h2>
+              <p className="text-xs text-[#6b7280] font-medium">ERP Financiero</p>
             </div>
           </div>
         )}
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={() => setCollapsed(!collapsed)} 
-          className="h-9 w-9 p-0 hover:bg-accent/50 transition-all"
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="h-9 w-9 rounded-lg flex items-center justify-center text-[#6b7280] hover:bg-[#f0fdf4] hover:text-[#164e63] transition-all"
         >
           {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
-        </Button>
+        </button>
       </div>
 
-      {/* Navigation con mejor espaciado */}
-      <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
+      {/* Navigation - Material Design 3 */}
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {menuItems.map((item) => {
           // Verificar si tiene acceso directo al módulo O a algún submenú
           const hasDirectAccess = hasModuleAccess(item.requiredPermissionCodes)
@@ -275,55 +261,71 @@ export function AppSidebar({ className }: SidebarProps) {
           return (
             <div key={item.href}>
               {hasSubmenu && !collapsed ? (
-                <Button
-                  variant={isActive ? "secondary" : "ghost"}
+                <button
                   className={cn(
-                    "w-full justify-start gap-3 h-11 rounded-lg font-medium transition-all",
-                    collapsed && "justify-center px-2",
-                    isActive && "shadow-sm"
+                    "w-full flex items-center gap-3 h-11 px-3 rounded-xl font-medium text-sm transition-all duration-200",
+                    isActive 
+                      ? "bg-[#f0fdf4] text-[#164e63]" 
+                      : "text-[#374151] hover:bg-[#f9fafb]"
                   )}
                   onClick={() => toggleSubmenu(item.href)}
                 >
-                  <Icon className="h-5 w-5 flex-shrink-0" />
-                  <span className="text-sm flex-1 text-left">{item.title}</span>
-                  <ChevronRight className={cn("h-4 w-4 transition-transform duration-200", isExpanded && "rotate-90")} />
-                </Button>
+                  <div className={cn(
+                    "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                    isActive ? "bg-[#164e63]/10" : "bg-transparent"
+                  )}>
+                    <Icon className="h-5 w-5 flex-shrink-0" />
+                  </div>
+                  <span className="flex-1 text-left">{item.title}</span>
+                  <ChevronRight className={cn("h-4 w-4 text-[#6b7280] transition-transform duration-200", isExpanded && "rotate-90")} />
+                </button>
               ) : (
-                <Link href={item.href}>
-                  <Button
-                    variant={isActive ? "secondary" : "ghost"}
+                <Link href={item.href} className="block">
+                  <div
                     className={cn(
-                      "w-full justify-start gap-3 h-11 rounded-lg font-medium transition-all",
+                      "flex items-center gap-3 h-11 px-3 rounded-xl font-medium text-sm transition-all duration-200 cursor-pointer",
                       collapsed && "justify-center px-2",
-                      isActive && "shadow-sm"
+                      isActive 
+                        ? "bg-[#f0fdf4] text-[#164e63]" 
+                        : "text-[#374151] hover:bg-[#f9fafb]"
                     )}
                   >
-                    <Icon className="h-5 w-5 flex-shrink-0" />
-                    {!collapsed && <span className="text-sm flex-1 text-left">{item.title}</span>}
-                  </Button>
+                    <div className={cn(
+                      "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                      isActive ? "bg-[#164e63]/10" : "bg-transparent"
+                    )}>
+                      <Icon className="h-5 w-5 flex-shrink-0" />
+                    </div>
+                    {!collapsed && <span className="flex-1 text-left">{item.title}</span>}
+                  </div>
                 </Link>
               )}
 
               {hasSubmenu && !collapsed && isExpanded && (
-                <div className="ml-8 mt-1.5 space-y-1 border-l-2 border-border/50 pl-3">
+                <div className="ml-4 mt-1 space-y-0.5">
                   {item.submenu
                     ?.filter((subitem) => hasModuleAccess((subitem as any).requiredPermissionCodes))
-                    .map((subitem) => (
-                      <Link key={subitem.href} href={subitem.href}>
-                        <Button
-                          variant={pathname === subitem.href ? "secondary" : "ghost"}
-                          size="sm"
-                          className={cn(
-                            "w-full justify-start h-9 text-sm rounded-lg transition-all",
-                            pathname === subitem.href 
-                              ? "text-foreground font-medium shadow-sm" 
-                              : "text-muted-foreground hover:text-foreground font-normal"
-                          )}
-                        >
-                          {subitem.title}
-                        </Button>
-                      </Link>
-                    ))}
+                    .map((subitem) => {
+                      const isSubActive = pathname === subitem.href
+                      return (
+                        <Link key={subitem.href} href={subitem.href} className="block">
+                          <div
+                            className={cn(
+                              "flex items-center h-9 px-3 pl-11 text-sm rounded-xl transition-all duration-200 cursor-pointer",
+                              isSubActive 
+                                ? "bg-[#f0fdf4] text-[#164e63] font-medium" 
+                                : "text-[#6b7280] hover:text-[#374151] hover:bg-[#f9fafb]"
+                            )}
+                          >
+                            <span className={cn(
+                              "w-1.5 h-1.5 rounded-full mr-2",
+                              isSubActive ? "bg-[#164e63]" : "bg-[#d1d5db]"
+                            )} />
+                            {subitem.title}
+                          </div>
+                        </Link>
+                      )
+                    })}
                 </div>
               )}
             </div>
@@ -331,29 +333,30 @@ export function AppSidebar({ className }: SidebarProps) {
         })}
       </nav>
 
-      {/* Footer con mejor diseño */}
-      <div className="px-4 py-4 border-t border-border space-y-3 bg-gradient-to-t from-card/95 to-card">
+      {/* Footer - Material Design 3 */}
+      <div className="px-3 py-4 border-t border-[#e5e7eb] space-y-2">
         {!collapsed && (
-          <div className="text-xs text-muted-foreground space-y-1 px-2 py-2 bg-accent/30 rounded-lg">
-            <p className="font-semibold">Usuario: Admin</p>
+          <div className="text-xs text-[#6b7280] space-y-1 px-3 py-2 bg-[#f9fafb] rounded-xl">
+            <p className="font-semibold text-[#374151]">Usuario: Admin</p>
             <p className="font-medium">Rol: Administrador</p>
-            <p className="text-[10px] opacity-70">Versión 1.0.0</p>
+            <p className="text-[10px] text-[#9ca3af]">Versión 1.0.0</p>
           </div>
         )}
 
-        {/* Logout button mejorado */}
-        <Button
-          variant="ghost"
+        {/* Logout button - MD3 */}
+        <button
           className={cn(
-            "w-full justify-start gap-3 h-11 rounded-lg font-medium transition-all",
-            "text-destructive hover:text-destructive hover:bg-destructive/10 hover:shadow-sm",
-            collapsed && "justify-center px-2",
+            "w-full flex items-center gap-3 h-11 px-3 rounded-xl font-medium text-sm transition-all duration-200",
+            "text-red-600 hover:bg-red-50",
+            collapsed && "justify-center px-2"
           )}
           onClick={handleLogout}
         >
-          <LogOut className="h-5 w-5 flex-shrink-0" />
-          {!collapsed && <span className="text-sm">Cerrar Sesión</span>}
-        </Button>
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg">
+            <LogOut className="h-5 w-5 flex-shrink-0" />
+          </div>
+          {!collapsed && <span className="flex-1 text-left">Cerrar Sesión</span>}
+        </button>
       </div>
     </div>
   )

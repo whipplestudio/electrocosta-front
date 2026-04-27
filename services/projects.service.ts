@@ -124,10 +124,10 @@ export const projectsService = {
       
       const response = await apiClient.get<any>('/carga/proyectos/listado', { params });
       const proyectos = response.data.data || response.data || [];
-      return proyectos.map((p: any) => ({ 
-        id: p.id, 
-        name: p.nombreProyecto, 
-        code: p.codigoProyecto 
+      return proyectos.map((p: any) => ({
+        id: p.id,
+        name: p.nombreProyecto,
+        code: p.codigoProyecto || p.id.slice(0, 8).toUpperCase()
       }));
     } catch (error) {
       throw new Error(handleApiError(error));

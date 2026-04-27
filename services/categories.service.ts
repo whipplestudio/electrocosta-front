@@ -18,7 +18,7 @@ export interface CreateCategoryDto {
   description?: string;
   type: CategoryType;
   macroClasificacion?: 'MATERIALES' | 'MANO_DE_OBRA' | 'OTROS';
-  color?: string;
+  // REMOVED: color - now auto-assigned by backend
 }
 
 export interface UpdateCategoryDto {
@@ -26,7 +26,7 @@ export interface UpdateCategoryDto {
   description?: string;
   type?: CategoryType;
   macroClasificacion?: 'MATERIALES' | 'MANO_DE_OBRA' | 'OTROS';
-  color?: string;
+  // REMOVED: color - now auto-assigned by backend
 }
 
 export interface PaginatedCategoriesResponse {
@@ -47,7 +47,7 @@ export const categoriesService = {
     }
   },
 
-  async getAll(params?: { page?: number; limit?: number; type?: CategoryType }): Promise<PaginatedCategoriesResponse> {
+  async getAll(params?: { page?: number; limit?: number; type?: CategoryType; search?: string }): Promise<PaginatedCategoriesResponse> {
     try {
       const response = await apiClient.get<PaginatedCategoriesResponse>('/categories', { params });
       return response.data;

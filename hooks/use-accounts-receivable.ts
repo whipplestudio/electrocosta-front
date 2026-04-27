@@ -46,7 +46,14 @@ export const useAccountsReceivable = () => {
         filterWithPagination
       );
       setAccounts(response.data);
-      setPagination(response.meta);
+      // La respuesta puede tener meta anidado o las propiedades directamente
+      const meta = response.meta || {
+        total: (response as any).total || 0,
+        page: (response as any).page || 1,
+        limit: (response as any).limit || 10,
+        totalPages: (response as any).totalPages || 0,
+      };
+      setPagination(meta);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al cargar cuentas';
       setError(errorMessage);

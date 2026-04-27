@@ -19,7 +19,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { CheckCircle, Clock, DollarSign, FileText, Plus, Search, Calendar as CalendarIcon, Loader2, X, History, Receipt, CreditCard, Pencil, Filter } from "lucide-react"
+import { KpiCard, TotalKpiCard, DataTable, Column, Action, SelectFilter } from "@/components/ui"
+import { CheckCircle, Clock, DollarSign, FileText, Plus, Search, Calendar as CalendarIcon, Loader2, X, History, Receipt, CreditCard, Pencil, Filter, AlertCircle, TrendingUp, TrendingDown, Eye } from "lucide-react"
+import { useAccountsReceivable } from "@/hooks/use-accounts-receivable"
 import { accountsReceivableService, paymentsService } from "@/services/accounts-receivable.service"
 import type { AccountReceivable, Payment, RegisterPaymentDto } from "@/types/accounts-receivable"
 import { RouteProtection } from "@/components/route-protection"
@@ -60,10 +62,16 @@ export default function AplicacionPagos() {
 }
 
 function AplicacionPagosContent() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [accounts, setAccounts] = useState<AccountReceivable[]>([])
+  // Hook de accounts receivable con paginación
+  const {
+    accounts,
+    isLoading: loading,
+    pagination,
+    fetchAccounts,
+  } = useAccountsReceivable()
+
+  // Estados locales
   const [payments, setPayments] = useState<Payment[]>([])
-  const [loading, setLoading] = useState(true)
   const [showRegisterDialog, setShowRegisterDialog] = useState(false)
   const [showHistoryDialog, setShowHistoryDialog] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<AccountReceivable | null>(null)
@@ -72,7 +80,7 @@ function AplicacionPagosContent() {
   
   // Filtros
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'paid'>('all')
-  const [clientFilter, setClientFilter] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   
   // Estados para edición de pago
   const [showEditDialog, setShowEditDialog] = useState(false)
@@ -94,27 +102,46 @@ function AplicacionPagosContent() {
     notes: '',
   })
 
-  // Cargar datos
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true)
-      const accountsData = await accountsReceivableService.list({ 
-        page: 1, 
-        limit: 100,
-      })
-      // Cargar TODAS las cuentas, incluyendo las pagadas
-      setAccounts(accountsData.data)
-    } catch (error) {
-      console.error('Error al cargar datos:', error)
-      toast.error('Error al cargar las cuentas por cobrar')
-    } finally {
-      setLoading(false)
+  // Construir filtros para el backend según el tab activo
+  const buildFilters = useCallback(() => {
+    const filters: any = {}
+    
+    // Filtro de búsqueda (cliente o factura)
+    if (searchQuery) {
+      filters.search = searchQuery
     }
-  }, [])
+    
+    // Filtro por estado (tab)
+    if (activeTab === 'pending') {
+      filters.status = 'pending'
+    } else if (activeTab === 'paid') {
+      filters.status = 'paid'
+    }
+    // 'all' no filtra por estado
+    
+    return filters
+  }, [searchQuery, activeTab])
 
+  // Cargar datos con paginación
+  const loadData = useCallback(async (page = 1, limit = 10) => {
+    const filters = buildFilters()
+    await fetchAccounts(filters, page, limit)
+  }, [fetchAccounts, buildFilters])
+
+  // Cargar datos iniciales
   useEffect(() => {
-    loadData()
+    loadData(1, 10)
   }, [loadData])
+
+  // Recargar cuando cambien los filtros (solo buscar, no clientFilter)
+  useEffect(() => {
+    // Debounce para evitar llamadas múltiples mientras el usuario escribe
+    const timer = setTimeout(() => {
+      loadData(1, 10)
+    }, 400)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, activeTab])
 
   // Formatear número con separadores de miles (permite punto decimal mientras se escribe)
   const formatNumber = (value: string): string => {
@@ -221,36 +248,9 @@ function AplicacionPagosContent() {
     }
   }
 
-  // Filtrar cuentas por búsqueda, estado y cliente
-  const filteredAccounts = accounts.filter((account) => {
-    // Filtro de búsqueda (factura o cliente)
-    const matchesSearch = 
-      account.client?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      account.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    // Filtro de cliente específico
-    const matchesClient = clientFilter === '' || 
-      account.client?.name?.toLowerCase().includes(clientFilter.toLowerCase())
-    
-    // Filtro de estado (tab)
-    const balance = Number(account.balance || 0)
-    let matchesStatus = true
-    if (activeTab === 'pending') {
-      matchesStatus = balance > 0
-    } else if (activeTab === 'paid') {
-      matchesStatus = balance === 0
-    }
-    // 'all' no filtra por estado
-    
-    return matchesSearch && matchesClient && matchesStatus
-  })
-  
-  // Lista única de clientes para el filtro
-  const uniqueClients = [...new Set(accounts.map(a => a.client?.name).filter(Boolean))]
-
   // Calcular KPIs
   const totalPending = accounts.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
-  const overdueAccounts = accounts.filter(acc => new Date(acc.dueDate) < new Date())
+  const overdueAccounts = accounts.filter(acc => acc.dueDate && new Date(acc.dueDate) < new Date())
   const totalOverdue = overdueAccounts.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
 
   // Abrir dialog de editar pago
@@ -340,233 +340,128 @@ function AplicacionPagosContent() {
         </div>
       </div>
 
-      {/* KPIs de Pagos */}
+      {/* KPIs de Pagos usando componentes reutilizables */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pagos Pendientes</CardTitle>
-            <Clock className="h-4 w-4 text-orange-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${totalPending.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">{accounts.length} facturas pendientes</p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Pagos Pendientes"
+          value={`$${totalPending.toLocaleString()}`}
+          subtitle={`${accounts.length} facturas pendientes`}
+          icon={<Clock className="h-4 w-4" />}
+          variant="warning"
+        />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Vencidos</CardTitle>
-            <CheckCircle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">${totalOverdue.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">{overdueAccounts.length} cuentas vencidas</p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Vencidos"
+          value={`$${totalOverdue.toLocaleString()}`}
+          subtitle={`${overdueAccounts.length} cuentas vencidas`}
+          icon={<AlertCircle className="h-4 w-4" />}
+          variant="danger"
+        />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cuentas Activas</CardTitle>
-            <DollarSign className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{accounts.length}</div>
-            <p className="text-xs text-muted-foreground">Con saldo pendiente</p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Cuentas Activas"
+          value={accounts.length.toString()}
+          subtitle="Con saldo pendiente"
+          icon={<DollarSign className="h-4 w-4" />}
+          variant="primary"
+        />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Promedio</CardTitle>
-            <FileText className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ${accounts.length > 0 ? Math.round(totalPending / accounts.length).toLocaleString() : '0'}
-            </div>
-            <p className="text-xs text-muted-foreground">Por factura</p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Promedio por Factura"
+          value={`$${accounts.length > 0 ? Math.round(totalPending / accounts.length).toLocaleString() : '0'}`}
+          subtitle="Monto promedio"
+          icon={<TrendingUp className="h-4 w-4" />}
+          variant="info"
+        />
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <TabsList className="grid w-full sm:w-auto grid-cols-3">
-            <TabsTrigger value="all" className="gap-2">
-              Todas
-              <Badge variant="secondary" className="ml-1">{accounts.length}</Badge>
-            </TabsTrigger>
-            <TabsTrigger value="pending" className="gap-2">
-              Pendientes
-              <Badge variant="secondary" className="ml-1">
-                {accounts.filter(a => Number(a.balance) > 0).length}
-              </Badge>
-            </TabsTrigger>
-            <TabsTrigger value="paid" className="gap-2">
-              Pagadas
-              <Badge variant="secondary" className="ml-1">
-                {accounts.filter(a => Number(a.balance) === 0).length}
-              </Badge>
-            </TabsTrigger>
-          </TabsList>
+        {/* Tabla de Facturas con DataTable reutilizable */}
+        <DataTable
+          title={
+            activeTab === 'all' ? 'Todas las Facturas' :
+            activeTab === 'pending' ? 'Facturas Pendientes de Pago' :
+            'Facturas Pagadas'
+          }
+          columns={[
+            { key: 'invoiceNumber', header: 'Factura', align: 'left' },
+            { key: 'client', header: 'Cliente', render: (row) => row.client?.name || 'N/A' },
+            { key: 'amount', header: 'Monto Total', align: 'right', render: (row) => `$${Number(row.amount).toLocaleString()}` },
+            { key: 'balance', header: 'Saldo Pendiente', align: 'right', render: (row) => `$${Number(row.balance).toLocaleString()}` },
+            { key: 'dueDate', header: 'Vencimiento', render: (row) => 
+              row.dueDate ? formatDateWithoutTimezone(row.dueDate) : 'Sin vencimiento'
+            },
+            { 
+              key: 'status', 
+              header: 'Estado', 
+              align: 'center',
+              render: (row) => {
+                const isPaid = Number(row.balance) === 0
+                
+                if (isPaid) {
+                  return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Pagado</Badge>
+                } else {
+                  return <Badge variant="secondary">Pendiente</Badge>
+                }
+              }
+            },
+          ]}
+          data={accounts}
+          keyExtractor={(row) => row.id}
+          actions={[
+            {
+              label: 'Ver historial',
+              icon: <History className="h-4 w-4" />,
+              onClick: (row) => loadPaymentHistory(row),
+            },
+            {
+              label: 'Aplicar pago',
+              icon: <DollarSign className="h-4 w-4" />,
+              onClick: (row) => openRegisterDialog(row),
+              hidden: (row) => Number(row.balance) === 0,
+            },
+          ]}
+          loading={loading}
+          emptyMessage={
+            activeTab === 'paid' 
+              ? 'No se encontraron facturas pagadas'
+              : activeTab === 'pending'
+                ? 'No se encontraron cuentas pendientes de pago'
+                : 'No se encontraron cuentas'
+          }
           
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Select value={clientFilter || '__all__'} onValueChange={(v) => setClientFilter(v === '__all__' ? '' : v)}>
-              <SelectTrigger className="w-[200px]">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Filtrar por cliente" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">Todos los clientes</SelectItem>
-                {uniqueClients.map((client) => (
-                  <SelectItem key={client} value={client as string}>
-                    {client}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            {clientFilter && (
-              <Button variant="ghost" size="sm" onClick={() => setClientFilter('')}>
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <TabsContent value={activeTab} className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>
-                    {activeTab === 'all' && 'Todas las Facturas'}
-                    {activeTab === 'pending' && 'Facturas Pendientes de Pago'}
-                    {activeTab === 'paid' && 'Facturas Pagadas'}
-                  </CardTitle>
-                  <CardDescription>
-                    {activeTab === 'all' && 'Listado completo de todas las cuentas por cobrar'}
-                    {activeTab === 'pending' && 'Facturas que requieren aplicación de pagos'}
-                    {activeTab === 'paid' && 'Facturas que han sido pagadas completamente'}
-                  </CardDescription>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {filteredAccounts.length} resultados
-                </div>
-              </div>
-              <div className="flex items-center gap-2 pt-2">
-                <div className="relative flex-1 max-w-sm">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar por cliente o factura..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-8"
-                  />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Factura</TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Monto Total</TableHead>
-                      <TableHead>Saldo Pendiente</TableHead>
-                      <TableHead>Vencimiento</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead>Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredAccounts.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                          {activeTab === 'paid' 
-                            ? 'No se encontraron facturas pagadas'
-                            : activeTab === 'pending'
-                              ? 'No se encontraron cuentas pendientes de pago'
-                              : 'No se encontraron cuentas'}
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredAccounts.map((account) => {
-                        const isOverdue = account.dueDate ? new Date(account.dueDate) < new Date() : false
-                        const isPartial = Number(account.balance) < Number(account.amount) && Number(account.balance) > 0
-                        const isPaid = Number(account.balance) === 0
-                        const hasBalance = Number(account.balance) > 0
-                        
-                        return (
-                          <TableRow key={account.id}>
-                            <TableCell className="font-medium">{account.invoiceNumber}</TableCell>
-                            <TableCell>{account.client?.name || 'N/A'}</TableCell>
-                            <TableCell>${Number(account.amount).toLocaleString()}</TableCell>
-                            <TableCell className="font-bold">
-                              ${Number(account.balance).toLocaleString()}
-                            </TableCell>
-                            <TableCell>
-                              {account.dueDate ? (
-                                <div className="flex items-center gap-1">
-                                  <CalendarIcon className="h-3 w-3" />
-                                  {formatDateWithoutTimezone(account.dueDate)}
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground">Sin vencimiento</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {isPaid ? (
-                                <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
-                                  Pagada
-                                </Badge>
-                              ) : isOverdue ? (
-                                <Badge variant="destructive">Vencida</Badge>
-                              ) : isPartial ? (
-                                <Badge variant="secondary">Parcial</Badge>
-                              ) : (
-                                <Badge>Vigente</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-2">
-                                <Button 
-                                  size="sm" 
-                                  variant="outline"
-                                  onClick={() => loadPaymentHistory(account)}
-                                  disabled={loadingHistory}
-                                  title="Ver historial de pagos"
-                                >
-                                  {loadingHistory ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <History className="h-4 w-4" />
-                                  )}
-                                </Button>
-                                <Button 
-                                  size="sm" 
-                                  onClick={() => openRegisterDialog(account)}
-                                  className="gap-1"
-                                  disabled={!hasBalance}
-                                  title={hasBalance ? 'Aplicar pago' : 'Factura ya pagada'}
-                                >
-                                  <DollarSign className="h-3 w-3" />
-                                  {hasBalance ? 'Aplicar Pago' : 'Pagada'}
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          // Filtros integrados
+          searchFilter={{ placeholder: 'Buscar por cliente o factura...', debounceMs: 400 }}
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          
+          selectFilters={[
+            {
+              key: 'status',
+              label: 'Estado',
+              options: [
+                { value: '', label: 'Todas' },
+                { value: 'pending', label: 'Pendiente' },
+                { value: 'paid', label: 'Pagado' },
+              ],
+            },
+          ]}
+          filterValues={{ status: activeTab === 'all' ? '' : activeTab }}
+          onFilterChange={(key, value) => {
+            if (key === 'status') {
+              setActiveTab(value === '' ? 'all' : value as any)
+            }
+          }}
+          onClearFilters={() => {
+            setSearchQuery('')
+            setActiveTab('all')
+          }}
+          
+          // Paginación backend
+          pagination={pagination}
+          onPageChange={(page) => loadData(page, pagination.limit)}
+          onRowsPerPageChange={(limit) => loadData(1, limit)}
+          rowsPerPageOptions={[10, 25, 50]}
+        />
 
       {/* Dialog Registrar Pago */}
       <Dialog open={showRegisterDialog} onOpenChange={setShowRegisterDialog}>

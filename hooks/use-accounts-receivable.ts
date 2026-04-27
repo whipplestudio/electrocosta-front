@@ -31,12 +31,19 @@ export const useAccountsReceivable = () => {
   // CRUD OPERATIONS
   // ============================================
 
-  const fetchAccounts = useCallback(async (filters?: AccountReceivableFilterDto) => {
+  const fetchAccounts = useCallback(async (filters?: AccountReceivableFilterDto, page?: number, limit?: number) => {
     setIsLoading(true);
     setError(null);
     try {
+      const currentPage = page ?? pagination?.page ?? 1;
+      const currentLimit = limit ?? pagination?.limit ?? 10;
+      const filterWithPagination: AccountReceivableFilterDto = {
+        ...filters,
+        page: currentPage,
+        limit: currentLimit,
+      };
       const response: PaginatedResponse<AccountReceivable> = await accountsReceivableService.list(
-        filters
+        filterWithPagination
       );
       setAccounts(response.data);
       setPagination(response.meta);
@@ -47,7 +54,7 @@ export const useAccountsReceivable = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [pagination?.page, pagination?.limit]);
 
   const fetchAccountById = useCallback(async (id: string) => {
     setIsLoading(true);

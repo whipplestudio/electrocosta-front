@@ -36,6 +36,7 @@ import { CreateButton, ActionButton, DataTable, Column, Action, KpiCard } from "
 import { FloatingInput } from "@/components/ui/floating-input"
 import { FloatingSelect } from "@/components/ui/floating-select"
 import { FloatingDatePicker } from "@/components/ui/floating-date-picker"
+import { DynamicForm, FormSection, useDynamicForm } from "@/components/ui/dynamic-form"
 import { FinancialAmountSection } from "@/components/financial"
 import type { IvaType } from "@/components/financial"
 
@@ -768,170 +769,224 @@ export default function ProyectosPage() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <Dialog open={openDialog} onOpenChange={(open) => {
-            setOpenDialog(open)
-            if (!open) {
-              resetFormulario()
-            }
-          }}>
-            <DialogTrigger asChild>
-              <CreateButton>
-                Nuevo Proyecto
-              </CreateButton>
-            </DialogTrigger>
-            <DialogContent className="w-[90vw] max-w-[1200px] max-h-[90vh] overflow-y-auto p-6">
-              <DialogHeader>
-                <DialogTitle>{modoFormulario === 'editar' ? 'Editar Proyecto' : 'Registrar Nuevo Proyecto'}</DialogTitle>
-                <DialogDescription>
-                  {modoFormulario === 'editar' ? 'Modifica los datos del proyecto' : 'Crea un nuevo proyecto en el sistema'}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                {/* Fila 1: Nombre del Proyecto + Cliente */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FloatingInput
-                    label="Nombre del Proyecto *"
-                    placeholder="Ej: Instalación eléctrica Planta Norte"
-                    value={nuevoProyecto.nombreProyecto}
-                    onChange={(e) => setNuevoProyecto({...nuevoProyecto, nombreProyecto: e.target.value})}
-                    error={formErrors.nombreProyecto}
-                  />
-                  
-                  <FloatingSelect
-                    label="Cliente"
-                    value={nuevoProyecto.clientId}
-                    onChange={(value) => setNuevoProyecto({...nuevoProyecto, clientId: value as string})}
-                    options={[
+          {/* Botón Nuevo Proyecto */}
+          <CreateButton onClick={() => setOpenDialog(true)}>
+            Nuevo Proyecto
+          </CreateButton>
+
+          {/* Formulario de Proyecto usando DynamicForm */}
+          <DynamicForm
+            isOpen={openDialog}
+            onOpenChange={(open) => {
+              setOpenDialog(open)
+              if (!open) resetFormulario()
+            }}
+            title={modoFormulario === 'editar' ? 'Editar Proyecto' : 'Registrar Nuevo Proyecto'}
+            description={modoFormulario === 'editar' ? 'Modifica los datos del proyecto' : 'Crea un nuevo proyecto en el sistema'}
+            mode={modoFormulario}
+            maxWidth="full"
+            data={nuevoProyecto}
+            onChange={setNuevoProyecto}
+            onSubmit={crearNuevoProyecto}
+            loading={loading}
+            errors={formErrors}
+            sections={[
+              {
+                columns: 2,
+                fields: [
+                  {
+                    name: 'nombreProyecto',
+                    type: 'text',
+                    label: 'Nombre del Proyecto',
+                    required: true,
+                    placeholder: 'Ej: Instalación eléctrica Planta Norte',
+                    colSpan: 1,
+                  },
+                  {
+                    name: 'clientId',
+                    type: 'select',
+                    label: 'Cliente',
+                    placeholder: 'Selecciona un cliente',
+                    options: [
                       { label: 'Sin cliente', value: '' },
                       ...clientes.map((c) => ({ 
                         label: `${c.name} (RFC: ${c.taxId})`, 
                         value: c.id 
                       }))
-                    ]}
-                    placeholder="Selecciona un cliente"
-                    searchable
-                    searchPlaceholder="Buscar por nombre o RFC..."
-                    helperText="Busca y selecciona un cliente existente o déjalo vacío"
-                  />
-                </div>
-
-                {/* Fila 2: Fechas */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FloatingDatePicker
-                    label="Fecha Inicio *"
-                    value={stringToLocalDate(nuevoProyecto.fechaInicio)}
-                    onChange={(date) => setNuevoProyecto({...nuevoProyecto, fechaInicio: date instanceof Date ? format(date, 'yyyy-MM-dd') : ''})}
-                    placeholder="Seleccionar fecha"
-                  />
-                  <FloatingDatePicker
-                    label="Fecha Fin Estimada"
-                    value={stringToLocalDate(nuevoProyecto.fechaFinEstimada)}
-                    onChange={(date) => setNuevoProyecto({...nuevoProyecto, fechaFinEstimada: date instanceof Date ? format(date, 'yyyy-MM-dd') : ''})}
-                    placeholder="Seleccionar fecha (opcional)"
-                  />
-                </div>
-
-                {/* Sección Venta - Usando componente reutilizable */}
-                <FinancialAmountSection
-                  title="💰 Venta"
-                  iva={nuevoProyecto.ivaType === 'percentage' ? nuevoProyecto.iva : formatNumber(nuevoProyecto.iva)}
-                  ivaType={nuevoProyecto.ivaType}
-                  subtotal={formatNumber(nuevoProyecto.subtotalVenta)}
-                  total={formatNumber(nuevoProyecto.valorVenta)}
-                  onIvaChange={(value) => handlePresupuestoChange('iva', value)}
-                  onIvaTypeChange={(type) => handlePresupuestoChange('ivaType', type)}
-                  onSubtotalChange={(value) => handlePresupuestoChange('subtotalVenta', value)}
-                  subtotalLabel="Subtotal Venta (sin IVA) *"
-                  totalLabel="Total Venta (con IVA)"
-                  subtotalPlaceholder="Ej: 100,000"
-                  subtotalError={formErrors.subtotalVenta}
-                  subtotalHelperText="Monto sin IVA"
-                />
-
-                {/* Sección Costos Estimados */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-[#164e63]">📊 Costos Estimados</h3>
-                  {formErrors.presupuestos && (
-                    <p className="text-sm text-red-500">{formErrors.presupuestos}</p>
-                  )}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <FloatingInput
-                      label="Materiales *"
-                      placeholder="Ej: 20,000"
-                      value={formatNumber(nuevoProyecto.presupuestoMateriales)}
-                      onChange={(e) => handlePresupuestoChange('presupuestoMateriales', e.target.value)}
-                    />
-                    <FloatingInput
-                      label="Mano de Obra *"
-                      placeholder="Ej: 25,000"
-                      value={formatNumber(nuevoProyecto.presupuestoManoObra)}
-                      onChange={(e) => handlePresupuestoChange('presupuestoManoObra', e.target.value)}
-                    />
-                    <FloatingInput
-                      label="Otros *"
-                      placeholder="Ej: 5,000"
-                      value={formatNumber(nuevoProyecto.presupuestoOtros)}
-                      onChange={(e) => handlePresupuestoChange('presupuestoOtros', e.target.value)}
-                    />
-                    <FloatingInput
-                      label="Total Costos (con IVA)"
-                      placeholder="Calculado automáticamente"
-                      value={formatNumber(nuevoProyecto.presupuestoTotal)}
-                      readOnly
-                      helperText="Suma de costos + IVA"
-                      className="bg-[#f9fafb]"
-                    />
-                  </div>
-                </div>
-
-                {/* Responsable - solo */}
-                <FloatingSelect
-                  label="Responsable del Proyecto *"
-                  value={nuevoProyecto.responsableEmail}
-                  onChange={(value) => setNuevoProyecto({...nuevoProyecto, responsableEmail: value as string})}
-                  options={usuarios.length === 0 ? [
-                    { label: 'No hay usuarios disponibles', value: '', disabled: true }
-                  ] : usuarios.map((u) => ({
-                    label: `${u.fullName} (${u.email})`,
-                    value: u.email
-                  }))}
-                  placeholder={loadingUsuarios ? "Cargando usuarios..." : "Selecciona un responsable"}
-                  disabled={loadingUsuarios}
-                  error={formErrors.responsableEmail}
-                />
-
-                {/* Descripción - al final, ancho completo */}
-                <div>
-                  <Label className="text-sm font-medium text-[#374151]">Descripción</Label>
-                  <Textarea 
-                    placeholder="Ingrese una descripción detallada del proyecto (opcional)"
-                    value={nuevoProyecto.descripcion}
-                    onChange={(e) => setNuevoProyecto({...nuevoProyecto, descripcion: e.target.value})}
-                    rows={4}
-                    className="mt-1.5 border-[#e5e7eb] focus:border-[#164e63] focus:ring-[#164e63] rounded-xl"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <ActionButton 
-                  variant="cancel" 
-                  onClick={() => setOpenDialog(false)} 
-                  disabled={loading}
-                >
-                  Cancelar
-                </ActionButton>
-                <ActionButton 
-                  variant="save" 
-                  onClick={crearNuevoProyecto} 
-                  disabled={loading}
-                  loading={loading}
-                  loadingText={modoFormulario === 'editar' ? 'Guardando...' : 'Creando...'}
-                >
-                  {modoFormulario === 'editar' ? 'Guardar Cambios' : 'Crear Proyecto'}
-                </ActionButton>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                    ],
+                    searchable: true,
+                    searchPlaceholder: 'Buscar por nombre o RFC...',
+                    helperText: 'Busca y selecciona un cliente existente o déjalo vacío',
+                    colSpan: 1,
+                  },
+                ],
+              },
+              {
+                columns: 2,
+                fields: [
+                  {
+                    name: 'fechaInicio',
+                    type: 'custom',
+                    label: 'Fecha Inicio',
+                    required: true,
+                    render: ({ value, onChange }) => (
+                      <FloatingDatePicker
+                        label="Fecha Inicio *"
+                        value={stringToLocalDate(value as string)}
+                        onChange={(date) => onChange(date instanceof Date ? format(date, 'yyyy-MM-dd') : '')}
+                        placeholder="Seleccionar fecha"
+                      />
+                    ),
+                    colSpan: 1,
+                  },
+                  {
+                    name: 'fechaFinEstimada',
+                    type: 'custom',
+                    label: 'Fecha Fin Estimada',
+                    render: ({ value, onChange }) => (
+                      <FloatingDatePicker
+                        label="Fecha Fin Estimada"
+                        value={stringToLocalDate(value as string)}
+                        onChange={(date) => onChange(date instanceof Date ? format(date, 'yyyy-MM-dd') : '')}
+                        placeholder="Seleccionar fecha (opcional)"
+                      />
+                    ),
+                    colSpan: 1,
+                  },
+                ],
+              },
+              {
+                fields: [
+                  {
+                    name: 'ventaSection',
+                    type: 'custom',
+                    label: '',
+                    colSpan: 'full',
+                    render: () => (
+                      <FinancialAmountSection
+                        title="💰 Venta"
+                        iva={nuevoProyecto.ivaType === 'percentage' ? nuevoProyecto.iva : formatNumber(nuevoProyecto.iva)}
+                        ivaType={nuevoProyecto.ivaType}
+                        subtotal={formatNumber(nuevoProyecto.subtotalVenta)}
+                        total={formatNumber(nuevoProyecto.valorVenta)}
+                        onIvaChange={(value) => handlePresupuestoChange('iva', value)}
+                        onIvaTypeChange={(type) => handlePresupuestoChange('ivaType', type)}
+                        onSubtotalChange={(value) => handlePresupuestoChange('subtotalVenta', value)}
+                        subtotalLabel="Subtotal Venta (sin IVA) *"
+                        totalLabel="Total Venta (con IVA)"
+                        subtotalPlaceholder="Ej: 100,000"
+                        subtotalError={formErrors.subtotalVenta}
+                        subtotalHelperText="Monto sin IVA"
+                      />
+                    ),
+                  },
+                ],
+              },
+              {
+                title: '📊 Costos Estimados',
+                description: formErrors.presupuestos,
+                columns: 4,
+                fields: [
+                  {
+                    name: 'presupuestoMateriales',
+                    type: 'custom',
+                    label: 'Materiales',
+                    required: true,
+                    render: ({ value, onChange }) => (
+                      <FloatingInput
+                        label="Materiales *"
+                        placeholder="Ej: 20,000"
+                        value={formatNumber(value as string)}
+                        onChange={(e) => handlePresupuestoChange('presupuestoMateriales', e.target.value)}
+                      />
+                    ),
+                    colSpan: 1,
+                  },
+                  {
+                    name: 'presupuestoManoObra',
+                    type: 'custom',
+                    label: 'Mano de Obra',
+                    required: true,
+                    render: ({ value, onChange }) => (
+                      <FloatingInput
+                        label="Mano de Obra *"
+                        placeholder="Ej: 25,000"
+                        value={formatNumber(value as string)}
+                        onChange={(e) => handlePresupuestoChange('presupuestoManoObra', e.target.value)}
+                      />
+                    ),
+                    colSpan: 1,
+                  },
+                  {
+                    name: 'presupuestoOtros',
+                    type: 'custom',
+                    label: 'Otros',
+                    required: true,
+                    render: ({ value, onChange }) => (
+                      <FloatingInput
+                        label="Otros *"
+                        placeholder="Ej: 5,000"
+                        value={formatNumber(value as string)}
+                        onChange={(e) => handlePresupuestoChange('presupuestoOtros', e.target.value)}
+                      />
+                    ),
+                    colSpan: 1,
+                  },
+                  {
+                    name: 'presupuestoTotal',
+                    type: 'custom',
+                    label: 'Total Costos (con IVA)',
+                    render: ({ value }) => (
+                      <FloatingInput
+                        label="Total Costos (con IVA)"
+                        placeholder="Calculado automáticamente"
+                        value={formatNumber(value as string)}
+                        readOnly
+                        helperText="Suma de costos + IVA"
+                        className="bg-[#f9fafb]"
+                      />
+                    ),
+                    colSpan: 1,
+                  },
+                ],
+              },
+              {
+                fields: [
+                  {
+                    name: 'responsableEmail',
+                    type: 'select',
+                    label: 'Responsable del Proyecto',
+                    required: true,
+                    placeholder: loadingUsuarios ? "Cargando usuarios..." : "Selecciona un responsable",
+                    options: usuarios.length === 0 ? [
+                      { label: 'No hay usuarios disponibles', value: '', disabled: true }
+                    ] : usuarios.map((u) => ({
+                      label: `${u.fullName} (${u.email})`,
+                      value: u.email
+                    })),
+                    disabled: loadingUsuarios,
+                    colSpan: 'full',
+                  },
+                ],
+              },
+              {
+                fields: [
+                  {
+                    name: 'descripcion',
+                    type: 'textarea',
+                    label: 'Descripción',
+                    placeholder: 'Ingrese una descripción detallada del proyecto (opcional)',
+                    rows: 4,
+                    colSpan: 'full',
+                  },
+                ],
+              },
+            ]}
+            submitLabel="Crear Proyecto"
+            submitLabelEditing="Guardar Cambios"
+            loadingLabel="Creando..."
+            loadingLabelEditing="Guardando..."
+          />
         </div>
       </div>
 

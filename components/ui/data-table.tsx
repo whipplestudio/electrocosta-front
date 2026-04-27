@@ -110,6 +110,8 @@ export interface DataTableProps<T> {
   onClearFilters?: () => void
   showFilters?: boolean
   title?: string
+  // Toolbar buttons
+  toolbarButtons?: React.ReactNode
 }
 
 // MD3 Styled TablePagination component
@@ -320,6 +322,7 @@ interface FiltersToolbarProps {
   showFilters?: boolean
   title?: string
   hasActiveFilters: boolean
+  toolbarButtons?: React.ReactNode
 }
 
 function FiltersToolbar({
@@ -333,6 +336,7 @@ function FiltersToolbar({
   showFilters = true,
   title,
   hasActiveFilters,
+  toolbarButtons,
 }: FiltersToolbarProps) {
   const [localSearch, setLocalSearch] = React.useState(searchValue)
   const debouncedSearch = useDebounce(localSearch, searchFilter?.debounceMs || 300)
@@ -404,6 +408,13 @@ function FiltersToolbar({
           </div>
         ))}
 
+        {/* Toolbar buttons */}
+        {toolbarButtons && (
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+            {toolbarButtons}
+          </Box>
+        )}
+
       </Box>
     </Box>
   )
@@ -461,6 +472,8 @@ export function DataTable<T>({
   onClearFilters,
   showFilters = true,
   title,
+  // Toolbar buttons
+  toolbarButtons,
 }: DataTableProps<T>) {
   // Internal state for uncontrolled usage
   const [internalSearch, setInternalSearch] = React.useState('')
@@ -517,12 +530,12 @@ export function DataTable<T>({
         backgroundColor: SYSTEM_COLORS.background,
         borderRadius: '12px',
         border: 'none',
-        overflow: 'hidden',
+        overflow: 'visible',
         ...containerSx,
       }}
     >
       {/* Filters Toolbar */}
-      {hasAnyFilters && showFilters && (
+      {(hasAnyFilters || toolbarButtons) && showFilters && (
         <FiltersToolbar
           searchFilter={searchFilter}
           selectFilters={selectFilters}
@@ -534,6 +547,7 @@ export function DataTable<T>({
           showFilters={showFilters}
           title={title}
           hasActiveFilters={hasActiveFilters}
+          toolbarButtons={toolbarButtons}
         />
       )}
       <TableContainer sx={{ maxHeight: maxHeight }}>

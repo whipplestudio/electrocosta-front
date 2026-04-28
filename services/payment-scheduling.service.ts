@@ -1,3 +1,8 @@
+/**
+ * @deprecated Este servicio ya no se utiliza en el flujo simplificado de cuentas por pagar.
+ * Se mantiene para compatibilidad con datos históricos.
+ * El flujo nuevo usa pagos directos sobre AccountPayable sin programación.
+ */
 import apiClient from '@/lib/api-client';
 import type { Payment } from '@/types/accounts-payable';
 

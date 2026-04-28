@@ -2,8 +2,7 @@
 // ENUMS
 // ============================================
 
-export type AccountPayableStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'cancelled' | 'scheduled';
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+export type AccountPayableStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
 export type PaymentMethod = 'cash' | 'check' | 'transfer' | 'card' | 'other';
 
 // ============================================
@@ -79,16 +78,7 @@ export interface AccountPayable {
   description?: string;
   notes?: string;
   status: AccountPayableStatus;
-  approvalStatus: ApprovalStatus;
-  approvedBy?: {
-    id: string;
-    firstName: string;
-    lastName: string;
-  };
-  approvedAt?: string;
-  rejectionReason?: string;
   payments: Payment[];
-  paymentSchedules: PaymentSchedule[];
   documents: any[];
   createdBy: {
     id: string;
@@ -181,7 +171,6 @@ export interface CreatePaymentScheduleDto {
 export interface AccountPayableFiltersDto {
   supplierId?: string;
   status?: AccountPayableStatus;
-  approvalStatus?: ApprovalStatus;
   categoryId?: string;
   projectId?: string;
   dateFrom?: string;

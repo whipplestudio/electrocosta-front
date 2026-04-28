@@ -295,8 +295,6 @@ function CuentasCobrarPageContent() {
       
       // Filtrar solo categorías de tipo "income" (ingresos)
       const incomeCategories = categoriesData.filter(cat => cat.type === 'income')
-      console.log('📊 Total de categorías:', categoriesData.length)
-      console.log('💰 Categorías de ingreso:', incomeCategories.length)
       
       if (incomeCategories.length === 0 && categoriesData.length > 0) {
         console.warn('⚠️ Hay categorías creadas pero ninguna es de tipo "Ingreso"')

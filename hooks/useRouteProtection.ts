@@ -61,19 +61,9 @@ const ROUTE_PERMISSIONS: RoutePermissionMap[] = [
     name: 'Registro Cuentas por Pagar',
   },
   {
-    path: '/cuentas-pagar/programacion',
-    requiredPermissions: ['cuentas_pagar.programacion.ver'],
-    name: 'Programación',
-  },
-  {
-    path: '/cuentas-pagar/aprobacion',
-    requiredPermissions: ['cuentas_pagar.aprobacion.ver'],
-    name: 'Aprobación',
-  },
-  {
     path: '/cuentas-pagar/pagos',
     requiredPermissions: ['cuentas_pagar.pagos.ver'],
-    name: 'Pagos',
+    name: 'Aplicación de Pagos',
   },
   {
     path: '/cuentas-pagar/reportes',

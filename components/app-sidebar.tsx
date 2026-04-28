@@ -115,7 +115,7 @@ const menuItems: MenuItem[] = [
         requiredPermissionCodes: ["cuentas_pagar.registro.ver"]
       },
       { 
-        title: "Pagos", 
+        title: "Aplicación de Pagos", 
         href: "/cuentas-pagar/pagos",
         requiredPermissionCodes: ["cuentas_pagar.pagos.ver"]
       },

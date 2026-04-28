@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrendingUp, TrendingDown, DollarSign, CreditCard, Wallet, AlertCircle, X } from "lucide-react"
+import { TrendingUp, TrendingDown, DollarSign, CreditCard, Wallet, AlertCircle, X, FolderOpen, ArrowRight } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import apiClient from "@/lib/api-client"
@@ -86,6 +86,7 @@ function DashboardContent() {
   const [dashboardProyecto, setDashboardProyecto] = useState<DashboardProyecto | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [loading, setLoading] = useState(true)
+  const [loadingProject, setLoadingProject] = useState(false)
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date } | undefined>()
   
   // Datos de cuentas por pagar por proyecto
@@ -151,7 +152,7 @@ function DashboardContent() {
 
   const cargarDashboardProyecto = async (projectId: string) => {
     try {
-      setLoading(true)
+      setLoadingProject(true)
       const params = new URLSearchParams()
       const from = searchParams.get("from")
       const to = searchParams.get("to")
@@ -165,7 +166,7 @@ function DashboardContent() {
       console.error("Error al cargar dashboard del proyecto:", error)
       toast.error("Error al cargar el dashboard del proyecto")
     } finally {
-      setLoading(false)
+      setLoadingProject(false)
     }
   }
 
@@ -377,6 +378,46 @@ function DashboardContent() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Estado vacío cuando no hay proyecto seleccionado */}
+          {!selectedProjectId && !loadingProject && (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-12">
+              <div className="flex flex-col items-center justify-center text-center">
+                <div className="mb-4 rounded-full bg-white p-4 shadow-sm">
+                  <FolderOpen className="h-10 w-10 text-gray-400" />
+                </div>
+                <h3 className="mb-2 text-lg font-semibold text-gray-900">
+                  Selecciona un proyecto
+                </h3>
+                <p className="mb-6 max-w-sm text-sm text-gray-500">
+                  Elige un proyecto arriba para ver su análisis financiero detallado, KPIs y métricas de rentabilidad en tiempo real.
+                </p>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <ArrowRight className="h-4 w-4" />
+                    Selecciona un proyecto para comenzar
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Skeleton loader cuando se está cargando el proyecto */}
+          {loadingProject && (
+            <div className="space-y-4">
+              <Skeleton className="h-8 w-64" />
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Skeleton className="h-32" />
+                <Skeleton className="h-32" />
+                <Skeleton className="h-32" />
+                <Skeleton className="h-32" />
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Skeleton className="h-64" />
+                <Skeleton className="h-64" />
+              </div>
+            </div>
+          )}
         </>
       )}
 

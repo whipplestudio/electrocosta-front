@@ -29,6 +29,7 @@ export interface Project {
   id: string;
   name: string;
   code: string;
+  nombreProyecto?: string; // Para compatibilidad con backend
 }
 
 export interface Payment {

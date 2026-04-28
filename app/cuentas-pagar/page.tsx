@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, Edit, Trash2, AlertCircle, Clock, CheckCircle, XCircle, Loader2, Upload, FileDown, History, Receipt, CreditCard, DollarSign, Filter, Pencil } from "lucide-react"
+import { Plus, Edit, Trash2, AlertCircle, Clock, CheckCircle, XCircle, Loader2, Upload, FileDown, History, Receipt, CreditCard, DollarSign, Filter, Pencil, HelpCircle } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { toast } from "sonner"
@@ -15,6 +15,7 @@ import { paymentSchedulingService } from "@/services/payment-scheduling.service"
 import { accountsPayableUploadService } from "@/services/accounts-payable-upload.service"
 import type { UploadResponse, ValidacionResultado, ImportacionResultado } from "@/services/accounts-payable-upload.service"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
+import { BulkUploadGuideDialog } from "@/components/bulk-upload-guide-dialog"
 import { KpiCard, ExpenseKpiCard, WarningKpiCard, SuccessKpiCard, TotalKpiCard } from "@/components/ui/kpi-card"
 import { ActionButton, CreateButton, CancelButton } from "@/components/ui/action-button"
 import { DataTable, Column, Action, SelectFilter } from "@/components/ui/data-table"
@@ -111,6 +112,7 @@ export default function CuentasPagarPage() {
   const [validacionResultado, setValidacionResultado] = useState<ValidacionResultado | null>(null)
   const [importacionResultado, setImportacionResultado] = useState<ImportacionResultado | null>(null)
   const [downloadingTemplate, setDownloadingTemplate] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -635,7 +637,7 @@ export default function CuentasPagarPage() {
       header: 'Proyecto',
       render: (row) => (
         <span className="text-sm text-muted-foreground">
-          {row.project?.name || 'Sin proyecto'}
+          {row.project?.nombreProyecto || 'Sin proyecto'}
         </span>
       ),
     },
@@ -791,6 +793,28 @@ export default function CuentasPagarPage() {
                   <p className="font-semibold text-white dark:text-slate-900">Importación masiva de cuentas por pagar</p>
                   <p className="text-xs text-slate-200 dark:text-slate-700">
                     Sube un archivo Excel con múltiples cuentas por pagar a la vez
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ActionButton 
+                  variant="ghost"
+                  onClick={() => setGuideOpen(true)}
+                  size="sm"
+                  startIcon={<HelpCircle className="h-4 w-4" />}
+                >
+                  Guía
+                </ActionButton>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
+                <div className="space-y-1">
+                  <p className="font-semibold text-white dark:text-slate-900">Guía de carga masiva</p>
+                  <p className="text-xs text-slate-200 dark:text-slate-700">
+                    Ver instrucciones detalladas sobre cómo usar la plantilla Excel
                   </p>
                 </div>
               </TooltipContent>
@@ -1341,6 +1365,12 @@ export default function CuentasPagarPage() {
         onImport={handleImport}
         onReset={handleResetBulkUpload}
         loading={loading}
+      />
+
+      {/* Diálogo de Guía de Carga Masiva */}
+      <BulkUploadGuideDialog
+        open={guideOpen}
+        onOpenChange={setGuideOpen}
       />
     </div>
   )

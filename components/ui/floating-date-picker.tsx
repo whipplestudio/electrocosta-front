@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { CalendarIcon, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, getYear, setYear, setMonth } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, getYear, setYear, setMonth, isToday } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 export type DateSelection = Date | { from?: Date; to?: Date } | undefined
@@ -126,21 +126,28 @@ export function FloatingDatePicker({
     setViewDate(setMonth(viewDate, monthIndex))
   }
 
+  // Normalize date to avoid timezone offset issues
+  const normalizeDate = (date: Date): Date => {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  }
+
   const handleDateClick = (date: Date) => {
+    const normalizedDate = normalizeDate(date)
     if (mode === 'single') {
-      onChange(date)
+      onChange(normalizedDate)
       setIsOpen(false)
     } else {
       const range = value as { from?: Date; to?: Date } | undefined
       if (!range?.from || (range.from && range.to)) {
         // Start new range
-        onChange({ from: date, to: undefined })
+        onChange({ from: normalizedDate, to: undefined })
       } else {
         // Complete range
-        if (date < range.from) {
-          onChange({ from: date, to: range.from })
+        const normalizedFrom = normalizeDate(range.from)
+        if (normalizedDate < normalizedFrom) {
+          onChange({ from: normalizedDate, to: normalizedFrom })
         } else {
-          onChange({ from: range.from, to: date })
+          onChange({ from: normalizedFrom, to: normalizedDate })
         }
       }
     }
@@ -323,6 +330,7 @@ export function FloatingDatePicker({
                         rangeStart={!!rangeStart}
                         rangeEnd={!!rangeEnd}
                         inRange={inRange}
+                        isToday={isToday(date)}
                         disabled={disabled}
                         onClick={() => handleDateClick(date)}
                       />
@@ -340,6 +348,7 @@ export function FloatingDatePicker({
                   rangeStart={!!rangeStart}
                   rangeEnd={!!rangeEnd}
                   inRange={inRange}
+                  isToday={isToday(date)}
                   disabled={disabled}
                   onClick={() => handleDateClick(date)}
                 />
@@ -391,11 +400,12 @@ interface DayButtonProps {
   rangeStart: boolean
   rangeEnd: boolean
   inRange: boolean
+  isToday: boolean
   disabled: boolean
   onClick: () => void
 }
 
-function DayButton({ date, isCurrentMonth, selected, rangeStart, rangeEnd, inRange, disabled, onClick }: DayButtonProps) {
+function DayButton({ date, isCurrentMonth, selected, rangeStart, rangeEnd, inRange, isToday: today, disabled, onClick }: DayButtonProps) {
   return (
     <button
       onClick={onClick}
@@ -409,7 +419,8 @@ function DayButton({ date, isCurrentMonth, selected, rangeStart, rangeEnd, inRan
         inRange && !selected && 'bg-[#f0fdf4] text-[#164e63]',
         rangeStart && !selected && 'bg-[#164e63] text-white rounded-r-none',
         rangeEnd && !selected && 'bg-[#164e63] text-white rounded-l-none',
-        rangeStart && rangeEnd && 'rounded-lg'
+        rangeStart && rangeEnd && 'rounded-lg',
+        today && !selected && 'ring-2 ring-cyan-500 ring-inset'
       )}
     >
       {format(date, 'd')}

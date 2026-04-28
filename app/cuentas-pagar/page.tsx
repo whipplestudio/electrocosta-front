@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, Edit, Trash2, AlertCircle, Clock, CheckCircle, XCircle, Loader2, Upload, FileDown, History, Receipt, CreditCard, DollarSign, Filter } from "lucide-react"
+import { Plus, Edit, Trash2, AlertCircle, Clock, CheckCircle, XCircle, Loader2, Upload, FileDown, History, Receipt, CreditCard, DollarSign, Filter, Pencil } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { toast } from "sonner"
@@ -21,6 +21,9 @@ import { DataTable, Column, Action, SelectFilter } from "@/components/ui/data-ta
 import { DynamicForm, FormSection } from "@/components/ui/dynamic-form"
 import { FloatingSelect } from "@/components/ui/floating-select"
 import { FloatingDatePicker } from "@/components/ui/floating-date-picker"
+import { FloatingInput } from "@/components/ui/floating-input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { FinancialAmountSection } from "@/components/financial"
 import type { IvaType } from "@/components/financial"
 import { suppliersService, type Supplier } from "@/services/suppliers.service"
@@ -49,11 +52,8 @@ export default function CuentasPagarPage() {
   const [loadingSelects, setLoadingSelects] = useState(false)
   const [applyingFilters, setApplyingFilters] = useState(false)
   const [savingAccount, setSavingAccount] = useState(false)
-  const [approvingId, setApprovingId] = useState<string | null>(null)
-  const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [filters, setFilters] = useState({
     status: "all" as string,
-    approvalStatus: "all" as string,
     search: ""
   })
 
@@ -67,6 +67,18 @@ export default function CuentasPagarPage() {
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false)
   const [accountHistory, setAccountHistory] = useState<{ payments: any[]; schedules: any[] } | null>(null)
   const [loadingHistory, setLoadingHistory] = useState(false)
+  
+  // Estados para editar pagos
+  const [showEditPaymentDialog, setShowEditPaymentDialog] = useState(false)
+  const [selectedPayment, setSelectedPayment] = useState<any>(null)
+  const [editPaymentFormData, setEditPaymentFormData] = useState({
+    amount: 0,
+    paymentDate: '',
+    paymentMethod: 'transfer' as 'transfer' | 'check' | 'cash' | 'card' | 'other',
+    reference: '',
+    notes: '',
+  })
+  const [savingPayment, setSavingPayment] = useState(false)
   const [formData, setFormData] = useState({
     supplierId: "",
     supplierName: "",
@@ -90,7 +102,6 @@ export default function CuentasPagarPage() {
     totalVencido: 0,
     cuentasVencidas: 0,
     proximasVencer: 0,
-    pendientesAprobacion: 0,
   })
 
   // Estados para carga masiva
@@ -111,9 +122,6 @@ export default function CuentasPagarPage() {
 
       if (filters.status && filters.status !== "all") {
         params.status = filters.status
-      }
-      if (filters.approvalStatus && filters.approvalStatus !== "all") {
-        params.approvalStatus = filters.approvalStatus
       }
       if (filters.search) {
         params.search = filters.search
@@ -150,14 +158,11 @@ export default function CuentasPagarPage() {
       return dueDate >= now && dueDate <= sevenDaysFromNow && acc.status !== 'paid' && acc.status !== 'cancelled'
     }).length
     
-    const pendientesAprobacion = accountsData.filter(acc => acc.approvalStatus === 'pending').length
-    
     return {
       totalPendiente,
       totalVencido,
       cuentasVencidas: overdueAccounts.length,
       proximasVencer,
-      pendientesAprobacion,
     }
   }, [])
 
@@ -169,7 +174,6 @@ export default function CuentasPagarPage() {
         totalVencido: data.keyMetrics?.totalOverdue || 0,
         cuentasVencidas: data.overdueAccounts?.length || 0,
         proximasVencer: data.keyMetrics?.upcomingThisWeek || 0,
-        pendientesAprobacion: data.keyMetrics?.pendingApproval || 0,
       })
     } catch (error) {
       console.error("Error al cargar dashboard:", error)
@@ -416,48 +420,13 @@ export default function CuentasPagarPage() {
     }
   }, [fetchAccounts, fetchDashboard])
 
-  const handleAprobar = async (id: string) => {
-    if (approvingId || rejectingId) return
-    try {
-      setApprovingId(id)
-      await accountsPayableService.approve(id)
-      toast.success("Cuenta aprobada")
-      fetchAccounts()
-      fetchDashboard()
-    } catch (error) {
-      toast.error("Error al aprobar")
-    } finally {
-      setApprovingId(null)
-    }
-  }
-
-  const handleRechazar = async (id: string) => {
-    if (approvingId || rejectingId) return
-    const reason = prompt("Razón del rechazo:")
-    if (!reason) return
-    try {
-      setRejectingId(id)
-      await accountsPayableService.reject(id, { reason })
-      toast.success("Cuenta rechazada")
-      fetchAccounts()
-      fetchDashboard()
-    } catch (error) {
-      toast.error("Error al rechazar")
-    } finally {
-      setRejectingId(null)
-    }
-  }
-
   const handleVerHistorial = useCallback(async (account: AccountPayable) => {
     setSelectedAccount(account)
     setLoadingHistory(true)
     setIsHistoryDialogOpen(true)
     try {
-      const [payments, schedules] = await Promise.all([
-        accountsPayableService.getPayments(account.id),
-        paymentSchedulingService.getAccountSchedules(account.id),
-      ])
-      setAccountHistory({ payments, schedules })
+      const payments = await accountsPayableService.getPayments(account.id)
+      setAccountHistory({ payments, schedules: [] })
     } catch (error) {
       console.error("Error al cargar historial:", error)
       toast.error("Error al cargar el historial de pagos")
@@ -467,8 +436,59 @@ export default function CuentasPagarPage() {
     }
   }, [])
 
+  // Funciones para editar pagos
+  const handleEditarPago = useCallback((payment: any) => {
+    setSelectedPayment(payment)
+    setEditPaymentFormData({
+      amount: parseFloat(payment.amount) || 0,
+      paymentDate: payment.paymentDate ? payment.paymentDate.split('T')[0] : '',
+      paymentMethod: payment.paymentMethod || 'transfer',
+      reference: payment.reference || '',
+      notes: payment.notes || '',
+    })
+    setShowEditPaymentDialog(true)
+  }, [])
+
+  const handleUpdatePayment = useCallback(async () => {
+    if (!selectedAccount || !selectedPayment) return
+    if (!editPaymentFormData.amount || editPaymentFormData.amount <= 0) {
+      toast.error("Ingresa un monto válido")
+      return
+    }
+
+    try {
+      setSavingPayment(true)
+      await accountsPayableService.updatePayment(
+        selectedAccount.id,
+        selectedPayment.id,
+        {
+          amount: editPaymentFormData.amount,
+          paymentDate: editPaymentFormData.paymentDate,
+          paymentMethod: editPaymentFormData.paymentMethod,
+          reference: editPaymentFormData.reference,
+          notes: editPaymentFormData.notes,
+        }
+      )
+      toast.success("Pago actualizado exitosamente")
+      setShowEditPaymentDialog(false)
+      // Recargar historial
+      const payments = await accountsPayableService.getPayments(selectedAccount.id)
+      setAccountHistory({ payments, schedules: [] })
+      // Recargar cuenta para actualizar saldos
+      const updatedAccount = await accountsPayableService.getById(selectedAccount.id)
+      setSelectedAccount(updatedAccount)
+      fetchAccounts()
+      fetchDashboard()
+    } catch (error: any) {
+      console.error("Error al actualizar pago:", error)
+      toast.error(error.message || "Error al actualizar el pago")
+    } finally {
+      setSavingPayment(false)
+    }
+  }, [selectedAccount, selectedPayment, editPaymentFormData, fetchAccounts, fetchDashboard])
+
   const handleClearFilters = useCallback(async () => {
-    setFilters({ status: "all", approvalStatus: "all", search: "" })
+    setFilters({ status: "all", search: "" })
     setPage(1)
     // El useEffect se encargará de hacer el fetch automáticamente
     toast.success('Filtros limpiados')
@@ -504,8 +524,7 @@ export default function CuentasPagarPage() {
 
   const filterValues = useMemo(() => ({
     status: filters.status,
-    approvalStatus: filters.approvalStatus,
-  }), [filters.status, filters.approvalStatus])
+  }), [filters.status])
 
   const pagination = useMemo(() => ({
     page,
@@ -599,7 +618,6 @@ export default function CuentasPagarPage() {
 
   const activeFiltersCount = [
     filters.status !== "all",
-    filters.approvalStatus !== "all",
     filters.search !== ""
   ].filter(Boolean).length
 
@@ -673,50 +691,7 @@ export default function CuentasPagarPage() {
       align: 'center',
       render: (row) => getEstadoBadge(row.status),
     },
-    {
-      key: 'approvalStatus',
-      header: 'Aprobación',
-      align: 'center',
-      render: (row) => getAprobacionBadge(row.approvalStatus),
-    },
-    {
-      key: 'inlineActions',
-      header: 'Acciones',
-      align: 'center',
-      render: (row) => (
-        <div className="flex gap-1 justify-center">
-          {row.approvalStatus === "pending" && (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => handleAprobar(row.id)}
-                disabled={approvingId === row.id || rejectingId === row.id}
-              >
-                {approvingId === row.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-green-600" />
-                ) : (
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => handleRechazar(row.id)}
-                disabled={approvingId === row.id || rejectingId === row.id}
-              >
-                {rejectingId === row.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-red-600" />
-                ) : (
-                  <XCircle className="h-4 w-4 text-red-600" />
-                )}
-              </Button>
-            </>
-          )}
-        </div>
-      ),
-    },
-  ], [approvingId, rejectingId])
+  ], [])
 
   // Configuración de acciones para el DataTable - memoizada
   const actions = useMemo<Action<AccountPayable>[]>(() => [
@@ -745,21 +720,9 @@ export default function CuentasPagarPage() {
       options: [
         { value: 'all', label: 'Todos' },
         { value: 'pending', label: 'Pendiente' },
-        { value: 'partial', label: 'Parcial' },
         { value: 'paid', label: 'Pagado' },
         { value: 'overdue', label: 'Vencido' },
-        { value: 'scheduled', label: 'Programado' },
         { value: 'cancelled', label: 'Cancelado' },
-      ],
-    },
-    {
-      key: 'approvalStatus',
-      label: 'Aprobación',
-      options: [
-        { value: 'all', label: 'Todos' },
-        { value: 'pending', label: 'Pendiente' },
-        { value: 'approved', label: 'Aprobado' },
-        { value: 'rejected', label: 'Rechazado' },
       ],
     },
   ], [])
@@ -767,27 +730,17 @@ export default function CuentasPagarPage() {
   const getEstadoBadge = (status: AccountPayableStatus) => {
     const styles = {
       pending: "bg-yellow-100 text-yellow-800",
-      partial: "bg-blue-100 text-blue-800",
       paid: "bg-green-100 text-green-800",
       overdue: "bg-red-100 text-red-800",
       cancelled: "bg-gray-100 text-gray-800",
-      scheduled: "bg-purple-100 text-purple-800",
     }
     const labels = {
       pending: "Pendiente",
-      partial: "Parcial",
       paid: "Pagado",
       overdue: "Vencido",
       cancelled: "Cancelado",
-      scheduled: "Programado",
     }
     return <Badge className={styles[status]}>{labels[status]}</Badge>
-  }
-
-  const getAprobacionBadge = (status: string) => {
-    if (status === "approved") return <Badge className="bg-green-100 text-green-800">Aprobado</Badge>
-    if (status === "rejected") return <Badge className="bg-red-100 text-red-800">Rechazado</Badge>
-    return <Badge className="bg-yellow-100 text-yellow-800">Pendiente</Badge>
   }
 
   return (
@@ -870,13 +823,6 @@ export default function CuentasPagarPage() {
           value={dashboardData.proximasVencer || 0}
           subtitle="Próximos 7 días"
           icon={<Clock className="h-4 w-4" />}
-          loading={loading}
-        />
-        <SuccessKpiCard
-          title="Pendientes Aprobación"
-          value={dashboardData.pendientesAprobacion || 0}
-          subtitle="Por aprobar o rechazar"
-          icon={<CheckCircle className="h-4 w-4" />}
           loading={loading}
         />
       </div>
@@ -1214,75 +1160,6 @@ export default function CuentasPagarPage() {
                 </div>
               </div>
 
-              {/* Programaciones - Outlined Card */}
-              <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
-                <div className="px-4 py-3 bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-                      <Clock className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                    </div>
-                    <h3 className="font-semibold text-slate-900 dark:text-slate-100">
-                      Programaciones de Pago
-                    </h3>
-                    <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">
-                      {accountHistory.schedules.length}
-                    </span>
-                  </div>
-                </div>
-                <div className="p-4">
-                  {accountHistory.schedules.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
-                        <Clock className="h-5 w-5 text-slate-400" />
-                      </div>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">Sin programaciones de pago</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-                      <Table>
-                        <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
-                          <TableRow className="hover:bg-transparent">
-                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Fecha Programada</TableHead>
-                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Monto</TableHead>
-                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Estado</TableHead>
-                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Método</TableHead>
-                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Referencia</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {accountHistory.schedules.map((schedule: any) => (
-                            <TableRow key={schedule.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                              <TableCell className="font-medium">
-                                {formatDateWithoutTimezone(schedule.scheduledDate)}
-                              </TableCell>
-                              <TableCell className="font-semibold">
-                                ${parseFloat(schedule.amount).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </TableCell>
-                              <TableCell>
-                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                                  schedule.status === 'completed'
-                                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
-                                    : schedule.status === 'scheduled'
-                                    ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
-                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                                }`}>
-                                  <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                                    schedule.status === 'completed' ? 'bg-emerald-500' : schedule.status === 'scheduled' ? 'bg-violet-500' : 'bg-slate-500'
-                                  }`} />
-                                  {schedule.status === 'completed' ? 'Completado' : schedule.status === 'scheduled' ? 'Programado' : schedule.status}
-                                </span>
-                              </TableCell>
-                              <TableCell className="text-slate-600 dark:text-slate-400">{schedule.paymentMethod || '-'}</TableCell>
-                              <TableCell className="text-slate-600 dark:text-slate-400 font-mono text-xs">{schedule.reference || '-'}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                </div>
-              </div>
-
               {/* Pagos Realizados - Outlined Card */}
               <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
@@ -1316,6 +1193,7 @@ export default function CuentasPagarPage() {
                             <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Método</TableHead>
                             <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Referencia</TableHead>
                             <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Registrado por</TableHead>
+                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300 w-16">Acciones</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1337,6 +1215,16 @@ export default function CuentasPagarPage() {
                                   <span className="text-sm">{payment.createdBy?.firstName} {payment.createdBy?.lastName}</span>
                                 </div>
                               </TableCell>
+                              <TableCell>
+                                <ActionButton
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditarPago(payment)}
+                                  className="text-cyan-600 hover:text-cyan-700"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </ActionButton>
+                              </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -1355,6 +1243,83 @@ export default function CuentasPagarPage() {
               size="md"
             >
               Cerrar
+            </ActionButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo: Editar Pago */}
+      <Dialog open={showEditPaymentDialog} onOpenChange={setShowEditPaymentDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-cyan-600" />
+              Editar Pago
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FloatingInput
+                label="Monto *"
+                value={editPaymentFormData.amount.toLocaleString('en-US')}
+                onChange={(e) => {
+                  const cleanValue = e.target.value.replace(/[^0-9.]/g, '')
+                  setEditPaymentFormData(prev => ({ ...prev, amount: parseFloat(cleanValue) || 0 }))
+                }}
+                placeholder="0"
+                startAdornment={<DollarSign className="h-4 w-4 text-gray-400" />}
+              />
+
+              <FloatingSelect
+                label="Método de Pago *"
+                value={editPaymentFormData.paymentMethod}
+                onChange={(value) => setEditPaymentFormData({ ...editPaymentFormData, paymentMethod: value as any })}
+                options={[
+                  { value: 'transfer', label: 'Transferencia' },
+                  { value: 'check', label: 'Cheque' },
+                  { value: 'cash', label: 'Efectivo' },
+                  { value: 'card', label: 'Tarjeta' },
+                  { value: 'other', label: 'Otro' },
+                ]}
+              />
+            </div>
+
+            <FloatingDatePicker
+              label="Fecha de Pago *"
+              value={editPaymentFormData.paymentDate ? new Date(editPaymentFormData.paymentDate) : undefined}
+              onChange={(date) => {
+                const selectedDate = date instanceof Date ? date : new Date()
+                setEditPaymentFormData({ ...editPaymentFormData, paymentDate: selectedDate.toISOString().split('T')[0] })
+              }}
+              mode="single"
+            />
+
+            <FloatingInput
+              label="Referencia *"
+              value={editPaymentFormData.reference}
+              onChange={(e) => setEditPaymentFormData({ ...editPaymentFormData, reference: e.target.value })}
+              startAdornment={<Receipt className="h-4 w-4 text-gray-400" />}
+            />
+
+            <div>
+              <Label htmlFor="edit-notes" className="text-sm font-medium text-gray-700 mb-1 block">Notas</Label>
+              <Textarea
+                id="edit-notes"
+                value={editPaymentFormData.notes}
+                onChange={(e) => setEditPaymentFormData({ ...editPaymentFormData, notes: e.target.value })}
+                rows={3}
+                className="rounded-xl border-gray-200 focus:border-cyan-500 focus:ring-cyan-500"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <ActionButton variant="cancel" onClick={() => setShowEditPaymentDialog(false)} disabled={savingPayment}>
+              Cancelar
+            </ActionButton>
+            <ActionButton variant="primary" onClick={handleUpdatePayment} loading={savingPayment}>
+              Guardar Cambios
             </ActionButton>
           </DialogFooter>
         </DialogContent>

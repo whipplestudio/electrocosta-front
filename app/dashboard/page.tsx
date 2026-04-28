@@ -11,6 +11,12 @@ import apiClient from "@/lib/api-client"
 import { toast } from "sonner"
 import { FloatingDatePicker, DateSelection, KpiCard, FloatingSelect, SelectOption } from "@/components/ui"
 
+// Helper para parsear fecha local sin conversión de zona horaria
+const parseLocalDate = (dateString: string): Date => {
+  const [year, month, day] = dateString.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
 interface Proyecto {
   id: string
   codigo: string
@@ -103,8 +109,8 @@ function DashboardContent() {
     const to = searchParams.get("to")
     if (from || to) {
       setDateRange({
-        from: from ? new Date(from) : undefined,
-        to: to ? new Date(to) : undefined,
+        from: from ? parseLocalDate(from) : undefined,
+        to: to ? parseLocalDate(to) : undefined,
       })
     }
   }, [searchParams])

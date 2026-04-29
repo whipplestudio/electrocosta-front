@@ -120,6 +120,8 @@ export default function CuentasPagarPage() {
       const params: any = {
         page,
         limit,
+        sortBy: 'createdAt',
+        order: 'desc',
       }
 
       if (filters.status && filters.status !== "all") {
@@ -555,7 +557,8 @@ export default function CuentasPagarPage() {
       setUploadResponse(response)
       toast.success(`${response.registrosDetectados} registros detectados`)
     } catch (error: any) {
-      toast.error(error.message || 'Error al subir archivo')
+      console.log("🚀 ~ handleUpload ~ error:", error)
+      toast.error(error?.response?.data?.message || 'Error al subir archivo')
     } finally {
       setLoading(false)
     }
@@ -757,6 +760,28 @@ export default function CuentasPagarPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <ActionButton 
+                  variant="ghost"
+                  onClick={() => setGuideOpen(true)}
+                  size="sm"
+                  startIcon={<HelpCircle className="h-4 w-4" />}
+                >
+                  Guía
+                </ActionButton>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
+                <div className="space-y-1">
+                  <p className="font-semibold text-white dark:text-slate-900">Guía de carga masiva</p>
+                  <p className="text-xs text-slate-200 dark:text-slate-700">
+                    Ver instrucciones detalladas sobre cómo usar la plantilla Excel
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ActionButton 
                   variant="outline" 
                   onClick={handleDownloadTemplate} 
                   disabled={downloadingTemplate}
@@ -793,28 +818,6 @@ export default function CuentasPagarPage() {
                   <p className="font-semibold text-white dark:text-slate-900">Importación masiva de cuentas por pagar</p>
                   <p className="text-xs text-slate-200 dark:text-slate-700">
                     Sube un archivo Excel con múltiples cuentas por pagar a la vez
-                  </p>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <ActionButton 
-                  variant="ghost"
-                  onClick={() => setGuideOpen(true)}
-                  size="sm"
-                  startIcon={<HelpCircle className="h-4 w-4" />}
-                >
-                  Guía
-                </ActionButton>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
-                <div className="space-y-1">
-                  <p className="font-semibold text-white dark:text-slate-900">Guía de carga masiva</p>
-                  <p className="text-xs text-slate-200 dark:text-slate-700">
-                    Ver instrucciones detalladas sobre cómo usar la plantilla Excel
                   </p>
                 </div>
               </TooltipContent>

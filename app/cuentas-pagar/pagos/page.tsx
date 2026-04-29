@@ -65,10 +65,7 @@ export default function PagosPage() {
   const [loadingPayments, setLoadingPayments] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  const [filters, setFilters] = useState({
-    status: "all" as string,
-    search: ""
-  })
+  const [search, setSearch] = useState("")
 
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
@@ -106,15 +103,11 @@ export default function PagosPage() {
   const fetchAccounts = useCallback(async () => {
     try {
       setLoading(true)
-      const params: any = { page, limit }
-      if (filters.status && filters.status !== "all") {
-        params.status = filters.status
-      } else {
-        // When showing all, only include pending and overdue (not paid)
-        params.status = 'pending,overdue'
-      }
-      if (filters.search) {
-        params.search = filters.search
+      const params: any = { page, limit, sortBy: 'createdAt', order: 'desc' }
+      // Siempre filtrar por cuentas con deuda (pending, partial, overdue)
+      params.status = ['pending', 'partial', 'overdue']
+      if (search) {
+        params.search = search
       }
       
       const response = await accountsPayableService.getAll(params)
@@ -137,7 +130,7 @@ export default function PagosPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, limit, filters])
+  }, [page, limit, search])
 
   useEffect(() => {
     fetchAccounts()
@@ -378,30 +371,14 @@ export default function PagosPage() {
     },
   ], [handleEditarPago])
 
-  const selectFilters = useMemo(() => [
-    {
-      key: 'status',
-      label: 'Estado',
-      options: [
-        { value: 'all', label: 'Todos' },
-        { value: 'pending', label: 'Pendiente' },
-        { value: 'overdue', label: 'Vencido' },
-      ],
-    },
-  ], [])
 
   const handleSearchChange = useCallback((value: string) => {
-    setFilters((prev) => ({ ...prev, search: value }))
-    setPage(1)
-  }, [])
-
-  const handleFilterChange = useCallback((key: string, value: string | string[]) => {
-    setFilters((prev) => ({ ...prev, [key]: value as string }))
+    setSearch(value)
     setPage(1)
   }, [])
 
   const handleClearFilters = useCallback(() => {
-    setFilters({ status: "all", search: "" })
+    setSearch("")
     setPage(1)
   }, [])
 
@@ -458,11 +435,8 @@ export default function PagosPage() {
           placeholder: 'Buscar proveedor o factura...',
           debounceMs: 400,
         }}
-        searchValue={filters.search}
+        searchValue={search}
         onSearchChange={handleSearchChange}
-        selectFilters={selectFilters}
-        filterValues={{ status: filters.status || 'all' }}
-        onFilterChange={handleFilterChange}
         onClearFilters={handleClearFilters}
         pagination={{
           page,

@@ -146,12 +146,12 @@ export function DynamicForm({
             
             {extraButtons && <div className="flex items-center gap-2 order-2 sm:order-1">{extraButtons}</div>}
             
-            <div className="flex items-center gap-3 w-full sm:w-auto order-1 sm:order-2">
+            <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto order-1 sm:order-2">
               {showCancel && onCancel && (
                 <ActionButton
                   type="button"
                   variant="cancel"
-                  size="lg"
+                  size="md"
                   loading={loading}
                   onClick={onCancel}
                   className="flex-1 sm:flex-none"
@@ -164,7 +164,7 @@ export function DynamicForm({
                 <ActionButton
                   type="submit"
                   variant="submit"
-                  size="lg"
+                  size="md"
                   loading={loading}
                   loadingText="Guardando..."
                   className="flex-1 sm:flex-none"

@@ -88,7 +88,6 @@ function AplicacionPagosContent() {
   const [loadingHistory, setLoadingHistory] = useState(false)
   
   // Filtros
-  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'paid'>('all')
   const [searchQuery, setSearchQuery] = useState('')
   
   // Estados para edición de pago
@@ -120,16 +119,11 @@ function AplicacionPagosContent() {
       filters.search = searchQuery
     }
     
-    // Filtro por estado (tab)
-    if (activeTab === 'pending') {
-      filters.status = 'pending'
-    } else if (activeTab === 'paid') {
-      filters.status = 'paid'
-    }
-    // 'all' no filtra por estado
+    // Siempre traer cuentas con deuda (pending, partial, overdue)
+    filters.status = ['pending', 'partial', 'overdue']
     
     return filters
-  }, [searchQuery, activeTab])
+  }, [searchQuery])
 
   // Cargar datos con paginación
   const loadData = useCallback(async (page = 1, limit = 10) => {
@@ -150,7 +144,7 @@ function AplicacionPagosContent() {
     }, 400)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, activeTab])
+  }, [searchQuery])
 
   // Formatear número con separadores de miles (permite punto decimal mientras se escribe)
   const formatNumber = (value: string): string => {
@@ -470,18 +464,17 @@ function AplicacionPagosContent() {
 
         {/* Tabla de Facturas con DataTable reutilizable */}
         <DataTable
-          title={
-            activeTab === 'all' ? 'Todas las Facturas' :
-            activeTab === 'pending' ? 'Facturas Pendientes de Pago' :
-            'Facturas Pagadas'
-          }
+          title="Cuentas por Cobrar con Deuda"
           columns={[
             { key: 'invoiceNumber', header: 'Factura', align: 'left' },
             { key: 'client', header: 'Cliente', render: (row) => row.client?.name || 'N/A' },
             { key: 'amount', header: 'Monto Total', align: 'right', render: (row) => `$${Number(row.amount).toLocaleString()}` },
             { key: 'balance', header: 'Saldo Pendiente', align: 'right', render: (row) => `$${Number(row.balance).toLocaleString()}` },
-            { key: 'dueDate', header: 'Vencimiento', render: (row) => 
-              row.dueDate ? formatDateWithoutTimezone(row.dueDate) : 'Sin vencimiento'
+            { 
+              key: 'dueDate', 
+              header: 'Vencimiento', 
+              render: (row) => 
+                row.dueDate ? formatDateWithoutTimezone(row.dueDate) : 'Sin vencimiento'
             },
             { 
               key: 'status', 
@@ -514,39 +507,15 @@ function AplicacionPagosContent() {
             },
           ]}
           loading={loading}
-          emptyMessage={
-            activeTab === 'paid' 
-              ? 'No se encontraron facturas pagadas'
-              : activeTab === 'pending'
-                ? 'No se encontraron cuentas pendientes de pago'
-                : 'No se encontraron cuentas'
-          }
+          emptyMessage="No se encontraron cuentas con deuda"
           
           // Filtros integrados
           searchFilter={{ placeholder: 'Buscar por cliente o factura...', debounceMs: 400 }}
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
           
-          selectFilters={[
-            {
-              key: 'status',
-              label: 'Estado',
-              options: [
-                { value: '', label: 'Todas' },
-                { value: 'pending', label: 'Pendiente' },
-                { value: 'paid', label: 'Pagado' },
-              ],
-            },
-          ]}
-          filterValues={{ status: activeTab === 'all' ? '' : activeTab }}
-          onFilterChange={(key, value) => {
-            if (key === 'status') {
-              setActiveTab(value === '' ? 'all' : value as any)
-            }
-          }}
           onClearFilters={() => {
             setSearchQuery('')
-            setActiveTab('all')
           }}
           
           // Paginación backend

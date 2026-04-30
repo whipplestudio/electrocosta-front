@@ -1,9 +1,9 @@
 "use client"
 
 import { useRef } from "react"
-import { Button } from "@/components/ui/button"
+import { ActionButton, CancelButton } from "@/components/ui"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Loader2, Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react"
+import { Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react"
 
 export interface BulkUploadDialogProps {
   open: boolean
@@ -88,14 +88,15 @@ export function BulkUploadDialog({
                 <FileText className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <Button 
-                  variant="outline" 
+                <ActionButton 
+                  variant="outline"
+                  size="md"
                   onClick={() => fileInputRef.current?.click()}
                   className="mb-2"
+                  startIcon={<FileText className="h-4 w-4" />}
                 >
-                  <FileText className="h-4 w-4 mr-2" />
                   Seleccionar archivo
-                </Button>
+                </ActionButton>
                 {archivo && (
                   <p className="text-sm font-medium text-green-600 mt-2">
                     ✓ {archivo.name}
@@ -110,19 +111,17 @@ export function BulkUploadDialog({
 
           {/* Botón de subir */}
           {!uploadResponse && archivo && (
-            <Button onClick={onUpload} disabled={loading} className="w-full">
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Subiendo...
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Subir y Analizar
-                </>
-              )}
-            </Button>
+            <ActionButton 
+              variant="primary"
+              size="md"
+              onClick={onUpload} 
+              loading={loading}
+              loadingText="Subiendo..."
+              fullWidth
+              startIcon={<Upload className="h-4 w-4" />}
+            >
+              Subir y Analizar
+            </ActionButton>
           )}
 
           {/* Archivo subido - pendiente validación */}
@@ -140,13 +139,14 @@ export function BulkUploadDialog({
                     </p>
                   </div>
                 </div>
-                <Button onClick={onValidate} disabled={loading} size="sm">
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Validar"
-                  )}
-                </Button>
+                <ActionButton 
+                  variant="primary"
+                  size="sm"
+                  onClick={onValidate}
+                  loading={loading}
+                >
+                  Validar
+                </ActionButton>
               </div>
             </div>
           )}
@@ -215,19 +215,17 @@ export function BulkUploadDialog({
 
               {/* Botón de importar */}
               {validacionResultado.puedeImportar && (
-                <Button onClick={onImport} disabled={loading} className="w-full" size="lg">
-                  {loading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Importando...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-4 w-4 mr-2" />
-                      Importar {validacionResultado.registrosValidos} registros
-                    </>
-                  )}
-                </Button>
+                <ActionButton 
+                  variant="primary"
+                  size="lg"
+                  onClick={onImport}
+                  loading={loading}
+                  loadingText="Importando..."
+                  fullWidth
+                  startIcon={<CheckCircle2 className="h-4 w-4" />}
+                >
+                  Importar {validacionResultado.registrosValidos} registros
+                </ActionButton>
               )}
             </div>
           )}
@@ -258,9 +256,13 @@ export function BulkUploadDialog({
                   </div>
                 </div>
               )}
-              <Button onClick={handleClose} variant="outline" className="w-full mt-4">
+              <ActionButton 
+                onClick={handleClose}
+                fullWidth
+                className="mt-4"
+              >
                 Cerrar
-              </Button>
+              </ActionButton>
             </div>
           )}
         </div>

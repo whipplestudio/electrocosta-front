@@ -119,6 +119,7 @@ export interface DynamicFormProps<T extends Record<string, any>> {
   // Layout
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full'
   maxHeight?: string
+  dialogClassName?: string
   
   // Button labels
   submitLabel?: string
@@ -281,6 +282,7 @@ export function DynamicForm<T extends Record<string, any>>({
   errors = {},
   maxWidth = 'lg',
   maxHeight = '90vh',
+  dialogClassName,
   submitLabel = 'Crear',
   submitLabelEditing = 'Guardar Cambios',
   cancelLabel = 'Cancelar',
@@ -324,15 +326,16 @@ export function DynamicForm<T extends Record<string, any>>({
       <DialogContent 
         className={cn(
           maxWidthClasses[maxWidth],
-          'max-h-[90vh] overflow-y-auto p-6'
+          'max-h-[90vh] overflow-y-auto p-4 sm:p-6',
+          dialogClassName
         )}
       >
-        <DialogHeader>
-          <DialogTitle className="text-xl">
+        <DialogHeader className="pb-3 sm:pb-4">
+          <DialogTitle className="text-lg sm:text-xl">
             {isEditing ? `Editar ${title}` : title}
           </DialogTitle>
           {description && (
-            <DialogDescription className="text-sm text-muted-foreground">
+            <DialogDescription className="text-xs sm:text-sm text-muted-foreground">
               {isEditing 
                 ? `Modifica los datos de ${description}` 
                 : description}
@@ -400,11 +403,13 @@ export function DynamicForm<T extends Record<string, any>>({
           )}
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-3 pt-2">
           <ActionButton
             variant="cancel"
             onClick={handleCancel}
             disabled={loading}
+            size="md"
+            className="w-full sm:w-auto order-2 sm:order-1"
           >
             {cancelLabel}
           </ActionButton>
@@ -414,6 +419,8 @@ export function DynamicForm<T extends Record<string, any>>({
             disabled={loading}
             loading={loading}
             loadingText={isEditing ? loadingLabelEditing : loadingLabel}
+            size="md"
+            className="w-full sm:w-auto order-1 sm:order-2"
           >
             {isEditing ? submitLabelEditing : submitLabel}
           </ActionButton>

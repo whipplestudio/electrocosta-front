@@ -32,7 +32,7 @@ import {
   Plus,
   Edit,
   Eye,
-  Download,
+  FileDown,
   Filter,
   TrendingUp,
   AlertCircle,
@@ -52,6 +52,8 @@ import {
   CreditCard,
   DollarSign,
   FileText,
+  HelpCircle,
+  Pencil,
 } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -62,19 +64,36 @@ const parseDateWithoutTimezone = (dateStr: string | Date): Date => {
   const [year, month, day] = dateStr.split('T')[0].split('-').map(Number)
   return new Date(year, month - 1, day)
 }
+
+// Helper para formatear fechas sin conversión de zona horaria
+const formatDateWithoutTimezone = (dateString: string): string => {
+  const date = new Date(dateString)
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  const day = date.getUTCDate()
+
+  const localDate = new Date(year, month, day)
+  return localDate.toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
 import { toast } from "sonner"
 import { useAccountsReceivable } from "@/hooks/use-accounts-receivable"
 import { ActionButton, KpiCard, TotalKpiCard, FloatingInput, FloatingSelect, FloatingDatePicker, DateSelection } from "@/components/ui"
 import { DynamicForm, FormSection } from "@/components/ui/dynamic-form"
+import { DynamicFormDialog } from "@/components/forms/dynamic-form"
 import { FinancialAmountSection } from "@/components/financial"
+import { BulkUploadGuideDialogCobrar } from "@/components/bulk-upload-guide-dialog-cobrar"
 import type { IvaType } from "@/components/financial"
 import { DataTable, Column, Action, SelectFilter } from "@/components/ui/data-table"
-import { AccountReceivable, AccountReceivableStatus } from "@/types/accounts-receivable"
+import { AccountReceivable, AccountReceivableStatus, Payment, PaymentMethod } from "@/types/accounts-receivable"
 import { clientsService, type Client } from "@/services/clients.service"
 import { categoriesService, type Category } from "@/services/categories.service"
 import { projectsService, type Project } from "@/services/projects.service"
 import { accountsReceivableUploadService } from "@/services/accounts-receivable-upload.service"
-import { accountsReceivableService } from "@/services/accounts-receivable.service"
+import { accountsReceivableService, paymentsService } from "@/services/accounts-receivable.service"
 import apiClient from "@/lib/api-client"
 import { RouteProtection } from "@/components/route-protection"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
@@ -173,6 +192,7 @@ function CuentasCobrarPageContent() {
   
   // Estados para carga masiva
   const [showBulkUploadDialog, setShowBulkUploadDialog] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
   const [archivo, setArchivo] = useState<File | null>(null)
   const [uploadResponse, setUploadResponse] = useState<any>(null)
   const [validacionResultado, setValidacionResultado] = useState<any>(null)
@@ -183,8 +203,25 @@ function CuentasCobrarPageContent() {
   // Estados para historial de pagos
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false)
   const [selectedAccountForHistory, setSelectedAccountForHistory] = useState<AccountReceivable | null>(null)
-  const [accountPayments, setAccountPayments] = useState<any[]>([])
+  const [accountPayments, setAccountPayments] = useState<Payment[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  
+  // Estados para editar pago
+  const [isEditPaymentDialogOpen, setIsEditPaymentDialogOpen] = useState(false)
+  const [selectedPaymentForEdit, setSelectedPaymentForEdit] = useState<Payment | null>(null)
+  const [editPaymentFormData, setEditPaymentFormData] = useState<{
+    amount: string
+    paymentMethod: PaymentMethod
+    paymentDate: string
+    reference: string
+    notes: string
+  }>({
+    amount: '',
+    paymentMethod: PaymentMethod.TRANSFER,
+    paymentDate: '',
+    reference: '',
+    notes: '',
+  })
   
   // Estados del formulario
   const [formData, setFormData] = useState({
@@ -295,8 +332,6 @@ function CuentasCobrarPageContent() {
       
       // Filtrar solo categorías de tipo "income" (ingresos)
       const incomeCategories = categoriesData.filter(cat => cat.type === 'income')
-      console.log('📊 Total de categorías:', categoriesData.length)
-      console.log('💰 Categorías de ingreso:', incomeCategories.length)
       
       if (incomeCategories.length === 0 && categoriesData.length > 0) {
         console.warn('⚠️ Hay categorías creadas pero ninguna es de tipo "Ingreso"')
@@ -584,6 +619,7 @@ function CuentasCobrarPageContent() {
       // Recargar datos
       await handleApplyFilters()
       await fetchDashboard()
+      await fetchTotals()
     }
   }
 
@@ -597,6 +633,7 @@ function CuentasCobrarPageContent() {
       toast.success("Cuenta eliminada correctamente")
       fetchAccounts()
       fetchDashboard()
+      fetchTotals()
     } catch (error) {
       console.error('Error al eliminar cuenta:', error)
       toast.error("Error al eliminar la cuenta")
@@ -618,6 +655,82 @@ function CuentasCobrarPageContent() {
       setAccountPayments([])
     } finally {
       setLoadingHistory(false)
+    }
+  }
+
+  // Abrir dialog de editar pago
+  const handleOpenEditPayment = (payment: Payment) => {
+    setSelectedPaymentForEdit(payment)
+    // Map string payment method to PaymentMethod enum
+    const methodMap: Record<string, PaymentMethod> = {
+      'transfer': PaymentMethod.TRANSFER,
+      'cash': PaymentMethod.CASH,
+      'check': PaymentMethod.CHECK,
+      'card': PaymentMethod.CARD,
+      'other': PaymentMethod.OTHER,
+    }
+    setEditPaymentFormData({
+      amount: payment.amount.toString(),
+      paymentMethod: methodMap[payment.paymentMethod] || PaymentMethod.TRANSFER,
+      paymentDate: new Date(payment.paymentDate).toISOString().split('T')[0],
+      reference: payment.reference || '',
+      notes: payment.notes || '',
+    })
+    setIsEditPaymentDialogOpen(true)
+  }
+
+  // Guardar edición de pago
+  const handleUpdatePayment = async () => {
+    if (!selectedPaymentForEdit || !selectedAccountForHistory) return
+
+    const amountValue = parseFloat(editPaymentFormData.amount)
+    if (!editPaymentFormData.amount || amountValue <= 0) {
+      toast.error('El monto debe ser mayor a cero')
+      return
+    }
+
+    const oldAmount = Number(selectedPaymentForEdit.amount)
+    const accountTotal = Number(selectedAccountForHistory.amount)
+    const currentPaid = Number(selectedAccountForHistory.paidAmount)
+    const difference = amountValue - oldAmount
+    const newBalance = accountTotal - (currentPaid + difference)
+
+    if (newBalance < 0) {
+      toast.error(`El nuevo monto excede el total de la factura. Máximo permitido: $${(accountTotal - (currentPaid - oldAmount)).toLocaleString()}`)
+      return
+    }
+
+    try {
+      setLoading(true)
+      const paymentData = {
+        amount: amountValue,
+        paymentMethod: editPaymentFormData.paymentMethod,
+        paymentDate: new Date(editPaymentFormData.paymentDate).toISOString(),
+        reference: editPaymentFormData.reference,
+        notes: editPaymentFormData.notes,
+      }
+      
+      const result = await paymentsService.updatePayment(selectedPaymentForEdit.id, paymentData)
+      
+      toast.success(`Pago actualizado. Nuevo balance: $${Number(result.account.balance).toLocaleString()}`)
+      setIsEditPaymentDialogOpen(false)
+      setSelectedPaymentForEdit(null)
+      
+      // Recargar historial
+      const response = await apiClient.get(`/accounts-receivable/${selectedAccountForHistory.id}/payments`)
+      setAccountPayments(response.data || [])
+      
+      // Actualizar la cuenta seleccionada con los nuevos datos
+      setSelectedAccountForHistory(result.account)
+      
+      // Refrescar lista de cuentas
+      fetchAccounts()
+      fetchDashboard()
+    } catch (error) {
+      console.error('Error al actualizar pago:', error)
+      toast.error('Error al actualizar el pago')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -882,14 +995,38 @@ function CuentasCobrarPageContent() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Cuentas por Cobrar</h1>
-          <p className="text-muted-foreground">Gestiona las cuentas pendientes de cobro</p>
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+      {/* Header - Mobile First */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Cuentas por Cobrar</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Gestiona las cuentas pendientes de cobro</p>
         </div>
-        <div className="flex gap-3">
+        {/* Toolbar buttons - 2 cols on mobile, horizontal on desktop */}
+        <div className="grid grid-cols-2 gap-2 md:flex md:flex-nowrap md:justify-end">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ActionButton 
+                  variant="ghost"
+                  onClick={() => setGuideOpen(true)}
+                  size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
+                  startIcon={<HelpCircle className="h-4 w-4" />}
+                >
+                  Guía
+                </ActionButton>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
+                <div className="space-y-1">
+                  <p className="font-semibold text-white dark:text-slate-900">Guía de carga masiva</p>
+                  <p className="text-xs text-slate-200 dark:text-slate-700">
+                    Ver instrucciones detalladas sobre cómo usar la plantilla Excel
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -898,7 +1035,8 @@ function CuentasCobrarPageContent() {
                   onClick={handleDownloadTemplate} 
                   disabled={downloadingTemplate}
                   size="sm"
-                  startIcon={downloadingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  className="w-full md:w-auto md:h-9 md:px-3"
+                  startIcon={downloadingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
                 >
                   {downloadingTemplate ? 'Descargando...' : 'Plantilla Excel'}
                 </ActionButton>
@@ -920,6 +1058,7 @@ function CuentasCobrarPageContent() {
                   variant="outline"
                   onClick={() => setShowBulkUploadDialog(true)}
                   size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={<Upload className="h-4 w-4" />}
                 >
                   Carga Masiva
@@ -935,14 +1074,14 @@ function CuentasCobrarPageContent() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <ActionButton variant="create" onClick={handleNuevaCuenta} size="sm">
+          <ActionButton variant="create" onClick={handleNuevaCuenta} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
             Nueva Cuenta
           </ActionButton>
         </div>
       </div>
 
-      {/* KPIs - Calculados desde el backend (con filtros aplicados) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* KPIs - Calculados desde el backend (con filtros aplicados) - Mobile First */}
+      <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KpiCard
           title="Total Facturado"
           value={`$${totals.totalAmount.toLocaleString()}`}
@@ -1035,6 +1174,7 @@ function CuentasCobrarPageContent() {
           <ActionButton
             variant="filter"
             size="sm"
+            className="md:h-9 md:px-3"
             startIcon={<Filter className="h-4 w-4" />}
             onClick={() => setIsAdvancedFiltersOpen(true)}
           >
@@ -1072,7 +1212,7 @@ function CuentasCobrarPageContent() {
         rowsPerPageOptions={[10, 25, 50]}
       />
 
-      {/* Sheet de Filtros Avanzados */}
+      {/* Sheet de Filtros Avanzados - Mobile First */}
       <Sheet
         open={isAdvancedFiltersOpen}
         onOpenChange={(open) => {
@@ -1083,15 +1223,15 @@ function CuentasCobrarPageContent() {
           setIsAdvancedFiltersOpen(open)
         }}
       >
-        <SheetContent className="w-[400px] sm:max-w-[400px] overflow-y-auto">
-          <SheetHeader className="px-6 pt-6">
-            <SheetTitle className="text-xl">Filtros Avanzados</SheetTitle>
-            <SheetDescription className="text-sm">
+        <SheetContent className="w-[95vw] sm:w-[400px] sm:max-w-[400px] overflow-y-auto">
+          <SheetHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+            <SheetTitle className="text-lg sm:text-xl">Filtros Avanzados</SheetTitle>
+            <SheetDescription className="text-xs sm:text-sm">
               Configura filtros adicionales
             </SheetDescription>
           </SheetHeader>
 
-          <div className="space-y-5 mt-6 px-6 pb-6">
+          <div className="space-y-5 mt-4 sm:mt-6 px-4 sm:px-6 pb-4 sm:pb-6">
             {/* Proyecto */}
             <FloatingSelect
               label="Proyecto"
@@ -1459,11 +1599,11 @@ function CuentasCobrarPageContent() {
         loadingLabelEditing="Guardando..."
       />
 
-      {/* Dialog para ver detalle de cuenta */}
+      {/* Dialog para ver detalle de cuenta - Mobile First */}
       <Dialog open={isDetalleDialogOpen} onOpenChange={setIsDetalleDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detalle de Cuenta por Cobrar</DialogTitle>
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader className="pb-3 sm:pb-4">
+            <DialogTitle className="text-xl sm:text-2xl">Detalle de Cuenta por Cobrar</DialogTitle>
             <DialogDescription>
               Información completa de la cuenta
             </DialogDescription>
@@ -1535,28 +1675,33 @@ function CuentasCobrarPageContent() {
                 </div>
               </div>
 
-              {/* Información Financiera */}
-              <div className="border rounded-lg p-4 space-y-3 bg-primary/5">
-                <h3 className="font-semibold text-lg">Información Financiera</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-muted-foreground">Monto Total</Label>
-                    <p className="text-xl font-bold text-primary">
-                      ${Number(cuentaDetalle.amount).toLocaleString()} {cuentaDetalle.currency}
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-muted-foreground">Monto Pagado</Label>
-                    <p className="text-xl font-bold text-green-600">
-                      ${Number(cuentaDetalle.paidAmount).toLocaleString()} {cuentaDetalle.currency}
-                    </p>
-                  </div>
-                  <div className="col-span-2">
-                    <Label className="text-muted-foreground">Saldo Pendiente</Label>
-                    <p className="text-2xl font-bold text-orange-600">
-                      ${Number(cuentaDetalle.balance).toLocaleString()} {cuentaDetalle.currency}
-                    </p>
-                  </div>
+              {/* Información Financiera - Usando KpiCards */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <DollarSign className="h-5 w-5 text-primary" />
+                  Información Financiera
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <KpiCard
+                    title="Monto Total"
+                    value={`$${Number(cuentaDetalle.amount).toLocaleString()} ${cuentaDetalle.currency}`}
+                    variant="primary"
+                    icon={<Receipt className="h-4 w-4" />}
+                  />
+                  <KpiCard
+                    title="Monto Pagado"
+                    value={`$${Number(cuentaDetalle.paidAmount).toLocaleString()} ${cuentaDetalle.currency}`}
+                    variant="success"
+                    icon={<CheckCircle className="h-4 w-4" />}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <KpiCard
+                    title="Saldo Pendiente"
+                    value={`$${Number(cuentaDetalle.balance).toLocaleString()} ${cuentaDetalle.currency}`}
+                    variant={Number(cuentaDetalle.balance) > 0 ? 'warning' : 'success'}
+                    icon={<AlertCircle className="h-4 w-4" />}
+                  />
                 </div>
               </div>
 
@@ -1633,28 +1778,30 @@ function CuentasCobrarPageContent() {
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDetalleDialogOpen(false)}>
+          <DialogFooter className="gap-2">
+            <ActionButton variant="outline" onClick={() => setIsDetalleDialogOpen(false)}>
               Cerrar
-            </Button>
+            </ActionButton>
             {cuentaDetalle && (
-              <Button onClick={() => {
-                setIsDetalleDialogOpen(false)
-                handleEditarCuenta(cuentaDetalle)
-              }}>
-                <Edit className="h-4 w-4 mr-2" />
+              <ActionButton
+                variant="edit"
+                onClick={() => {
+                  setIsDetalleDialogOpen(false)
+                  handleEditarCuenta(cuentaDetalle)
+                }}
+              >
                 Editar Cuenta
-              </Button>
+              </ActionButton>
             )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Historial de Pagos */}
+      {/* Dialog de Historial de Pagos - Mobile First */}
       <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
-        <DialogContent className="max-w-[95vw] lg:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+        <DialogContent className="w-[95vw] max-w-7xl max-h-[90vh] overflow-hidden flex flex-col p-4 sm:p-6">
+          <DialogHeader className="pb-3 sm:pb-4">
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
               <History className="h-5 w-5" />
               Historial de Cobros/Pagos Recibidos
             </DialogTitle>
@@ -1664,122 +1811,286 @@ function CuentasCobrarPageContent() {
           </DialogHeader>
 
           <div className="space-y-4 flex-1 overflow-y-auto py-4">
-            {/* Resumen de la cuenta */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-muted/50 rounded-lg">
-              <div className="text-center">
-                <Label className="text-xs text-muted-foreground">Monto Original</Label>
-                <p className="font-bold text-xl">
-                  ${Number(selectedAccountForHistory?.amount || 0).toLocaleString()}
-                </p>
-              </div>
-              <div className="text-center">
-                <Label className="text-xs text-muted-foreground">Total Cobrado</Label>
-                <p className="font-bold text-xl text-green-600">
-                  ${accountPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0).toLocaleString()}
-                </p>
-              </div>
-              <div className="text-center">
-                <Label className="text-xs text-muted-foreground">Saldo Pendiente</Label>
-                <p className="font-bold text-xl text-orange-600">
-                  ${Number(selectedAccountForHistory?.balance || 0).toLocaleString()}
-                </p>
-              </div>
-              <div className="text-center">
-                <Label className="text-xs text-muted-foreground">Total de Cobros</Label>
-                <p className="font-bold text-xl text-blue-600">{accountPayments.length}</p>
-              </div>
+            {/* Resumen de la cuenta con KpiCard reutilizables */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <KpiCard
+                title="Monto Original"
+                value={`$${Number(selectedAccountForHistory?.amount || 0).toLocaleString()}`}
+                icon={<FileText className="h-4 w-4" />}
+              />
+              <KpiCard
+                title="Total Cobrado"
+                value={`$${accountPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0).toLocaleString()}`}
+                icon={<DollarSign className="h-4 w-4" />}
+                variant="success"
+              />
+              <KpiCard
+                title="Saldo Pendiente"
+                value={`$${Number(selectedAccountForHistory?.balance || 0).toLocaleString()}`}
+                icon={<Clock className="h-4 w-4" />}
+                variant="warning"
+              />
+              <KpiCard
+                title="Total de Cobros"
+                value={accountPayments.length}
+                icon={<Receipt className="h-4 w-4" />}
+                variant="info"
+              />
             </div>
 
-            {/* Lista de pagos */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold">Registro de Cobros</h3>
-                {loadingHistory && (
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                )}
-              </div>
-
-              {loadingHistory ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-              ) : accountPayments.length === 0 ? (
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-8 text-center">
-                    <Receipt className="h-12 w-12 text-muted-foreground mb-3" />
-                    <p className="text-muted-foreground">
-                      No hay cobros registrados para esta cuenta
+            {/* Lista de pagos - DataTable reutilizable */}
+            <DataTable
+              title="Registro de Cobros"
+              data={accountPayments}
+              columns={[
+                {
+                  key: 'index',
+                  header: '#',
+                  width: '50px',
+                  render: (row: Payment) => accountPayments.length - accountPayments.indexOf(row),
+                },
+                {
+                  key: 'paymentDate',
+                  header: 'Fecha',
+                  render: (row: Payment) => (
+                    <div className="flex items-center gap-1 text-sm">
+                      <CalendarIcon className="h-3 w-3 text-muted-foreground" />
+                      {formatDateWithoutTimezone(row.paymentDate)}
+                    </div>
+                  ),
+                },
+                {
+                  key: 'paymentMethod',
+                  header: 'Método',
+                  render: (row: Payment) => {
+                    const paymentMethodIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+                      transfer: CreditCard,
+                      check: FileText,
+                      cash: DollarSign,
+                      card: CreditCard,
+                      other: Receipt,
+                    }
+                    const paymentMethodLabels: Record<string, string> = {
+                      transfer: 'Transferencia',
+                      check: 'Cheque',
+                      cash: 'Efectivo',
+                      card: 'Tarjeta',
+                      other: 'Otro',
+                    }
+                    const PaymentIcon = paymentMethodIcons[row.paymentMethod] || Receipt
+                    return (
+                      <div className="flex items-center gap-2">
+                        <div className="bg-green-100 p-1.5 rounded">
+                          <PaymentIcon className="h-3.5 w-3.5 text-green-600" />
+                        </div>
+                        <span className="text-sm">{paymentMethodLabels[row.paymentMethod] || row.paymentMethod}</span>
+                      </div>
+                    )
+                  },
+                },
+                {
+                  key: 'reference',
+                  header: 'Referencia',
+                  render: (row: Payment) => (
+                    <span className="text-sm font-mono">{row.reference || '-'}</span>
+                  ),
+                },
+                {
+                  key: 'amount',
+                  header: 'Monto',
+                  align: 'right',
+                  render: (row: Payment) => {
+                    const isFullPayment = Number(row.amount) === Number(selectedAccountForHistory?.amount)
+                    return (
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="font-bold text-green-600">${Number(row.amount).toLocaleString()}</span>
+                        {isFullPayment && (
+                          <Badge variant="default" className="bg-green-600 text-xs h-5">Completo</Badge>
+                        )}
+                      </div>
+                    )
+                  },
+                },
+                {
+                  key: 'notes',
+                  header: 'Observaciones',
+                  render: (row: Payment) => (
+                    <p className="text-sm text-muted-foreground truncate max-w-xs" title={row.notes || ''}>
+                      {row.notes || '-'}
                     </p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Los cobros aparecerán aquí una vez que sean registrados
+                  ),
+                },
+                {
+                  key: 'createdBy',
+                  header: 'Registrado por',
+                  render: (row: Payment) => (
+                    <p className="text-sm">
+                      {row.createdBy ? `${row.createdBy.firstName} ${row.createdBy.lastName}` : 'Sistema'}
                     </p>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead className="w-12">#</TableHead>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead>Método</TableHead>
-                        <TableHead>Referencia</TableHead>
-                        <TableHead className="text-right">Monto</TableHead>
-                        <TableHead>Observaciones</TableHead>
-                        <TableHead>Registrado por</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {accountPayments.map((payment, index) => {
-                        const PaymentIcon = payment.paymentMethod === 'transfer' ? CreditCard :
-                                           payment.paymentMethod === 'cash' ? DollarSign :
-                                           payment.paymentMethod === 'check' ? FileText :
-                                           payment.paymentMethod === 'card' ? CreditCard : Receipt
-
-                        return (
-                          <TableRow key={payment.id} className="hover:bg-muted/30">
-                            <TableCell className="font-medium">
-                              {accountPayments.length - index}
-                            </TableCell>
-                            <TableCell>
-                              {format(new Date(payment.paymentDate), "dd MMM yyyy", { locale: es })}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <PaymentIcon className="h-4 w-4 text-muted-foreground" />
-                                <span className="capitalize">
-                                  {payment.paymentMethod === 'transfer' ? 'Transferencia' :
-                                   payment.paymentMethod === 'cash' ? 'Efectivo' :
-                                   payment.paymentMethod === 'check' ? 'Cheque' :
-                                   payment.paymentMethod === 'card' ? 'Tarjeta' : payment.paymentMethod}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell>{payment.reference || '-'}</TableCell>
-                            <TableCell className="text-right font-medium text-green-600">
-                              ${Number(payment.amount).toLocaleString()}
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {payment.notes || '-'}
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {payment.createdBy?.firstName} {payment.createdBy?.lastName}
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </div>
+                  ),
+                },
+              ]}
+              keyExtractor={(row: Payment) => row.id}
+              actions={[
+                {
+                  icon: <Pencil className="h-4 w-4" />,
+                  label: 'Editar pago',
+                  onClick: (payment: Payment) => handleOpenEditPayment(payment),
+                },
+              ]}
+              loading={loadingHistory}
+              emptyMessage="No hay cobros registrados para esta cuenta"
+            />
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsHistoryDialogOpen(false)}>
+            <ActionButton variant="cancel" onClick={() => setIsHistoryDialogOpen(false)}>
               Cerrar
-            </Button>
+            </ActionButton>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Editar Pago - Mobile First */}
+      <Dialog open={isEditPaymentDialogOpen} onOpenChange={setIsEditPaymentDialogOpen}>
+        <DialogContent className="w-[95vw] max-w-[500px] p-4 sm:p-6">
+          <DialogHeader className="pb-3 sm:pb-4">
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
+              <Pencil className="h-5 w-5" />
+              Editar Pago
+            </DialogTitle>
+            <DialogDescription>
+              {selectedAccountForHistory && selectedPaymentForEdit && (
+                <div className="mt-2 space-y-1">
+                  <p><strong>Factura:</strong> {selectedAccountForHistory.invoiceNumber}</p>
+                  <p><strong>Cliente:</strong> {selectedAccountForHistory.client?.name}</p>
+                  <p><strong>Monto Actual:</strong> ${Number(selectedPaymentForEdit.amount).toLocaleString()}</p>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedAccountForHistory && selectedPaymentForEdit && (
+            <DynamicFormDialog
+              dialogTitle=""
+              dialogDescription=""
+              config={{
+                columns: 2,
+                fields: [
+                  {
+                    name: 'amount',
+                    label: 'Nuevo Monto',
+                    type: 'currency',
+                    required: true,
+                    placeholder: '0.00',
+                    min: 0.01,
+                  },
+                  {
+                    name: 'paymentMethod',
+                    label: 'Método de Pago',
+                    type: 'select',
+                    required: true,
+                    options: [
+                      { value: 'transfer', label: 'Transferencia Bancaria' },
+                      { value: 'check', label: 'Cheque' },
+                      { value: 'cash', label: 'Efectivo' },
+                      { value: 'card', label: 'Tarjeta de Crédito' },
+                      { value: 'other', label: 'Otro' },
+                    ],
+                  },
+                  {
+                    name: 'reference',
+                    label: 'Referencia/Folio',
+                    type: 'text',
+                    placeholder: 'Número de referencia',
+                  },
+                  {
+                    name: 'paymentDate',
+                    label: 'Fecha de Pago',
+                    type: 'date',
+                    required: true,
+                  },
+                  {
+                    name: 'notes',
+                    label: 'Observaciones',
+                    type: 'textarea',
+                    placeholder: 'Comentarios adicionales...',
+                    className: 'col-span-2',
+                  },
+                ],
+                defaultValues: {
+                  amount: selectedPaymentForEdit?.amount ? String(selectedPaymentForEdit.amount) : '',
+                  paymentMethod: selectedPaymentForEdit?.paymentMethod || 'transfer',
+                  reference: selectedPaymentForEdit?.reference || '',
+                  paymentDate: selectedPaymentForEdit?.paymentDate 
+                    ? new Date(selectedPaymentForEdit.paymentDate).toISOString().split('T')[0] 
+                    : new Date().toISOString().split('T')[0],
+                  notes: selectedPaymentForEdit?.notes || '',
+                },
+              }}
+              onSubmit={async (data: Record<string, any>) => {
+                if (!selectedAccountForHistory || !selectedPaymentForEdit) return
+
+                const amountValue = parseFloat(data.amount)
+                if (!data.amount || amountValue <= 0) {
+                  toast.error('El monto debe ser mayor a cero')
+                  return
+                }
+
+                const oldAmount = Number(selectedPaymentForEdit.amount)
+                const balanceDifference = oldAmount - amountValue
+                const newBalance = Number(selectedAccountForHistory.balance) + balanceDifference
+
+                if (newBalance < 0) {
+                  toast.error(`El nuevo balance sería negativo (${newBalance.toLocaleString()})`)
+                  return
+                }
+
+                try {
+                  setLoading(true)
+                  const updateData = {
+                    amount: amountValue,
+                    paymentMethod: data.paymentMethod as PaymentMethod,
+                    paymentDate: new Date(data.paymentDate).toISOString(),
+                    reference: data.reference || '',
+                    notes: data.notes || '',
+                  }
+                  
+                  const result = await paymentsService.updatePayment(
+                    selectedPaymentForEdit.id,
+                    updateData
+                  )
+                  
+                  toast.success(`Pago actualizado. Nuevo balance: $${Number(result.account.balance).toLocaleString()}`)
+                  setIsEditPaymentDialogOpen(false)
+                  setSelectedPaymentForEdit(null)
+                  
+                  // Recargar historial
+                  const response = await apiClient.get(`/accounts-receivable/${selectedAccountForHistory.id}/payments`)
+                  setAccountPayments(response.data || [])
+                  
+                  // Actualizar la cuenta seleccionada con los nuevos datos
+                  setSelectedAccountForHistory(result.account)
+                  
+                  // Refrescar lista de cuentas
+                  fetchAccounts()
+                  fetchDashboard()
+                } catch (error) {
+                  console.error('Error al actualizar pago:', error)
+                  toast.error('Error al actualizar el pago')
+                } finally {
+                  setLoading(false)
+                }
+              }}
+              onCancel={() => {
+                setIsEditPaymentDialogOpen(false)
+                setSelectedPaymentForEdit(null)
+              }}
+              submitLabel="Guardar Cambios"
+              cancelLabel="Cancelar"
+              loading={loading}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -1799,6 +2110,12 @@ function CuentasCobrarPageContent() {
         onValidate={handleValidate}
         onImport={handleImport}
         onReset={handleResetBulkUpload}
+      />
+
+      {/* Dialog de Guía de Carga Masiva */}
+      <BulkUploadGuideDialogCobrar
+        open={guideOpen}
+        onOpenChange={setGuideOpen}
       />
     </div>
   )

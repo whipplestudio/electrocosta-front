@@ -385,7 +385,6 @@ function UsuariosPageContent() {
       options: [
         { value: 'activo', label: 'Activo' },
         { value: 'inactivo', label: 'Inactivo' },
-        { value: 'pendiente', label: 'Pendiente' },
       ],
     },
   ], [])
@@ -407,9 +406,9 @@ function UsuariosPageContent() {
           <h1 className="text-3xl font-bold tracking-tight text-[#374151]">Usuarios</h1>
           <p className="text-[#6b7280]">Gestiona los usuarios del sistema y sus accesos</p>
         </div>
-        <CreateButton onClick={handleCreateUser}>
+        <ActionButton onClick={handleCreateUser} className="w-full sm:w-auto">
           Nuevo Usuario
-        </CreateButton>
+        </ActionButton>
       </div>
 
       {/* DataTable with filters and pagination */}
@@ -456,12 +455,12 @@ function UsuariosPageContent() {
 
       {/* Dialog - Material Design 3 */}
       <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-xl">
-          <DialogHeader className="space-y-2 pb-4">
-            <DialogTitle className="text-2xl font-semibold text-[#374151]">
+        <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto rounded-xl p-4 sm:p-6">
+          <DialogHeader className="space-y-2 pb-3 sm:pb-4">
+            <DialogTitle className="text-xl sm:text-2xl font-semibold text-[#374151]">
               {selectedUser ? "Editar Usuario" : "Nuevo Usuario"}
             </DialogTitle>
-            <DialogDescription className="text-base text-[#6b7280]">
+            <DialogDescription className="text-sm sm:text-base text-[#6b7280]">
               {selectedUser ? "Modifica los datos del usuario" : "Crea un nuevo usuario en el sistema"}
             </DialogDescription>
           </DialogHeader>

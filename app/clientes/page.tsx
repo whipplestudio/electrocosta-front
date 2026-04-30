@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Search, Edit, Users, Building2, Mail, Phone, User, CheckCircle2, Save, Upload, FileSpreadsheet, Loader2 } from "lucide-react"
+import { Search, Edit, Users, Building2, Mail, Phone, User, CheckCircle2, Save, Upload, FileSpreadsheet, Loader2, HelpCircle } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
@@ -11,17 +11,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { clientsService, Client, CreateClientDto } from "@/services/clients.service"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import { ActionButton, CreateButton, KpiCard, DataTable, Column, Action } from "@/components/ui"
 import { FloatingInput } from "@/components/ui"
 import { DynamicForm, FormSection } from "@/components/forms"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
+import { BulkUploadGuideDialogClientes } from "@/components/bulk-upload-guide-dialog-clientes"
 import { cn } from "@/lib/utils"
 
 export default function ClientesPage() {
   const router = useRouter()
-  const { toast } = useToast()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   
@@ -45,6 +46,7 @@ export default function ClientesPage() {
   
   // Bulk upload dialog states (similar to proyectos)
   const [showBulkUploadDialog, setShowBulkUploadDialog] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
   const [archivo, setArchivo] = useState<File | null>(null)
   const [uploadResponse, setUploadResponse] = useState<any>(null)
   const [validacionResultado, setValidacionResultado] = useState<any>(null)
@@ -64,11 +66,7 @@ export default function ClientesPage() {
       setTotal(response.total)
       setPages(response.pages)
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar los clientes",
-        variant: "destructive",
-      })
+      toast.error('No se pudieron cargar los clientes')
       console.error("Error loading clients:", error)
     } finally {
       setLoading(false)
@@ -284,19 +282,12 @@ export default function ClientesPage() {
 
       await clientsService.create(clientData)
       
-      toast({
-        title: "✅ Cliente creado",
-        description: "El cliente ha sido registrado exitosamente",
-      })
+      toast.success('El cliente se ha creado exitosamente')
       
       handleCloseModals()
       loadClients(searchTerm)
     } catch (error) {
-      toast({
-        title: "❌ Error",
-        description: error instanceof Error ? error.message : "No se pudo crear el cliente",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear el cliente')
     } finally {
       setFormLoading(false)
     }
@@ -320,19 +311,12 @@ export default function ClientesPage() {
 
       await clientsService.update(selectedClient.id, updateData)
       
-      toast({
-        title: "✅ Cliente actualizado",
-        description: "Los cambios han sido guardados exitosamente",
-      })
+      toast.success('Los cambios se han guardado exitosamente')
 
       handleCloseModals()
       loadClients(searchTerm)
     } catch (error) {
-      toast({
-        title: "❌ Error",
-        description: error instanceof Error ? error.message : "No se pudo actualizar el cliente",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el cliente')
     } finally {
       setFormLoading(false)
     }
@@ -374,18 +358,10 @@ export default function ClientesPage() {
       })
       
       if (result.failed > 0) {
-        toast({
-          title: `⚠️ Validación completada`,
-          description: `${result.success} válidos, ${result.failed} con errores`,
-          variant: "destructive",
-        })
+        toast.error(`${result.success} válidos, ${result.failed} con errores`)
       }
     } catch (error) {
-      toast({
-        title: "❌ Error",
-        description: error instanceof Error ? error.message : "No se pudo procesar el archivo",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : 'No se pudo procesar el archivo')
     } finally {
       setUploadLoading(false)
     }
@@ -424,52 +400,99 @@ export default function ClientesPage() {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
       
-      toast({
-        title: "✅ Descarga completada",
-        description: "La plantilla se ha descargado exitosamente",
-      })
+      toast.success('La plantilla se ha descargado exitosamente')
     } catch (error) {
-      toast({
-        title: "❌ Error",
-        description: "No se pudo descargar la plantilla",
-        variant: "destructive",
-      })
+      toast.error('No se pudo descargar la plantilla')
     }
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header - Material Design 3 */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#e5e7eb]">
+    <div className="container mx-auto p-4 md:p-6 space-y-4 md:space-y-6">
+      {/* Header - Material Design 3 - Mobile First */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-[#e5e7eb]">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight text-[#374151]">Gestión de Clientes</h1>
-          <p className="text-[#6b7280]">Administra la información de tus clientes y contactos</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[#374151]">Gestión de Clientes</h1>
+          <p className="text-sm md:text-base text-[#6b7280]">Administra la información de tus clientes y contactos</p>
         </div>
-        <div className="flex gap-2">
-          <ActionButton
-            variant="outline"
-            size="sm"
-            startIcon={<Upload className="h-4 w-4" />}
-            onClick={() => setShowBulkUploadDialog(true)}
-          >
-            Carga Masiva
-          </ActionButton>
-          <ActionButton
-            variant="outline"
-            size="sm"
-            startIcon={<FileSpreadsheet className="h-4 w-4" />}
-            onClick={descargarPlantilla}
-          >
-            Plantilla
-          </ActionButton>
-          <CreateButton onClick={handleOpenCreate}>
+        {/* Toolbar buttons - 2 cols on mobile, horizontal on desktop */}
+        <div className="grid grid-cols-2 gap-2 md:flex md:flex-nowrap md:justify-end">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ActionButton
+                  variant="ghost"
+                  size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
+                  startIcon={<HelpCircle className="h-4 w-4" />}
+                  onClick={() => setGuideOpen(true)}
+                >
+                  Guía
+                </ActionButton>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
+                <div className="space-y-1">
+                  <p className="font-semibold text-white dark:text-slate-900">Guía de carga masiva</p>
+                  <p className="text-xs text-slate-200 dark:text-slate-700">
+                    Ver instrucciones detalladas sobre cómo usar la plantilla Excel
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ActionButton
+                  variant="outline"
+                  size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
+                  startIcon={<FileSpreadsheet className="h-4 w-4" />}
+                  onClick={descargarPlantilla}
+                >
+                  Plantilla
+                </ActionButton>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
+                <div className="space-y-1">
+                  <p className="font-semibold text-white dark:text-slate-900">Plantilla para carga masiva</p>
+                  <p className="text-xs text-slate-200 dark:text-slate-700">
+                    Descarga el archivo Excel con el formato correcto para importar múltiples clientes a la vez
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ActionButton
+                  variant="outline"
+                  size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
+                  startIcon={<Upload className="h-4 w-4" />}
+                  onClick={() => setShowBulkUploadDialog(true)}
+                >
+                  Carga Masiva
+                </ActionButton>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
+                <div className="space-y-1">
+                  <p className="font-semibold text-white dark:text-slate-900">Importación masiva de clientes</p>
+                  <p className="text-xs text-slate-200 dark:text-slate-700">
+                    Sube un archivo Excel con múltiples clientes a la vez
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <CreateButton onClick={handleOpenCreate} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
             Nuevo Cliente
           </CreateButton>
         </div>
       </div>
 
-      {/* KPIs - Reusable Components */}
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* KPIs - Reusable Components - Mobile First */}
+      <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <KpiCard
           title="Total Clientes"
           value={total}
@@ -520,14 +543,14 @@ export default function ClientesPage() {
         rowsPerPageOptions={[10, 25, 50, 100]}
       />
 
-      {/* Create Client Modal */}
+      {/* Create Client Modal - Mobile First */}
       <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-        <DialogContent className="sm:max-w-2xl rounded-xl">
-          <DialogHeader className="space-y-2 pb-4">
-            <DialogTitle className="text-2xl font-semibold text-[#374151]">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl p-4 sm:p-6">
+          <DialogHeader className="space-y-2 pb-3 sm:pb-4">
+            <DialogTitle className="text-xl sm:text-2xl font-semibold text-[#374151]">
               Nuevo Cliente
             </DialogTitle>
-            <DialogDescription className="text-base text-[#6b7280]">
+            <DialogDescription className="text-sm sm:text-base text-[#6b7280]">
               Registrar un nuevo cliente en el sistema
             </DialogDescription>
           </DialogHeader>
@@ -546,8 +569,15 @@ export default function ClientesPage() {
             showCancel={false}
             footerClassName="flex justify-end gap-3 pt-4 border-t border-[#e5e7eb]"
             extraButtons={
-              <>
-                <ActionButton variant="ghost" onClick={handleCloseModals} disabled={formLoading}>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                <ActionButton 
+                  type="button" 
+                  variant="ghost" 
+                  onClick={handleCloseModals} 
+                  disabled={formLoading}
+                  className="flex-1 sm:flex-none"
+                  size="md"
+                >
                   Cancelar
                 </ActionButton>
                 <ActionButton
@@ -555,24 +585,28 @@ export default function ClientesPage() {
                   form="create-client-form"
                   variant="save"
                   disabled={formLoading}
-                  startIcon={formLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  size="md"
+                  loading={formLoading}
+                  loadingText="Guardando..."
+                  className="flex-1 sm:flex-none"
+                  startIcon={<Save className="h-4 w-4" />}
                 >
-                  {formLoading ? 'Guardando...' : 'Guardar Cliente'}
+                  Guardar Cliente
                 </ActionButton>
-              </>
+              </div>
             }
           />
         </DialogContent>
       </Dialog>
 
-      {/* Edit Client Modal */}
+      {/* Edit Client Modal - Mobile First */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="sm:max-w-2xl rounded-xl">
-          <DialogHeader className="space-y-2 pb-4">
-            <DialogTitle className="text-2xl font-semibold text-[#374151]">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl p-4 sm:p-6">
+          <DialogHeader className="space-y-2 pb-3 sm:pb-4">
+            <DialogTitle className="text-xl sm:text-2xl font-semibold text-[#374151]">
               Editar Cliente
             </DialogTitle>
-            <DialogDescription className="text-base text-[#6b7280]">
+            <DialogDescription className="text-sm sm:text-base text-[#6b7280]">
               Actualizar información del cliente
             </DialogDescription>
           </DialogHeader>
@@ -599,8 +633,15 @@ export default function ClientesPage() {
             showCancel={false}
             footerClassName="flex justify-end gap-3 pt-4 border-t border-[#e5e7eb]"
             extraButtons={
-              <>
-                <ActionButton variant="ghost" onClick={handleCloseModals} disabled={formLoading}>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                <ActionButton 
+                  type="button" 
+                  variant="ghost" 
+                  onClick={handleCloseModals} 
+                  disabled={formLoading}
+                  className="flex-1 sm:flex-none"
+                  size="md"
+                >
                   Cancelar
                 </ActionButton>
                 <ActionButton
@@ -608,11 +649,15 @@ export default function ClientesPage() {
                   form="edit-client-form"
                   variant="save"
                   disabled={formLoading}
-                  startIcon={formLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  size="md"
+                  loading={formLoading}
+                  loadingText="Guardando..."
+                  className="flex-1 sm:flex-none"
+                  startIcon={<Save className="h-4 w-4" />}
                 >
-                  {formLoading ? 'Guardando...' : 'Guardar Cambios'}
+                  Guardar Cambios
                 </ActionButton>
-              </>
+              </div>
             }
           />
         </DialogContent>
@@ -634,6 +679,12 @@ export default function ClientesPage() {
         onValidate={() => {}} // No needed for clients - validation happens on upload
         onImport={importarDatos}
         onReset={handleResetBulkUpload}
+      />
+
+      {/* Dialog de Guía de Carga Masiva */}
+      <BulkUploadGuideDialogClientes
+        open={guideOpen}
+        onOpenChange={setGuideOpen}
       />
     </div>
   )

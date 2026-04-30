@@ -135,10 +135,12 @@ function MD3TablePagination({
     <Box
       sx={{
         display: 'flex',
+        flexDirection: { xs: 'column', sm: 'row' },
         alignItems: 'center',
-        justifyContent: 'flex-end',
-        px: 2,
-        py: 1.5,
+        justifyContent: { xs: 'center', sm: 'flex-end' },
+        gap: { xs: 1, sm: 0 },
+        px: { xs: 1.5, sm: 2 },
+        py: { xs: 1, sm: 1.5 },
         borderTop: `1px solid ${SYSTEM_COLORS.border}`,
         backgroundColor: SYSTEM_COLORS.background,
       }}
@@ -147,13 +149,19 @@ function MD3TablePagination({
         variant="body2"
         sx={{
           color: SYSTEM_COLORS.foregroundMuted,
-          mr: 2,
-          fontSize: '14px',
+          mr: { sm: 2 },
+          fontSize: { xs: '12px', sm: '14px' },
+          order: { xs: 2, sm: 1 },
         }}
       >
         {(page - 1) * rowsPerPage + 1}-{Math.min(page * rowsPerPage, count)} de {count}
       </Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: 0.5,
+        order: { xs: 1, sm: 2 }
+      }}>
         <IconButton
           size="small"
           disabled={page <= 1}
@@ -162,17 +170,18 @@ function MD3TablePagination({
             color: SYSTEM_COLORS.foreground,
             '&:hover': { backgroundColor: SYSTEM_COLORS.muted },
             '&.Mui-disabled': { color: SYSTEM_COLORS.borderHover },
+            padding: { xs: '4px', sm: '8px' },
           }}
         >
-          <KeyboardArrowLeft />
+          <KeyboardArrowLeft sx={{ fontSize: { xs: '20px', sm: '24px' } }} />
         </IconButton>
         <Typography
           variant="body2"
           sx={{
             color: SYSTEM_COLORS.foreground,
-            minWidth: '40px',
+            minWidth: { xs: '32px', sm: '40px' },
             textAlign: 'center',
-            fontSize: '14px',
+            fontSize: { xs: '13px', sm: '14px' },
             fontWeight: 500,
           }}
         >
@@ -186,9 +195,10 @@ function MD3TablePagination({
             color: SYSTEM_COLORS.foreground,
             '&:hover': { backgroundColor: SYSTEM_COLORS.muted },
             '&.Mui-disabled': { color: SYSTEM_COLORS.borderHover },
+            padding: { xs: '4px', sm: '8px' },
           }}
         >
-          <KeyboardArrowRight />
+          <KeyboardArrowRight sx={{ fontSize: { xs: '20px', sm: '24px' } }} />
         </IconButton>
       </Box>
     </Box>
@@ -231,15 +241,19 @@ function ActionsMenu<T>({ actions, row }: { actions: Action<T>[]; row: T }) {
   return (
     <>
       <IconButton
-        size="small"
         onClick={handleClick}
+        size="small"
         aria-label="more"
         sx={{
           color: SYSTEM_COLORS.foregroundMuted,
-          '&:hover': { backgroundColor: SYSTEM_COLORS.muted },
+          padding: { xs: '4px', sm: '8px' },
+          '&:hover': { 
+            backgroundColor: SYSTEM_COLORS.muted,
+            color: SYSTEM_COLORS.foreground,
+          },
         }}
       >
-        <MoreVertIcon fontSize="small" />
+        <MoreVertIcon sx={{ fontSize: { xs: '18px', sm: '20px' } }} />
       </IconButton>
       <ClickAwayListener onClickAway={handleClickAway}>
         <Menu
@@ -391,14 +405,15 @@ function FiltersToolbar({
       <Box
         sx={{
           display: 'flex',
-          flexWrap: 'wrap',
-          gap: 2,
-          alignItems: 'center',
+          flexDirection: { xs: 'column', sm: 'row' },
+          flexWrap: { xs: 'nowrap', sm: 'wrap' },
+          gap: { xs: 1.5, sm: 2 },
+          alignItems: { xs: 'stretch', sm: 'center' },
         }}
       >
         {/* Search filter */}
         {searchFilter && (
-          <div className="w-full sm:max-w-[33.333%] sm:w-[400px]">
+          <Box sx={{ width: { xs: '100%', sm: 'auto', md: 400 }, flexShrink: 0 }}>
             <FloatingInput
               label={searchFilter.placeholder || 'Buscar'}
               value={localSearch}
@@ -406,12 +421,12 @@ function FiltersToolbar({
               startAdornment={<SearchIcon className="w-4 h-4" />}
               containerClassName="w-full compact-search"
             />
-          </div>
+          </Box>
         )}
 
         {/* Select filters */}
         {selectFilters?.map((filter) => (
-          <div key={filter.key} className="w-full sm:w-auto sm:min-w-[180px]">
+          <Box key={filter.key} sx={{ width: { xs: '100%', sm: 'auto' }, minWidth: { sm: 180 } }}>
             <FloatingSelect
               label={filter.label}
               value={filterValues[filter.key] || (filter.multiple ? [] : '')}
@@ -420,12 +435,19 @@ function FiltersToolbar({
               multiple={filter.multiple}
               placeholder={filter.placeholder || `Seleccionar ${filter.label.toLowerCase()}`}
             />
-          </div>
+          </Box>
         ))}
 
         {/* Toolbar buttons */}
         {toolbarButtons && (
-          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ 
+            ml: { sm: 'auto' }, 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 1,
+            width: { xs: '100%', sm: 'auto' },
+            justifyContent: { xs: 'flex-start', sm: 'flex-end' }
+          }}>
             {toolbarButtons}
           </Box>
         )}
@@ -565,15 +587,39 @@ export function DataTable<T>({
           toolbarButtons={toolbarButtons}
         />
       )}
-      <TableContainer sx={{ maxHeight: maxHeight }}>
+      <TableContainer 
+        sx={{ 
+          maxHeight: maxHeight,
+          overflowX: 'auto',
+          // Hide scrollbar on mobile for cleaner look, but keep functionality
+          '&::-webkit-scrollbar': {
+            height: '6px',
+          },
+          '&::-webkit-scrollbar-track': {
+            backgroundColor: 'transparent',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            backgroundColor: SYSTEM_COLORS.borderHover,
+            borderRadius: '3px',
+          },
+        }}
+      >
         <Table
           stickyHeader={stickyHeader}
           size={size}
           sx={{
-            minWidth: 650,
+            minWidth: { xs: '100%', sm: 650 },
+            tableLayout: { xs: 'auto', sm: 'fixed' },
             '& .MuiTableCell-root': {
               fontFamily: '"Roboto", "Geist", sans-serif',
-              fontSize: '14px',
+              fontSize: { xs: '13px', sm: '14px' },
+              px: { xs: 1.5, sm: 2 },
+              py: { xs: 1, sm: 1.5 },
+              // Prevent text overflow
+              maxWidth: { xs: '150px', sm: 'none' },
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: { xs: 'nowrap', sm: 'normal' },
             },
             ...tableSx,
           }}
@@ -586,10 +632,10 @@ export function DataTable<T>({
                   '& .MuiTableCell-root': {
                     color: SYSTEM_COLORS.foreground,
                     fontWeight: 500,
-                    fontSize: '14px',
+                    fontSize: { xs: '12px', sm: '14px' },
                     borderBottom: `1px solid ${SYSTEM_COLORS.border}`,
-                    py: 1.5,
-                    px: 2,
+                    py: { xs: 1, sm: 1.5 },
+                    px: { xs: 1.5, sm: 2 },
                   },
                   ...headerSx,
                 }}
@@ -604,8 +650,8 @@ export function DataTable<T>({
                   </TableCell>
                 ))}
                 {hasActions && (
-                  <TableCell align="right" sx={{ width: '50px' }}>
-                    Acciones
+                  <TableCell align="right" sx={{ width: { xs: '40px', sm: '50px' }, padding: { xs: '4px' } }}>
+                    <span style={{ fontSize: '0' }}>⋮</span>
                   </TableCell>
                 )}
               </TableRow>

@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrendingUp, TrendingDown, DollarSign, CreditCard, Wallet, AlertCircle, X } from "lucide-react"
+import { TrendingUp, TrendingDown, DollarSign, CreditCard, Wallet, AlertCircle, X, FolderOpen, ArrowRight } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import apiClient from "@/lib/api-client"
@@ -86,6 +86,7 @@ function DashboardContent() {
   const [dashboardProyecto, setDashboardProyecto] = useState<DashboardProyecto | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [loading, setLoading] = useState(true)
+  const [loadingProject, setLoadingProject] = useState(false)
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date } | undefined>()
   
   // Datos de cuentas por pagar por proyecto
@@ -151,7 +152,7 @@ function DashboardContent() {
 
   const cargarDashboardProyecto = async (projectId: string) => {
     try {
-      setLoading(true)
+      setLoadingProject(true)
       const params = new URLSearchParams()
       const from = searchParams.get("from")
       const to = searchParams.get("to")
@@ -165,7 +166,7 @@ function DashboardContent() {
       console.error("Error al cargar dashboard del proyecto:", error)
       toast.error("Error al cargar el dashboard del proyecto")
     } finally {
-      setLoading(false)
+      setLoadingProject(false)
     }
   }
 
@@ -286,11 +287,11 @@ function DashboardContent() {
 
   if (loading && !dashboardGeneral) {
     return (
-      <div className="container mx-auto p-6 space-y-6">
-        <Skeleton className="h-12 w-64" />
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="container mx-auto p-4 md:p-6 space-y-4 md:space-y-6">
+        <Skeleton className="h-10 md:h-12 w-48 md:w-64" />
+        <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-32" />
+            <Skeleton key={i} className="h-28 md:h-32" />
           ))}
         </div>
       </div>
@@ -298,19 +299,19 @@ function DashboardContent() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard Financiero</h1>
-          <p className="text-muted-foreground">
-            Visualización en tiempo real de la salud financiera de tus proyectos
-          </p>
-        </div>
+    <div className="container mx-auto p-4 md:p-6 space-y-4 md:space-y-6">
+      {/* Header - Mobile first */}
+      <div className="flex flex-col gap-2">
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Dashboard Financiero</h1>
+        <p className="text-sm md:text-base text-muted-foreground">
+          Visualización en tiempo real de la salud financiera de tus proyectos
+        </p>
       </div>
 
       {dashboardGeneral && (
         <>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {/* KPI Cards - Mobile: 1 col, Tablet: 2 cols, Desktop: 4 cols */}
+          <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <KpiCard
               title="Proyectos Activos"
               value={dashboardGeneral.proyectosActivos}
@@ -347,8 +348,9 @@ function DashboardContent() {
               <CardDescription>Selecciona un proyecto y filtra por rango de fechas</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex gap-4 items-end">
-                <div className="flex-1">
+              {/* Project Selector and Date Filter - Mobile: stacked, Desktop: side by side */}
+              <div className="flex flex-col md:flex-row gap-3 md:gap-4 md:items-end">
+                <div className="flex-1 w-full">
                   <FloatingSelect
                     label="Proyecto"
                     value={selectedProjectId}
@@ -364,37 +366,77 @@ function DashboardContent() {
                   />
                 </div>
 
-                <div>
+                <div className="w-full md:w-auto">
                   <FloatingDatePicker
                     label="Rango de Fechas"
                     value={dateRange}
                     onChange={handleDateRangeChange}
                     mode="range"
                     placeholder="Seleccionar rango de fechas"
-                    containerClassName="min-w-[280px]"
+                    containerClassName="md:min-w-[280px]"
                   />
                 </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* Estado vacío cuando no hay proyecto seleccionado */}
+          {!selectedProjectId && !loadingProject && (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-12">
+              <div className="flex flex-col items-center justify-center text-center">
+                <div className="mb-4 rounded-full bg-white p-4 shadow-sm">
+                  <FolderOpen className="h-10 w-10 text-gray-400" />
+                </div>
+                <h3 className="mb-2 text-lg font-semibold text-gray-900">
+                  Selecciona un proyecto
+                </h3>
+                <p className="mb-6 max-w-sm text-sm text-gray-500">
+                  Elige un proyecto arriba para ver su análisis financiero detallado, KPIs y métricas de rentabilidad en tiempo real.
+                </p>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <ArrowRight className="h-4 w-4" />
+                    Selecciona un proyecto para comenzar
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Skeleton loader cuando se está cargando el proyecto */}
+          {loadingProject && (
+            <div className="space-y-3 md:space-y-4">
+              <Skeleton className="h-7 md:h-8 w-48 md:w-64" />
+              <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                <Skeleton className="h-28 md:h-32" />
+                <Skeleton className="h-28 md:h-32" />
+                <Skeleton className="h-28 md:h-32" />
+                <Skeleton className="h-28 md:h-32" />
+              </div>
+              <div className="grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-2">
+                <Skeleton className="h-48 md:h-64" />
+                <Skeleton className="h-48 md:h-64" />
+              </div>
+            </div>
+          )}
         </>
       )}
 
       {dashboardProyecto && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold">{dashboardProyecto.proyectoNombre}</h2>
-              {dashboardProyecto.filtrosAplicados.fechaInicio && (
-                <p className="text-sm text-muted-foreground">
-                  Período: {dashboardProyecto.filtrosAplicados.fechaInicio} -{" "}
-                  {dashboardProyecto.filtrosAplicados.fechaFin || "Presente"}
-                </p>
-              )}
-            </div>
+        <div className="space-y-3 md:space-y-4">
+          {/* Project Title Section - Mobile optimized */}
+          <div className="flex flex-col gap-1">
+            <h2 className="text-xl md:text-2xl font-bold">{dashboardProyecto.proyectoNombre}</h2>
+            {dashboardProyecto.filtrosAplicados.fechaInicio && (
+              <p className="text-xs md:text-sm text-muted-foreground">
+                Período: {dashboardProyecto.filtrosAplicados.fechaInicio} -{" "}
+                {dashboardProyecto.filtrosAplicados.fechaFin || "Presente"}
+              </p>
+            )}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {/* Project KPIs - Mobile: 1 col, Tablet: 2 cols, Desktop: 4 cols */}
+          <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <KpiCard
               title="Proyección Total"
               value={formatCurrency(dashboardProyecto.kpis.proyeccionTotal.total)}
@@ -554,17 +596,17 @@ function DashboardContent() {
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Rentabilidad del Proyecto</CardTitle>
+            <CardHeader className="pb-3 md:pb-4">
+              <CardTitle className="text-lg md:text-xl">Rentabilidad del Proyecto</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="space-y-4 md:space-y-6">
                 {/* Rentabilidad Esperada - Métrica Principal */}
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Rentabilidad Esperada</p>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs md:text-sm font-medium text-muted-foreground mb-1">Rentabilidad Esperada</p>
                     <div
-                      className={`text-4xl font-bold ${
+                      className={`text-2xl md:text-4xl font-bold truncate ${
                         (dashboardProyecto.kpis.rentabilidad.rentabilidadEsperada ?? 0) >= 0
                           ? "text-green-600"
                           : "text-red-600"
@@ -572,30 +614,30 @@ function DashboardContent() {
                     >
                       {formatCurrency(dashboardProyecto.kpis.rentabilidad.rentabilidadEsperada ?? 0)}
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Margen Esperado: {formatPercentage(dashboardProyecto.kpis.rentabilidad.margenEsperado ?? 0)}
+                    <p className="text-xs md:text-sm text-muted-foreground mt-1">
+                      Margen: {formatPercentage(dashboardProyecto.kpis.rentabilidad.margenEsperado ?? 0)}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-[10px] md:text-xs text-muted-foreground mt-1">
                       (Valor Venta - Presupuesto Total)
                     </p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex-shrink-0">
                     {(dashboardProyecto.kpis.rentabilidad.rentabilidadEsperada ?? 0) >= 0 ? (
-                      <TrendingUp className="h-12 w-12 text-green-600" />
+                      <TrendingUp className="h-8 w-8 md:h-12 md:w-12 text-green-600" />
                     ) : (
-                      <TrendingDown className="h-12 w-12 text-red-600" />
+                      <TrendingDown className="h-8 w-8 md:h-12 md:w-12 text-red-600" />
                     )}
                   </div>
                 </div>
 
                 {/* Separador */}
-                <div className="border-t pt-3">
+                <div className="border-t pt-3 md:pt-4">
                   {/* Flujo de Caja Actual - Métrica Secundaria */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">Flujo actual (Cobrado vs Gastado)</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs md:text-sm font-medium text-muted-foreground mb-1">Flujo actual (Cobrado vs Gastado)</p>
                       <div
-                        className={`text-2xl font-semibold ${
+                        className={`text-xl md:text-2xl font-semibold truncate ${
                           (dashboardProyecto.kpis.rentabilidad.esFlujoNegativo ?? false)
                             ? "text-red-600"
                             : "text-green-600"
@@ -603,7 +645,7 @@ function DashboardContent() {
                       >
                         {formatCurrency(dashboardProyecto.kpis.rentabilidad.flujoActual ?? 0)}
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-[10px] md:text-xs text-muted-foreground mt-1 leading-tight">
                         {(dashboardProyecto.kpis.rentabilidad.esFlujoNegativo ?? false)
                           ? "⚠️ Flujo negativo: se ha gastado más de lo cobrado"
                           : "✓ Flujo positivo: se ha cobrado más de lo gastado"
@@ -623,7 +665,17 @@ function DashboardContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<div className="p-8"><Skeleton className="h-96 w-full" /></div>}>
+    <Suspense fallback={
+      <div className="p-4 md:p-6 space-y-4">
+        <Skeleton className="h-10 md:h-12 w-48 md:w-64" />
+        <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-28 md:h-32" />
+          ))}
+        </div>
+        <Skeleton className="h-48 md:h-64 w-full" />
+      </div>
+    }>
       <DashboardContent />
     </Suspense>
   )

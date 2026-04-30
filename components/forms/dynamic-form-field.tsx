@@ -297,22 +297,63 @@ export function DynamicFormField({
           </div>
         );
 
-      case 'currency':
+      case 'currency': {
+        // Formatear número con separadores de miles (mientras se escribe)
+        const formatNumber = (val: string): string => {
+          const num = val.replace(/,/g, '');
+          if (!num) return '';
+
+          const parts = num.split('.');
+          const wholePart = parts[0];
+          const decimalPart = parts[1] || '';
+
+          // Agregar separadores de miles a la parte entera
+          const withSeparators = wholePart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+          return decimalPart ? `${withSeparators}.${decimalPart}` : withSeparators;
+        };
+
+        // Manejar cambio - formatear mientras se escribe
+        const handleChange = (inputValue: string) => {
+          // Remover todo excepto números y punto decimal
+          const cleanValue = inputValue.replace(/[^\d.]/g, '');
+
+          // Asegurar solo un punto decimal
+          const parts = cleanValue.split('.');
+          let sanitized = parts[0];
+          if (parts.length > 1) {
+            sanitized += '.' + parts.slice(1).join('').slice(0, 2);
+          }
+
+          if (sanitized === '' || sanitized === '.') {
+            onChange(undefined);
+            return;
+          }
+
+          // Actualizar el valor numérico en el formulario (sin formato)
+          const numValue = parseFloat(sanitized);
+          if (!isNaN(numValue)) {
+            onChange(numValue);
+          }
+        };
+
+        // El valor mostrado está formateado con separadores
+        const displayValue = formatNumber(value ? String(value) : '');
+
         return (
           <FloatingInput
             label={field.label + (field.required ? ' *' : '')}
-            type="number"
-            step={field.step || 0.01}
-            min={field.min}
-            max={field.max}
+            type="text"
+            inputMode="decimal"
             placeholder={field.placeholder || '0.00'}
             disabled={field.disabled}
             readOnly={field.readOnly}
-            value={value || ''}
-            onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+            value={displayValue}
+            onChange={(e) => handleChange(e.target.value)}
             startAdornment={<span className="font-medium">$</span>}
           />
         );
+      }
 
       case 'percent':
         return (

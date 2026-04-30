@@ -995,14 +995,15 @@ function CuentasCobrarPageContent() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Cuentas por Cobrar</h1>
-          <p className="text-muted-foreground">Gestiona las cuentas pendientes de cobro</p>
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+      {/* Header - Mobile First */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Cuentas por Cobrar</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Gestiona las cuentas pendientes de cobro</p>
         </div>
-        <div className="flex gap-2">
+        {/* Toolbar buttons - 2 cols on mobile, horizontal on desktop */}
+        <div className="grid grid-cols-2 gap-2 md:flex md:flex-nowrap md:justify-end">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1010,6 +1011,7 @@ function CuentasCobrarPageContent() {
                   variant="ghost"
                   onClick={() => setGuideOpen(true)}
                   size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={<HelpCircle className="h-4 w-4" />}
                 >
                   Guía
@@ -1033,6 +1035,7 @@ function CuentasCobrarPageContent() {
                   onClick={handleDownloadTemplate} 
                   disabled={downloadingTemplate}
                   size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={downloadingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
                 >
                   {downloadingTemplate ? 'Descargando...' : 'Plantilla Excel'}
@@ -1055,6 +1058,7 @@ function CuentasCobrarPageContent() {
                   variant="outline"
                   onClick={() => setShowBulkUploadDialog(true)}
                   size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={<Upload className="h-4 w-4" />}
                 >
                   Carga Masiva
@@ -1070,14 +1074,14 @@ function CuentasCobrarPageContent() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <ActionButton variant="create" onClick={handleNuevaCuenta} size="sm">
+          <ActionButton variant="create" onClick={handleNuevaCuenta} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
             Nueva Cuenta
           </ActionButton>
         </div>
       </div>
 
-      {/* KPIs - Calculados desde el backend (con filtros aplicados) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* KPIs - Calculados desde el backend (con filtros aplicados) - Mobile First */}
+      <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KpiCard
           title="Total Facturado"
           value={`$${totals.totalAmount.toLocaleString()}`}
@@ -1170,6 +1174,7 @@ function CuentasCobrarPageContent() {
           <ActionButton
             variant="filter"
             size="sm"
+            className="md:h-9 md:px-3"
             startIcon={<Filter className="h-4 w-4" />}
             onClick={() => setIsAdvancedFiltersOpen(true)}
           >
@@ -1207,7 +1212,7 @@ function CuentasCobrarPageContent() {
         rowsPerPageOptions={[10, 25, 50]}
       />
 
-      {/* Sheet de Filtros Avanzados */}
+      {/* Sheet de Filtros Avanzados - Mobile First */}
       <Sheet
         open={isAdvancedFiltersOpen}
         onOpenChange={(open) => {
@@ -1218,15 +1223,15 @@ function CuentasCobrarPageContent() {
           setIsAdvancedFiltersOpen(open)
         }}
       >
-        <SheetContent className="w-[400px] sm:max-w-[400px] overflow-y-auto">
-          <SheetHeader className="px-6 pt-6">
-            <SheetTitle className="text-xl">Filtros Avanzados</SheetTitle>
-            <SheetDescription className="text-sm">
+        <SheetContent className="w-[95vw] sm:w-[400px] sm:max-w-[400px] overflow-y-auto">
+          <SheetHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+            <SheetTitle className="text-lg sm:text-xl">Filtros Avanzados</SheetTitle>
+            <SheetDescription className="text-xs sm:text-sm">
               Configura filtros adicionales
             </SheetDescription>
           </SheetHeader>
 
-          <div className="space-y-5 mt-6 px-6 pb-6">
+          <div className="space-y-5 mt-4 sm:mt-6 px-4 sm:px-6 pb-4 sm:pb-6">
             {/* Proyecto */}
             <FloatingSelect
               label="Proyecto"
@@ -1594,11 +1599,11 @@ function CuentasCobrarPageContent() {
         loadingLabelEditing="Guardando..."
       />
 
-      {/* Dialog para ver detalle de cuenta */}
+      {/* Dialog para ver detalle de cuenta - Mobile First */}
       <Dialog open={isDetalleDialogOpen} onOpenChange={setIsDetalleDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detalle de Cuenta por Cobrar</DialogTitle>
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader className="pb-3 sm:pb-4">
+            <DialogTitle className="text-xl sm:text-2xl">Detalle de Cuenta por Cobrar</DialogTitle>
             <DialogDescription>
               Información completa de la cuenta
             </DialogDescription>
@@ -1792,11 +1797,11 @@ function CuentasCobrarPageContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Historial de Pagos */}
+      {/* Dialog de Historial de Pagos - Mobile First */}
       <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
-        <DialogContent className="max-w-[95vw] lg:max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+        <DialogContent className="w-[95vw] max-w-7xl max-h-[90vh] overflow-hidden flex flex-col p-4 sm:p-6">
+          <DialogHeader className="pb-3 sm:pb-4">
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
               <History className="h-5 w-5" />
               Historial de Cobros/Pagos Recibidos
             </DialogTitle>
@@ -1946,11 +1951,11 @@ function CuentasCobrarPageContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Editar Pago */}
+      {/* Dialog de Editar Pago - Mobile First */}
       <Dialog open={isEditPaymentDialogOpen} onOpenChange={setIsEditPaymentDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+        <DialogContent className="w-[95vw] max-w-[500px] p-4 sm:p-6">
+          <DialogHeader className="pb-3 sm:pb-4">
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
               <Pencil className="h-5 w-5" />
               Editar Pago
             </DialogTitle>

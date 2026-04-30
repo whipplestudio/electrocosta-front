@@ -149,9 +149,9 @@ function RolesPageContent() {
           <div className="flex items-center gap-4">
             {/* Search removed - can be added back with FloatingInput if needed */}
           </div>
-          <CreateButton onClick={handleCreateRole}>
+          <ActionButton onClick={handleCreateRole} className="w-full sm:w-auto">
             Nuevo Rol
-          </CreateButton>
+          </ActionButton>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

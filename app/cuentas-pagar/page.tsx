@@ -749,13 +749,15 @@ export default function CuentasPagarPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Cuentas por Pagar</h1>
-          <p className="text-muted-foreground">Gestiona las facturas y pagos a proveedores</p>
+    <div className="space-y-4 md:space-y-6 p-4 md:p-6">
+      {/* Header - Mobile First */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Cuentas por Pagar</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Gestiona las facturas y pagos a proveedores</p>
         </div>
-        <div className="flex gap-2">
+        {/* Toolbar buttons - 2 cols on mobile, horizontal on desktop */}
+        <div className="grid grid-cols-2 gap-2 md:flex md:flex-nowrap md:justify-end">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -763,6 +765,7 @@ export default function CuentasPagarPage() {
                   variant="ghost"
                   onClick={() => setGuideOpen(true)}
                   size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={<HelpCircle className="h-4 w-4" />}
                 >
                   Guía
@@ -786,6 +789,7 @@ export default function CuentasPagarPage() {
                   onClick={handleDownloadTemplate} 
                   disabled={downloadingTemplate}
                   size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={downloadingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
                 >
                   {downloadingTemplate ? 'Descargando...' : 'Plantilla Excel'}
@@ -808,6 +812,7 @@ export default function CuentasPagarPage() {
                   variant="outline"
                   onClick={() => setBulkUploadOpen(true)}
                   size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={<Upload className="h-4 w-4" />}
                 >
                   Carga Masiva
@@ -823,14 +828,14 @@ export default function CuentasPagarPage() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <ActionButton variant="create" onClick={handleNuevaCuenta} size="sm">
+          <ActionButton variant="create" onClick={handleNuevaCuenta} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
             Nueva Cuenta
           </ActionButton>
         </div>
       </div>
 
-      {/* Dashboard KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* Dashboard KPI Cards - Mobile First */}
+      <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <TotalKpiCard
           title="Total Pendiente"
           value={`$${(dashboardData.totalPendiente || 0).toLocaleString()}`}
@@ -1088,20 +1093,20 @@ export default function CuentasPagarPage() {
         loadingLabelEditing="Guardando..."
       />
 
-      {/* Diálogo de Historial de Pagos - Material Design 3 */}
+      {/* Diálogo de Historial de Pagos - Material Design 3 - Mobile First */}
       <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
-        <DialogContent className="!max-w-7xl !w-[95vw] max-h-[85vh] overflow-y-auto overflow-x-hidden p-0 gap-0">
+        <DialogContent className="!max-w-4xl !w-[95vw] max-h-[90vh] overflow-y-auto overflow-x-hidden p-0 gap-0">
           {/* Header con tonal surface */}
-          <DialogHeader className="px-6 pt-6 pb-4 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
+          <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <History className="h-5 w-5 text-primary" />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <History className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
               </div>
-              <div>
-                <DialogTitle className="text-xl font-semibold tracking-tight">
+              <div className="min-w-0">
+                <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight">
                   Historial de Pagos
                 </DialogTitle>
-                <p className="text-sm text-muted-foreground mt-0.5">
+                <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 truncate">
                   {selectedAccount?.supplierName || selectedAccount?.supplier?.name}
                 </p>
               </div>
@@ -1116,50 +1121,50 @@ export default function CuentasPagarPage() {
               <p className="text-sm text-muted-foreground">Cargando historial...</p>
             </div>
           ) : accountHistory ? (
-            <div className="p-6 space-y-6">
-              {/* Resumen - Cards con elevación MD3 */}
-              <div className="grid grid-cols-3 gap-4">
+            <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 min-w-0 overflow-x-hidden">
+              {/* Resumen - Cards con elevación MD3 - Responsive grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 {/* Monto Total - Surface Container Highest */}
-                <div className="bg-slate-100 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200 dark:border-slate-700/50">
+                <div className="bg-slate-100 dark:bg-slate-800/60 rounded-2xl p-3 sm:p-4 border border-slate-200 dark:border-slate-700/50 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                      <Receipt className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                      <Receipt className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <span className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Monto Total
                     </span>
                   </div>
-                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                  <p className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight truncate">
                     ${parseFloat(selectedAccount?.amount || '0').toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
 
                 {/* Pagado - Primary Container */}
-                <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl p-4 border border-emerald-200 dark:border-emerald-800/50">
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl p-3 sm:p-4 border border-emerald-200 dark:border-emerald-800/50 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-800/50 flex items-center justify-center">
-                      <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-100 dark:bg-emerald-800/50 flex items-center justify-center flex-shrink-0">
+                      <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-600 dark:text-emerald-400" />
                     </div>
-                    <span className="text-xs font-medium uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    <span className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                       Pagado
                     </span>
                   </div>
-                  <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 tracking-tight">
+                  <p className="text-lg sm:text-2xl font-bold text-emerald-700 dark:text-emerald-300 tracking-tight truncate">
                     ${parseFloat(selectedAccount?.paidAmount || '0').toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
 
                 {/* Faltante - Error Container */}
-                <div className="bg-rose-50 dark:bg-rose-900/20 rounded-2xl p-4 border border-rose-200 dark:border-rose-800/50">
+                <div className="bg-rose-50 dark:bg-rose-900/20 rounded-2xl p-3 sm:p-4 border border-rose-200 dark:border-rose-800/50 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-800/50 flex items-center justify-center">
-                      <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-rose-100 dark:bg-rose-800/50 flex items-center justify-center flex-shrink-0">
+                      <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-rose-600 dark:text-rose-400" />
                     </div>
-                    <span className="text-xs font-medium uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                    <span className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-rose-600 dark:text-rose-400">
                       Faltante
                     </span>
                   </div>
-                  <p className="text-2xl font-bold text-rose-700 dark:text-rose-300 tracking-tight">
+                  <p className="text-lg sm:text-2xl font-bold text-rose-700 dark:text-rose-300 tracking-tight truncate">
                     ${parseFloat(selectedAccount?.balance || '0').toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
@@ -1202,7 +1207,7 @@ export default function CuentasPagarPage() {
                     </span>
                   </div>
                 </div>
-                <div className="p-4">
+                <div className="p-4 overflow-x-auto">
                   {accountHistory.payments.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center">
                       <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
@@ -1211,52 +1216,83 @@ export default function CuentasPagarPage() {
                       <p className="text-sm text-slate-500 dark:text-slate-400">Sin pagos registrados</p>
                     </div>
                   ) : (
-                    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-                      <Table>
-                        <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
-                          <TableRow className="hover:bg-transparent">
-                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Fecha</TableHead>
-                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Monto</TableHead>
-                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Método</TableHead>
-                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Referencia</TableHead>
-                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300">Registrado por</TableHead>
-                            <TableHead className="font-semibold text-slate-700 dark:text-slate-300 w-16">Acciones</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {accountHistory.payments.map((payment: any) => (
-                            <TableRow key={payment.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                              <TableCell className="font-medium">
+                    <DataTable
+                      data={accountHistory.payments}
+                      keyExtractor={(payment) => payment.id}
+                      columns={[
+                        {
+                          key: 'paymentDate',
+                          header: 'Fecha',
+                          width: '15%',
+                          render: (payment) => (
+                            <span className="font-medium text-slate-900 dark:text-slate-100">
                                 {formatDateWithoutTimezone(payment.paymentDate)}
-                              </TableCell>
-                              <TableCell className="font-semibold text-emerald-600 dark:text-emerald-400">
+                            </span>
+                          )
+                        },
+                        {
+                          key: 'amount',
+                          header: 'Monto',
+                          width: '15%',
+                          align: 'right',
+                          render: (payment) => (
+                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                                 ${parseFloat(payment.amount).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </TableCell>
-                              <TableCell className="text-slate-600 dark:text-slate-400">{payment.paymentMethod || '-'}</TableCell>
-                              <TableCell className="text-slate-600 dark:text-slate-400 font-mono text-xs">{payment.reference || '-'}</TableCell>
-                              <TableCell className="text-slate-700 dark:text-slate-300">
+                            </span>
+                          )
+                        },
+                        {
+                          key: 'paymentMethod',
+                          header: 'Método',
+                          width: '15%',
+                          render: (payment) => (
+                            <span className="text-slate-600 dark:text-slate-400">
+                              {payment.paymentMethod || '-'}
+                            </span>
+                          )
+                        },
+                        {
+                          key: 'reference',
+                          header: 'Referencia',
+                          width: '20%',
+                          render: (payment) => (
+                            <span className="text-slate-600 dark:text-slate-400 font-mono text-xs">
+                              {payment.reference || '-'}
+                            </span>
+                          )
+                        },
+                        {
+                          key: 'createdBy',
+                          header: 'Registrado por',
+                          width: '25%',
+                          render: (payment) => (
                                 <div className="flex items-center gap-2">
-                                  <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-medium">
+                              <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-medium text-slate-700 dark:text-slate-300 flex-shrink-0">
                                     {payment.createdBy?.firstName?.[0]}{payment.createdBy?.lastName?.[0]}
                                   </div>
-                                  <span className="text-sm">{payment.createdBy?.firstName} {payment.createdBy?.lastName}</span>
+                              <span className="text-sm text-slate-700 dark:text-slate-300 truncate">
+                                {payment.createdBy?.firstName} {payment.createdBy?.lastName}
+                              </span>
                                 </div>
-                              </TableCell>
-                              <TableCell>
-                                <ActionButton
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleEditarPago(payment)}
-                                  className="text-cyan-600 hover:text-cyan-700"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </ActionButton>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                          )
+                        }
+                      ]}
+                      actions={[
+                        {
+                          label: 'Editar',
+                          icon: <Pencil className="h-4 w-4" />,
+                          onClick: (payment) => handleEditarPago(payment)
+                        }
+                      ]}
+                      showHeader={true}
+                      size="small"
+                      containerSx={{
+                        borderRadius: '12px',
+                        border: '1px solid #e5e7eb',
+                        boxShadow: 'none',
+                        minWidth: '600px'
+                      }}
+                    />
                   )}
                 </div>
               </div>
@@ -1275,11 +1311,11 @@ export default function CuentasPagarPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Diálogo: Editar Pago */}
+      {/* Diálogo: Editar Pago - Mobile First */}
       <Dialog open={showEditPaymentDialog} onOpenChange={setShowEditPaymentDialog}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+        <DialogContent className="w-[95vw] max-w-lg p-4 sm:p-6">
+          <DialogHeader className="pb-3 sm:pb-4">
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
               <Pencil className="h-5 w-5 text-cyan-600" />
               Editar Pago
             </DialogTitle>

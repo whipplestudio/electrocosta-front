@@ -364,9 +364,9 @@ export default function CategoriasPage() {
           <h1 className="text-3xl font-bold tracking-tight text-[#374151]">Categorías</h1>
           <p className="text-[#6b7280]">Gestiona las categorías de ingresos y egresos</p>
         </div>
-        <CreateButton onClick={openCreateModal}>
+        <ActionButton onClick={openCreateModal} className="w-full sm:w-auto">
           Nueva Categoría
-        </CreateButton>
+        </ActionButton>
       </div>
 
       {/* Estadísticas MD3 */}

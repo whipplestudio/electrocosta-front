@@ -78,30 +78,32 @@ export function KpiCard({
   const styles = variantStyles[variant]
 
   return (
-    <Card className={cn(styles.container, className)}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className={cn('text-sm font-medium', styles.title)}>
+    <Card className={cn(styles.container, 'overflow-hidden', className)}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 md:pb-2 px-3 md:px-6 pt-3 md:pt-6">
+        <CardTitle className={cn('text-xs md:text-sm font-medium truncate pr-2', styles.title)}>
           {title}
         </CardTitle>
-        <div className={cn('h-8 w-8 rounded-full flex items-center justify-center', styles.icon)}>
-          {icon}
+        <div className={cn('h-7 w-7 md:h-8 md:w-8 rounded-full flex items-center justify-center flex-shrink-0', styles.icon)}>
+          <span className="h-3.5 w-3.5 md:h-4 md:w-4 flex items-center justify-center">
+            {icon}
+          </span>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-3 md:px-6 pb-3 md:pb-6">
         {loading ? (
           <div className="space-y-2">
-            <div className="h-8 w-20 bg-gray-200/50 rounded animate-pulse" />
-            <div className="h-3 w-32 bg-gray-200/50 rounded animate-pulse" />
+            <div className="h-6 md:h-8 w-16 md:w-20 bg-gray-200/50 rounded animate-pulse" />
+            <div className="h-2.5 md:h-3 w-24 md:w-32 bg-gray-200/50 rounded animate-pulse" />
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-2">
-              <div className={cn('text-3xl font-bold', styles.value)}>
+            <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
+              <div className={cn('text-xl md:text-2xl lg:text-3xl font-bold truncate', styles.value)}>
                 {value}
               </div>
               {trend && (
                 <span className={cn(
-                  'text-xs font-medium px-1.5 py-0.5 rounded-full',
+                  'text-[10px] md:text-xs font-medium px-1.5 py-0.5 rounded-full flex-shrink-0',
                   trend.isPositive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                 )}>
                   {trend.isPositive ? '+' : '-'}{trend.value}%
@@ -109,7 +111,7 @@ export function KpiCard({
               )}
             </div>
             {subtitle && (
-              <p className={cn('text-xs mt-1', styles.subtitle)}>
+              <p className={cn('text-[10px] md:text-xs mt-1 leading-tight line-clamp-2', styles.subtitle)}>
                 {subtitle}
               </p>
             )}

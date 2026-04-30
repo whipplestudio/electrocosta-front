@@ -55,9 +55,9 @@ export const useFollowUps = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const allFollowUps = await followUpService.list(filters);
-      setFollowUps(allFollowUps);
-      return allFollowUps;
+      const response = await followUpService.list(filters);
+      setFollowUps(response.data);
+      return response.data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al cargar seguimientos';
       setError(errorMessage);

@@ -1,9 +1,10 @@
 "use client"
 
 import type React from "react"
+import { useState } from "react"
 
 import { usePathname } from "next/navigation"
-import { AppSidebar } from "@/components/app-sidebar"
+import { AppSidebar, MobileMenuButton } from "@/components/app-sidebar"
 
 interface ConditionalLayoutProps {
   children: React.ReactNode
@@ -11,6 +12,7 @@ interface ConditionalLayoutProps {
 
 export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   const pathname = usePathname()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // Routes where sidebar should be hidden (authentication pages)
   const authRoutes = ["/login", "/registro", "/recuperar-password"]
@@ -24,8 +26,18 @@ export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   // Regular pages: with sidebar
   return (
     <div className="flex h-screen bg-background">
-      <AppSidebar />
-      <main className="flex-1 overflow-auto">{children}</main>
+      {/* Mobile Menu Button - only visible on mobile */}
+      <MobileMenuButton onClick={() => setMobileMenuOpen(true)} />
+      
+      {/* Sidebar - hidden on mobile, visible on desktop */}
+      <AppSidebar 
+        mobileOpen={mobileMenuOpen} 
+        onMobileClose={() => setMobileMenuOpen(false)} 
+      />
+      
+      {/* Main content - full width on mobile, flex-1 on desktop */}
+      {/* Add pt-12 on mobile to account for menu button, no padding on desktop */}
+      <main className="flex-1 overflow-auto w-full pt-12 md:pt-0">{children}</main>
     </div>
   )
 }

@@ -256,13 +256,13 @@ export function BulkUploadDialog({
                   </div>
                 </div>
               )}
-              <CancelButton 
+              <ActionButton 
                 onClick={handleClose}
                 fullWidth
                 className="mt-4"
               >
                 Cerrar
-              </CancelButton>
+              </ActionButton>
             </div>
           )}
         </div>

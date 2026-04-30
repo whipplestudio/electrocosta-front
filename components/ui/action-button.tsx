@@ -103,6 +103,8 @@ export const ActionButton = React.forwardRef<HTMLButtonElement, ActionButtonProp
           'inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 cursor-pointer',
           'focus:outline-none focus:ring-2 focus:ring-[#164e63]/20 focus:ring-offset-1',
           'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none',
+          // Prevent horizontal expansion during loading
+          'min-w-0',
           
           // Variant styles
           variantStyles[variant],
@@ -115,6 +117,10 @@ export const ActionButton = React.forwardRef<HTMLButtonElement, ActionButtonProp
           
           className
         )}
+        style={{ 
+          // Prevent layout shift during loading by using consistent sizing
+          contain: 'layout',
+        }}
         {...props}
       >
         {loading && (

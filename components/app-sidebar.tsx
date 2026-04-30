@@ -17,12 +17,17 @@ import {
   Tag,
   Building2,
   LayoutDashboard,
+  Menu,
+  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { permissionsService } from "@/services/permissions.service"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface SidebarProps {
   className?: string
+  mobileOpen?: boolean
+  onMobileClose?: () => void
 }
 
 interface MenuItem {
@@ -123,13 +128,24 @@ const menuItems: MenuItem[] = [
   }
 ]
 
-export function AppSidebar({ className }: SidebarProps) {
+export function AppSidebar({ className, mobileOpen = false, onMobileClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const [expandedMenus, setExpandedMenus] = useState<string[]>([])
   const [userPermissionCodes, setUserPermissionCodes] = useState<string[]>([])
   const [permissionsLoading, setPermissionsLoading] = useState(true)
   const pathname = usePathname()
   const router = useRouter()
+
+  // Detectar si es mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   // Cargar permisos del usuario autenticado al montar el sidebar
   useEffect(() => {
@@ -203,16 +219,29 @@ export function AppSidebar({ className }: SidebarProps) {
     router.push("/login")
   }
 
-  return (
-    <div
-      className={cn(
-        "relative flex flex-col bg-white border-r border-[#e5e7eb] transition-all duration-300",
-        collapsed ? "w-16" : "w-64",
-        className,
-      )}
-    >
-      {/* Header - Material Design 3 */}
-      <div className="flex items-center justify-between px-4 py-5 border-b border-[#e5e7eb]">
+  const sidebarContent = (
+    <>
+      {/* Mobile Header */}
+      <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-[#e5e7eb]">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-[#164e63] rounded-lg flex items-center justify-center">
+            <DollarSign className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="font-bold text-sm text-[#374151]">Grupo BARREDA</h2>
+            <p className="text-[10px] text-[#6b7280]">ERP Financiero</p>
+          </div>
+        </div>
+        <button
+          onClick={onMobileClose}
+          className="h-9 w-9 rounded-lg flex items-center justify-center text-[#6b7280] hover:bg-[#f0fdf4] hover:text-[#164e63] transition-all"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Desktop Header */}
+      <div className="hidden md:flex items-center justify-between px-4 py-5 border-b border-[#e5e7eb]">
         {!collapsed && (
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[#164e63] rounded-xl flex items-center justify-center shadow-sm transition-transform hover:scale-105">
@@ -234,7 +263,18 @@ export function AppSidebar({ className }: SidebarProps) {
 
       {/* Navigation - Material Design 3 */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {menuItems.map((item) => {
+        {permissionsLoading ? (
+          // Skeleton loading state
+          <div className="space-y-3">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 h-11 px-3">
+                <Skeleton className="w-8 h-8 rounded-lg" />
+                {!collapsed && <Skeleton className="h-4 w-32 rounded" />}
+              </div>
+            ))}
+          </div>
+        ) : (
+          menuItems.map((item) => {
           // Verificar si tiene acceso directo al módulo O a algún submenú
           const hasDirectAccess = hasModuleAccess(item.requiredPermissionCodes)
           const hasSubmenuAccess = hasAnySubmenuAccess(item.submenu as any)
@@ -320,7 +360,7 @@ export function AppSidebar({ className }: SidebarProps) {
               )}
             </div>
           )
-        })}
+        }))}
       </nav>
 
       {/* Footer - Material Design 3 */}
@@ -348,6 +388,55 @@ export function AppSidebar({ className }: SidebarProps) {
           {!collapsed && <span className="flex-1 text-left">Cerrar Sesión</span>}
         </button>
       </div>
-    </div>
+    </>
+  )
+
+  return (
+    <>
+      {/* Desktop Sidebar - always visible on md+ */}
+      <aside
+        className={cn(
+          "hidden md:flex flex-col bg-white border-r border-[#e5e7eb] transition-all duration-300 h-screen sticky top-0",
+          collapsed ? "w-16" : "w-64",
+          className,
+        )}
+      >
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile Sidebar Overlay */}
+      {mobileOpen && (
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={onMobileClose}
+          />
+          {/* Mobile Sidebar */}
+          <aside
+            className={cn(
+              "fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl md:hidden",
+              "flex flex-col h-full"
+            )}
+          >
+            {sidebarContent}
+          </aside>
+        </>
+      )}
+    </>
+  )
+}
+
+// Mobile Menu Button Component
+export function MobileMenuButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="md:hidden fixed top-3 left-3 z-30 h-9 w-9 rounded-lg bg-white/95 backdrop-blur-sm shadow-lg border border-[#e5e7eb] flex items-center justify-center text-[#374151] hover:bg-[#f0fdf4] hover:text-[#164e63] active:scale-95 transition-all"
+      style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}
+      aria-label="Abrir menú"
+    >
+      <Menu className="h-[18px] w-[18px]" />
+    </button>
   )
 }

@@ -16,7 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Upload, Download, Plus, Search, FileText, Calendar as CalendarIcon, Loader2, Eye, Edit, AlertCircle, Check, ChevronsUpDown, Info, CheckCircle2, XCircle, Save, FileSpreadsheet, TrendingUp, DollarSign, Briefcase } from "lucide-react"
+import { Upload, Download, Plus, Search, FileText, Calendar as CalendarIcon, Loader2, Eye, Edit, AlertCircle, Check, ChevronsUpDown, Info, CheckCircle2, XCircle, Save, FileSpreadsheet, TrendingUp, TrendingDown, DollarSign, Briefcase, Percent, HelpCircle, Building2, User, Wallet, Users, HardHat, Package, FolderOpen, FileClock, ClipboardList, StickyNote, Flag } from "lucide-react"
 import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command"
@@ -28,10 +28,12 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { projectsUploadService, type CrearProyectoData } from "@/services/projects-upload.service"
+import { projectsService } from "@/services/projects.service"
 import { handleApiError } from "@/lib/api-client"
 import { clientsService, type ClientSimple } from "@/services/clients.service"
 import { areasService, type AreaSimple } from "@/services/areas.service"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
+import { BulkUploadGuideDialogProyectos } from "@/components/bulk-upload-guide-dialog-proyectos"
 import { CreateButton, ActionButton, DataTable, Column, Action, KpiCard } from "@/components/ui"
 import { FloatingInput } from "@/components/ui/floating-input"
 import { FloatingSelect } from "@/components/ui/floating-select"
@@ -87,6 +89,7 @@ export default function ProyectosPage() {
   const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   const [showTemplateInfoDialog, setShowTemplateInfoDialog] = useState(false)
   const [showBulkUploadDialog, setShowBulkUploadDialog] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
   
   // Estados para clientes
   const [clientes, setClientes] = useState<ClientSimple[]>([])
@@ -97,6 +100,15 @@ export default function ProyectosPage() {
   // Estados para áreas
   const [areas, setAreas] = useState<AreaSimple[]>([])
   const [loadingAreas, setLoadingAreas] = useState(false)
+  
+  // Estado para datos financieros consolidados
+  const [financialData, setFinancialData] = useState({
+    totalIncome: 0,
+    totalExpenses: 0,
+    totalProfit: 0,
+    profitMargin: 0,
+  })
+  const [loadingFinancial, setLoadingFinancial] = useState(false)
   const [openAreaPopover, setOpenAreaPopover] = useState(false)
   const [openAreaPopoverEdit, setOpenAreaPopoverEdit] = useState(false)
   
@@ -216,11 +228,31 @@ export default function ProyectosPage() {
     }
   }, [])
 
+  // Cargar datos financieros consolidados
+  const cargarDatosFinancieros = useCallback(async () => {
+    try {
+      setLoadingFinancial(true)
+      const data = await projectsService.getConsolidatedIncomeStatement()
+      setFinancialData({
+        totalIncome: data.totals.totalIncome,
+        totalExpenses: data.totals.totalExpenses,
+        totalProfit: data.totals.totalProfit,
+        profitMargin: data.profitMargin,
+      })
+    } catch (error) {
+      console.error('Error al cargar datos financieros:', error)
+      // No mostrar toast para no ser intrusivo
+    } finally {
+      setLoadingFinancial(false)
+    }
+  }, [])
+
   useEffect(() => {
     cargarProyectos(searchTerm, page, limit)
     cargarUsuarios()
     cargarClientes()
     cargarAreas()
+    cargarDatosFinancieros()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -614,6 +646,11 @@ export default function ProyectosPage() {
     cliente: p.cliente?.name || 'Cliente',
     valorContrato: Number(p.presupuestoTotal) || 0,
     valorVenta: Number(p.valorVenta) || 0,
+    // Campos financieros reales
+    totalIncome: Number(p.totalIncome) || 0,
+    totalExpenses: Number(p.totalExpenses) || 0,
+    netProfit: Number(p.netProfit) || 0,
+    profitMargin: Number(p.profitMargin) || 0,
     fechaInicio: formatDateWithoutTimezone(p.fechaInicio),
     fechaFin: formatDateWithoutTimezone(p.fechaFinEstimada),
     estado: p.estado === 'en_progreso' ? 'En Progreso' : 
@@ -624,8 +661,14 @@ export default function ProyectosPage() {
     categoria: p.area?.name || 'General',
   }))
 
-  // Use backend data directly - no local filtering
-  const totalValor = proyectosFormateados.reduce((sum, proyecto) => sum + proyecto.valorContrato, 0)
+  // Calcular KPIs financieros reales
+  const totalPresupuesto = proyectosFormateados.reduce((sum, p) => sum + p.valorContrato, 0)
+  const totalIngresos = proyectosFormateados.reduce((sum, p) => sum + p.totalIncome, 0)
+  const totalGastos = proyectosFormateados.reduce((sum, p) => sum + p.totalExpenses, 0)
+  const totalGanancia = proyectosFormateados.reduce((sum, p) => sum + p.netProfit, 0)
+  const margenPromedio = proyectosFormateados.length > 0 
+    ? proyectosFormateados.reduce((sum, p) => sum + p.profitMargin, 0) / proyectosFormateados.length 
+    : 0
 
   const getStatusBadge = (estado: string) => {
     switch (estado) {
@@ -719,13 +762,38 @@ export default function ProyectosPage() {
   ], [])
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Carga de Proyectos</h1>
-          <p className="text-muted-foreground">Gestión de proyectos y contratos</p>
+    <div className="container mx-auto p-4 md:p-6 space-y-4 md:space-y-6">
+      {/* Header - Mobile First */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Carga de Proyectos</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Gestión de proyectos y contratos</p>
         </div>
-        <div className="flex gap-3">
+        {/* Toolbar buttons - 2 cols on mobile, horizontal on desktop */}
+        <div className="grid grid-cols-2 gap-2 md:flex md:flex-nowrap md:justify-end">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ActionButton 
+                  variant="ghost"
+                  onClick={() => setGuideOpen(true)}
+                  size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
+                  startIcon={<HelpCircle className="h-4 w-4" />}
+                >
+                  Guía
+                </ActionButton>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
+                <div className="space-y-1">
+                  <p className="font-semibold text-white dark:text-slate-900">Guía de carga masiva</p>
+                  <p className="text-xs text-slate-200 dark:text-slate-700">
+                    Ver instrucciones detalladas sobre cómo usar la plantilla Excel
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -733,6 +801,8 @@ export default function ProyectosPage() {
                   variant="outline" 
                   onClick={descargarPlantilla} 
                   disabled={downloadingTemplate}
+                  size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={downloadingTemplate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 >
                   {downloadingTemplate ? 'Descargando...' : 'Plantilla Excel'}
@@ -754,6 +824,8 @@ export default function ProyectosPage() {
                 <ActionButton 
                   variant="outline"
                   onClick={() => setShowBulkUploadDialog(true)}
+                  size="sm"
+                  className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={<Upload className="h-4 w-4" />}
                 >
                   Carga Masiva
@@ -770,9 +842,9 @@ export default function ProyectosPage() {
             </Tooltip>
           </TooltipProvider>
           {/* Botón Nuevo Proyecto */}
-          <CreateButton onClick={() => setOpenDialog(true)}>
+          <ActionButton onClick={() => setOpenDialog(true)} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
             Nuevo Proyecto
-          </CreateButton>
+          </ActionButton>
 
           {/* Formulario de Proyecto usando DynamicForm */}
           <DynamicForm
@@ -785,6 +857,7 @@ export default function ProyectosPage() {
             description={modoFormulario === 'editar' ? 'Modifica los datos del proyecto' : 'Crea un nuevo proyecto en el sistema'}
             mode={modoFormulario}
             maxWidth="full"
+            dialogClassName="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto"
             data={nuevoProyecto}
             onChange={setNuevoProyecto}
             onSubmit={crearNuevoProyecto}
@@ -815,6 +888,7 @@ export default function ProyectosPage() {
                       }))
                     ],
                     searchable: true,
+                    required: true,
                     searchPlaceholder: 'Buscar por nombre o RFC...',
                     helperText: 'Busca y selecciona un cliente existente o déjalo vacío',
                     colSpan: 1,
@@ -990,28 +1064,39 @@ export default function ProyectosPage() {
         </div>
       </div>
 
-      {/* KPI Cards - Reusables */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* KPI Cards - Reusables - Métricas Financieras Reales - Mobile First */}
+      <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          title="Valor Total"
-          value={`$${totalValor.toLocaleString()}`}
+          title="Ingresos Totales"
+          value={`$${financialData.totalIncome.toLocaleString()}`}
           subtitle={`${total} proyectos`}
           icon={<DollarSign className="h-4 w-4" />}
-          variant="info"
-        />
-        <KpiCard
-          title="En Progreso"
-          value={proyectosFormateados.filter((p) => p.estado === "En Progreso").length}
-          subtitle="Activos"
-          icon={<TrendingUp className="h-4 w-4" />}
-          variant="info"
-        />
-        <KpiCard
-          title="Completados"
-          value={proyectosFormateados.filter((p) => p.estado === "Completado").length}
-          subtitle="Finalizados"
-          icon={<Briefcase className="h-4 w-4" />}
           variant="success"
+          loading={loadingFinancial}
+        />
+        <KpiCard
+          title="Gastos Totales"
+          value={`$${financialData.totalExpenses.toLocaleString()}`}
+          subtitle="Cuentas por pagar"
+          icon={<TrendingDown className="h-4 w-4" />}
+          variant="danger"
+          loading={loadingFinancial}
+        />
+        <KpiCard
+          title="Ganancia Neta"
+          value={`$${financialData.totalProfit.toLocaleString()}`}
+          subtitle="Ingresos - Gastos"
+          icon={<TrendingUp className="h-4 w-4" />}
+          variant={financialData.totalProfit >= 0 ? "info" : "danger"}
+          loading={loadingFinancial}
+        />
+        <KpiCard
+          title="Margen Promedio"
+          value={`${financialData.profitMargin.toFixed(1)}%`}
+          subtitle="Rentabilidad"
+          icon={<Percent className="h-4 w-4" />}
+          variant={financialData.profitMargin >= 20 ? "success" : financialData.profitMargin >= 10 ? "info" : "warning"}
+          loading={loadingFinancial}
         />
       </div>
 
@@ -1060,115 +1145,199 @@ export default function ProyectosPage() {
         rowsPerPageOptions={[10, 25, 50, 100]}
       />
 
-      {/* Modal Ver Detalle */}
+      {/* Modal Ver Detalle - Mobile First with Enhanced UI */}
       <Dialog open={verModalOpen} onOpenChange={setVerModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detalle del Proyecto</DialogTitle>
-          </DialogHeader>
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto p-0">
+          {/* Header with gradient background */}
+          <div className="bg-gradient-to-r from-[#164e63] to-[#0e3a4a] p-4 sm:p-6">
+            <DialogHeader className="space-y-2">
+              <div className="flex items-center gap-2 text-white/80 text-xs sm:text-sm">
+                <FolderOpen className="h-4 w-4" />
+                <span>Detalle de Proyecto</span>
+              </div>
+              <DialogTitle className="text-xl sm:text-2xl font-bold text-white">
+                {proyectoSeleccionado?.nombreProyecto}
+              </DialogTitle>
+              {proyectoSeleccionado?.cliente && (
+                <div className="flex items-center gap-2 text-white/90 text-sm">
+                  <Building2 className="h-4 w-4" />
+                  <span>{proyectoSeleccionado.cliente.name}</span>
+                </div>
+              )}
+            </DialogHeader>
+          </div>
+
           {proyectoSeleccionado && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Estado</Label>
-                  <p className="text-sm font-medium">{proyectoSeleccionado.estado}</p>
+            <div className="p-4 sm:p-6 space-y-5">
+              {/* Status Badge */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge 
+                  variant="outline" 
+                  className={cn(
+                    "px-3 py-1 text-xs font-medium",
+                    proyectoSeleccionado.estado === 'activo' && "bg-green-50 text-green-700 border-green-200",
+                    proyectoSeleccionado.estado === 'pendiente' && "bg-amber-50 text-amber-700 border-amber-200",
+                    proyectoSeleccionado.estado === 'completado' && "bg-blue-50 text-blue-700 border-blue-200",
+                    proyectoSeleccionado.estado === 'cancelado' && "bg-red-50 text-red-700 border-red-200"
+                  )}
+                >
+                  <Flag className="h-3 w-3 mr-1.5" />
+                  {proyectoSeleccionado.estado}
+                </Badge>
+                <Badge variant="outline" className="px-3 py-1 text-xs">
+                  <Wallet className="h-3 w-3 mr-1.5 text-[#164e63]" />
+                  Prioridad: {proyectoSeleccionado.prioridad}
+                </Badge>
+              </div>
+
+              {/* Info Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Fechas */}
+                <div className="bg-slate-50 rounded-lg p-3 space-y-3">
+                  <div className="flex items-center gap-2 text-[#164e63] font-medium text-sm">
+                    <CalendarIcon className="h-4 w-4" />
+                    <span>Fechas</span>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Inicio:</span>
+                      <span className="font-medium">{formatDateWithoutTimezone(proyectoSeleccionado.fechaInicio)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Fin estimada:</span>
+                      <span className="font-medium">{formatDateWithoutTimezone(proyectoSeleccionado.fechaFinEstimada)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Presupuesto */}
+                <div className="bg-[#f0fdf4] rounded-lg p-3 space-y-3">
+                  <div className="flex items-center gap-2 text-[#166534] font-medium text-sm">
+                    <DollarSign className="h-4 w-4" />
+                    <span>Presupuesto</span>
+                  </div>
+                  <div className="text-2xl font-bold text-[#166534]">
+                    ${Number(proyectoSeleccionado.presupuestoTotal || 0).toLocaleString()}
+                  </div>
+                  <div className="text-xs text-[#15803d]">Total estimado</div>
                 </div>
               </div>
 
-              <div>
-                <Label className="text-sm font-medium text-muted-foreground">Nombre del Proyecto</Label>
-                <p className="text-sm font-medium">{proyectoSeleccionado.nombreProyecto}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Cliente</Label>
-                  <p className="text-sm">{proyectoSeleccionado.cliente?.name || 'N/A'}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">RUC Cliente</Label>
-                  <p className="text-sm">{proyectoSeleccionado.cliente?.taxId || 'N/A'}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Fecha Inicio</Label>
-                  <p className="text-sm">{formatDateWithoutTimezone(proyectoSeleccionado.fechaInicio)}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Fecha Fin Estimada</Label>
-                  <p className="text-sm">{formatDateWithoutTimezone(proyectoSeleccionado.fechaFinEstimada)}</p>
+              {/* Desglose del Presupuesto */}
+              <div className="bg-white border rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-[#374151] mb-3 flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4 text-[#164e63]" />
+                  Desglose del Presupuesto
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="text-center p-3 bg-slate-50 rounded-lg">
+                    <Package className="h-4 w-4 mx-auto mb-1.5 text-[#6b7280]" />
+                    <div className="text-xs text-muted-foreground">Materiales</div>
+                    <div className="font-semibold text-sm">${Number(proyectoSeleccionado.presupuestoMateriales || 0).toLocaleString()}</div>
+                  </div>
+                  <div className="text-center p-3 bg-slate-50 rounded-lg">
+                    <HardHat className="h-4 w-4 mx-auto mb-1.5 text-[#6b7280]" />
+                    <div className="text-xs text-muted-foreground">Mano de Obra</div>
+                    <div className="font-semibold text-sm">${Number(proyectoSeleccionado.presupuestoManoObra || 0).toLocaleString()}</div>
+                  </div>
+                  <div className="text-center p-3 bg-slate-50 rounded-lg col-span-2 sm:col-span-1">
+                    <FileClock className="h-4 w-4 mx-auto mb-1.5 text-[#6b7280]" />
+                    <div className="text-xs text-muted-foreground">Otros</div>
+                    <div className="font-semibold text-sm">${Number(proyectoSeleccionado.presupuestoOtros || 0).toLocaleString()}</div>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Presupuesto Total</Label>
-                  <p className="text-sm font-medium">${Number(proyectoSeleccionado.presupuestoTotal || 0).toLocaleString()}</p>
+              {/* Responsable y Área */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-9 w-9 rounded-full bg-[#164e63]/10 flex items-center justify-center flex-shrink-0">
+                    <User className="h-4 w-4 text-[#164e63]" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Responsable</div>
+                    <div className="text-sm font-medium">
+                      {proyectoSeleccionado.responsable 
+                        ? `${proyectoSeleccionado.responsable.firstName} ${proyectoSeleccionado.responsable.lastName}`
+                        : 'Sin asignar'
+                      }
+                    </div>
+                    {proyectoSeleccionado.responsable?.email && (
+                      <div className="text-xs text-muted-foreground">{proyectoSeleccionado.responsable.email}</div>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Prioridad</Label>
-                  <p className="text-sm">{proyectoSeleccionado.prioridad}</p>
+
+                <div className="flex items-start gap-3">
+                  <div className="h-9 w-9 rounded-full bg-[#84cc16]/10 flex items-center justify-center flex-shrink-0">
+                    <Briefcase className="h-4 w-4 text-[#65a30d]" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Área</div>
+                    <div className="text-sm font-medium">{proyectoSeleccionado.area?.name || 'Sin área'}</div>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Materiales</Label>
-                  <p className="text-sm">${Number(proyectoSeleccionado.presupuestoMateriales || 0).toLocaleString()}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Mano de Obra</Label>
-                  <p className="text-sm">${Number(proyectoSeleccionado.presupuestoManoObra || 0).toLocaleString()}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Otros</Label>
-                  <p className="text-sm">${Number(proyectoSeleccionado.presupuestoOtros || 0).toLocaleString()}</p>
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium text-muted-foreground">Responsable</Label>
-                <p className="text-sm">{proyectoSeleccionado.responsable ? `${proyectoSeleccionado.responsable.firstName} ${proyectoSeleccionado.responsable.lastName} (${proyectoSeleccionado.responsable.email})` : 'N/A'}</p>
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium text-muted-foreground">Área</Label>
-                <p className="text-sm">{proyectoSeleccionado.area?.name || 'N/A'}</p>
-              </div>
-
+              {/* Descripción */}
               {proyectoSeleccionado.descripcion && (
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Descripción</Label>
-                  <p className="text-sm">{proyectoSeleccionado.descripcion}</p>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <div className="flex items-center gap-2 text-[#374151] font-medium text-sm mb-2">
+                    <StickyNote className="h-4 w-4 text-[#164e63]" />
+                    <span>Descripción</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {proyectoSeleccionado.descripcion}
+                  </p>
                 </div>
               )}
 
+              {/* Observaciones */}
               {proyectoSeleccionado.observaciones && (
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Observaciones</Label>
-                  <p className="text-sm">{proyectoSeleccionado.observaciones}</p>
+                <div className="bg-amber-50 rounded-lg p-4 border border-amber-100">
+                  <div className="flex items-center gap-2 text-amber-700 font-medium text-sm mb-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>Observaciones</span>
+                  </div>
+                  <p className="text-sm text-amber-800 leading-relaxed">
+                    {proyectoSeleccionado.observaciones}
+                  </p>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground">
-                <div>
-                  <Label className="text-xs">Origen de Carga</Label>
-                  <p>{proyectoSeleccionado.origenCarga}</p>
+              {/* Footer info */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <Info className="h-3.5 w-3.5" />
+                  <span>Origen: <span className="font-medium">{proyectoSeleccionado.origenCarga}</span></span>
                 </div>
-                <div>
-                  <Label className="text-xs">Creado</Label>
-                  <p>{formatDateWithoutTimezone(proyectoSeleccionado.createdAt)}</p>
+                <div className="flex items-center gap-1.5">
+                  <CalendarIcon className="h-3.5 w-3.5" />
+                  <span>Creado: <span className="font-medium">{formatDateWithoutTimezone(proyectoSeleccionado.createdAt)}</span></span>
                 </div>
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setVerModalOpen(false)}>Cerrar</Button>
+
+          {/* Footer Actions */}
+          <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-3 p-4 sm:p-6 bg-slate-50 border-t">
+            <ActionButton 
+              variant="cancel" 
+              onClick={() => setVerModalOpen(false)} 
+              className="w-full sm:w-auto"
+              size="md"
+            >
+              Cerrar
+            </ActionButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de Guía de Carga Masiva */}
+      <BulkUploadGuideDialogProyectos
+        open={guideOpen}
+        onOpenChange={setGuideOpen}
+      />
     </div>
   )
 }

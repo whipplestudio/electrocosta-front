@@ -19,9 +19,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { CheckCircle, Clock, DollarSign, History, CreditCard, Building2, FileText, Wallet, Receipt, Pencil, AlertCircle } from "lucide-react"
+import { CheckCircle, Clock, DollarSign, History, CreditCard, Building2, FileText, Wallet, Receipt, Pencil, AlertCircle, Calendar } from "lucide-react"
 import { accountsPayableService } from "@/services/accounts-payable.service"
-import type { AccountPayable, RegisterPaymentDto, UpdatePaymentDto, Payment, AccountPayableStatus } from "@/types/accounts-payable"
+import type { AccountPayable, RegisterPaymentDto, UpdatePaymentDto, Payment, AccountPayableStatus, PaymentMethod } from "@/types/accounts-payable"
 
 const paymentMethodLabels: Record<string, string> = {
   transfer: 'Transferencia',
@@ -451,7 +451,7 @@ export default function PagosPage() {
 
       {/* Dialog: Registrar Pago */}
       <Dialog open={showRegisterDialog} onOpenChange={setShowRegisterDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-cyan-600" />
@@ -576,8 +576,8 @@ export default function PagosPage() {
 
               <FloatingSelect
                 label="Método de Pago *"
-                value={editFormData.paymentMethod}
-                onChange={(value) => setEditFormData({ ...editFormData, paymentMethod: value as any })}
+                value={editFormData.paymentMethod ?? ''}
+                onChange={(value) => setEditFormData({ ...editFormData, paymentMethod: value as PaymentMethod })}
                 options={[
                   { value: 'transfer', label: 'Transferencia' },
                   { value: 'check', label: 'Cheque' },
@@ -628,54 +628,134 @@ export default function PagosPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog: Historial de Pagos */}
+      {/* Dialog: Historial de Pagos - Mobile First */}
       <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <History className="h-5 w-5 text-cyan-600" />
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-4 sm:p-6">
+          <DialogHeader className="pb-3 sm:pb-4">
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
+              <History className="h-5 w-5" />
               Historial de Pagos
             </DialogTitle>
             <DialogDescription>
-              {selectedAccount && `Pagos registrados para la factura ${selectedAccount.invoiceNumber}`}
+              {selectedAccount && `Factura: ${selectedAccount.invoiceNumber} - Proveedor: ${selectedAccount.supplier?.name || selectedAccount.supplierName}`}
             </DialogDescription>
           </DialogHeader>
 
           {selectedAccount && (
-            <div className="space-y-5">
-              <div className="rounded-xl border bg-gray-50 p-4 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Proveedor:</span>
-                  <span className="font-medium">{selectedAccount.supplier?.name || selectedAccount.supplierName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Monto Total:</span>
-                  <span className="font-medium">${Number(selectedAccount.amount).toLocaleString()}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-4 pt-2 border-t">
-                  <div className="text-center p-2 bg-green-100 rounded-lg">
-                    <span className="text-xs text-gray-600 block">Pagado</span>
-                    <span className="font-bold text-green-700">${Number(selectedAccount.paidAmount || 0).toLocaleString()}</span>
-                  </div>
-                  <div className="text-center p-2 bg-red-100 rounded-lg">
-                    <span className="text-xs text-gray-600 block">Saldo</span>
-                    <span className="font-bold text-red-700">${Number(selectedAccount.balance || 0).toLocaleString()}</span>
-                  </div>
-                </div>
+            <div className="space-y-4 flex-1 overflow-y-auto py-4">
+              {/* Resumen de la cuenta con KpiCard reutilizables */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <KpiCard
+                  title="Monto Original"
+                  value={`$${Number(selectedAccount.amount || 0).toLocaleString()}`}
+                  icon={<Receipt className="h-4 w-4" />}
+                />
+                <KpiCard
+                  title="Total Pagado"
+                  value={`$${payments.reduce((sum, p) => sum + Number(p.amount || 0), 0).toLocaleString()}`}
+                  icon={<DollarSign className="h-4 w-4" />}
+                  variant="success"
+                />
+                <KpiCard
+                  title="Saldo Pendiente"
+                  value={`$${Number(selectedAccount.balance || 0).toLocaleString()}`}
+                  icon={<Clock className="h-4 w-4" />}
+                  variant="warning"
+                />
+                <KpiCard
+                  title="Total de Pagos"
+                  value={payments.length}
+                  icon={<FileText className="h-4 w-4" />}
+                  variant="info"
+                />
               </div>
 
+              {/* Lista de pagos - DataTable reutilizable */}
               <DataTable
-                title="Pagos Registrados"
-                columns={paymentColumns}
+                title="Registro de Pagos"
                 data={payments}
-                keyExtractor={(row) => row.id}
+                columns={[
+                  {
+                    key: 'index',
+                    header: '#',
+                    width: '50px',
+                    render: (row: Payment) => payments.length - payments.indexOf(row),
+                  },
+                  {
+                    key: 'paymentDate',
+                    header: 'Fecha',
+                    render: (row: Payment) => (
+                      <div className="flex items-center gap-1 text-sm">
+                        <Calendar className="h-3 w-3 text-muted-foreground" />
+                        {formatDate(row.paymentDate)}
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'paymentMethod',
+                    header: 'Método',
+                    render: (row: Payment) => {
+                      const paymentMethodIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+                        transfer: CreditCard,
+                        check: FileText,
+                        cash: DollarSign,
+                        card: CreditCard,
+                        other: Receipt,
+                      }
+                      const PaymentIcon = paymentMethodIcons[row.paymentMethod] || Receipt
+                      return (
+                        <div className="flex items-center gap-2">
+                          <div className="bg-emerald-100 p-1.5 rounded">
+                            <PaymentIcon className="h-3.5 w-3.5 text-emerald-600" />
+                          </div>
+                          <span className="text-sm">{paymentMethodLabels[row.paymentMethod] || row.paymentMethod}</span>
+                        </div>
+                      )
+                    },
+                  },
+                  {
+                    key: 'reference',
+                    header: 'Referencia',
+                    render: (row: Payment) => (
+                      <span className="text-sm font-mono">{row.reference || '-'}</span>
+                    ),
+                  },
+                  {
+                    key: 'amount',
+                    header: 'Monto',
+                    align: 'right',
+                    render: (row: Payment) => {
+                      const isFullPayment = Number(row.amount) === Number(selectedAccount?.amount)
+                      return (
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="font-bold text-emerald-600">${Number(row.amount).toLocaleString()}</span>
+                          {isFullPayment && (
+                            <Badge variant="default" className="bg-emerald-600 text-xs h-5">Completo</Badge>
+                          )}
+                        </div>
+                      )
+                    },
+                  },
+                ]}
+                keyExtractor={(row: Payment) => row.id}
+                actions={[
+                  {
+                    icon: <Pencil className="h-4 w-4" />,
+                    label: 'Editar pago',
+                    onClick: (payment: Payment) => handleEditarPago(payment),
+                  },
+                ]}
                 loading={loadingPayments}
                 emptyMessage="No hay pagos registrados para esta cuenta"
-                showFilters={false}
-                showHeader={false}
               />
             </div>
           )}
+
+          <DialogFooter>
+            <ActionButton variant="cancel" onClick={() => setShowHistoryDialog(false)}>
+              Cerrar
+            </ActionButton>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

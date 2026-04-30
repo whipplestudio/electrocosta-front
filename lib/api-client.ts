@@ -42,25 +42,32 @@ apiClient.interceptors.response.use(
       try {
         const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refreshToken') : null;
         
-        if (refreshToken) {
-          // Intentar refrescar el token
-          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-            refreshToken,
-          });
-
-          const { accessToken } = response.data;
-          
+        // Si no hay refresh token, redirigir al login inmediatamente
+        if (!refreshToken) {
           if (typeof window !== 'undefined') {
-            localStorage.setItem('accessToken', accessToken);
+            localStorage.removeItem('accessToken');
+            window.location.href = '/login';
           }
-
-          // Reintentar la petición original con el nuevo token
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-          }
-          
-          return apiClient(originalRequest);
+          return Promise.reject(error);
         }
+
+        // Intentar refrescar el token
+        const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+          refreshToken,
+        });
+
+        const { accessToken } = response.data;
+        
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('accessToken', accessToken);
+        }
+
+        // Reintentar la petición original con el nuevo token
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        }
+        
+        return apiClient(originalRequest);
       } catch (refreshError) {
         // Si falla el refresh, limpiar tokens y redirigir al login
         if (typeof window !== 'undefined') {

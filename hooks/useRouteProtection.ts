@@ -146,6 +146,9 @@ export function useRouteProtection(
           console.log('Usuario sin permisos para ningún módulo')
           
           // Limpiar sesión
+          localStorage.removeItem('accessToken')
+          localStorage.removeItem('refreshToken')
+          localStorage.removeItem('currentUser')
           localStorage.removeItem('authToken')
           localStorage.removeItem('userData')
           sessionStorage.clear()
@@ -164,6 +167,9 @@ export function useRouteProtection(
         if (!isMounted) return
 
         // En caso de error, cerrar sesión por seguridad
+        localStorage.removeItem('accessToken')
+        localStorage.removeItem('refreshToken')
+        localStorage.removeItem('currentUser')
         localStorage.removeItem('authToken')
         localStorage.removeItem('userData')
         sessionStorage.clear()
@@ -180,7 +186,7 @@ export function useRouteProtection(
     return () => {
       isMounted = false
     }
-  }, [pathname, requiredPermissions, router])
+  }, [pathname, router]) // removed requiredPermissions to prevent infinite loop when array reference changes
 
   return { isChecking, hasAccess }
 }

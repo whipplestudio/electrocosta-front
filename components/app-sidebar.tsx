@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { permissionsService } from "@/services/permissions.service"
+import { authService } from "@/services/auth.service"
 import { Skeleton } from "@/components/ui/skeleton"
 
 interface SidebarProps {
@@ -207,8 +208,11 @@ export function AppSidebar({ className, mobileOpen = false, onMobileClose }: Sid
     )
   }
 
-  const handleLogout = () => {
-    // Clear localStorage/sessionStorage if you're storing tokens
+  const handleLogout = async () => {
+    // Usar authService para logout consistente
+    await authService.logout()
+    
+    // Limpiar cualquier otra key legacy que pudiera existir
     if (typeof window !== "undefined") {
       localStorage.removeItem("authToken")
       localStorage.removeItem("userData")

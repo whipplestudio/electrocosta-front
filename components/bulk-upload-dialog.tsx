@@ -215,7 +215,7 @@ export function BulkUploadDialog({
 
               {/* Botón de importar */}
               {validacionResultado.puedeImportar && (
-                <ActionButton 
+                <ActionButton
                   variant="primary"
                   size="lg"
                   onClick={onImport}
@@ -226,6 +226,26 @@ export function BulkUploadDialog({
                 >
                   Importar {validacionResultado.registrosValidos} registros
                 </ActionButton>
+              )}
+
+              {/* Botón de importar cuando hay advertencias pero no errores */}
+              {!validacionResultado.puedeImportar && validacionResultado.registrosValidos > 0 && validacionResultado.errores?.length === 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                    Hay {validacionResultado.advertencias?.length || 0} advertencias. Se importarán solo los registros válidos.
+                  </p>
+                  <ActionButton
+                    variant="primary"
+                    size="lg"
+                    onClick={onImport}
+                    loading={loading}
+                    loadingText="Importando..."
+                    fullWidth
+                    startIcon={<CheckCircle2 className="h-4 w-4" />}
+                  >
+                    Importar {validacionResultado.registrosValidos} registros
+                  </ActionButton>
+                </div>
               )}
             </div>
           )}

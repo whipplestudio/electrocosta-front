@@ -356,9 +356,9 @@ function CuentasCobrarPageContent() {
 
     setLoadingProjects(true)
     try {
-      // Obtener proyectos completos del cliente
-      const response = await apiClient.get<any>('/carga/proyectos/listado', { 
-        params: { clientId } 
+      // Obtener proyectos completos del cliente (solo activos)
+      const response = await apiClient.get<any>('/carga/proyectos/listado', {
+        params: { clientId, status: 'activo' }
       })
       const proyectos = response.data.data || response.data || []
       setProjects(proyectos) // Guardar proyectos completos
@@ -382,8 +382,8 @@ function CuentasCobrarPageContent() {
   // Cargar proyectos para filtros (filtrados por cliente si se proporciona)
   const loadProjectsForFilter = async (clientId: string) => {
     try {
-      const response = await apiClient.get<any>('/carga/proyectos/listado', { 
-        params: { clientId } 
+      const response = await apiClient.get<any>('/carga/proyectos/listado', {
+        params: { clientId, status: 'activo' }
       })
       const proyectos = response.data.data || response.data || []
       setFilterProjects(proyectos)
@@ -395,7 +395,9 @@ function CuentasCobrarPageContent() {
   // Cargar todos los proyectos sin filtro de cliente
   const loadAllProjectsForFilter = async () => {
     try {
-      const response = await apiClient.get<any>('/carga/proyectos/listado')
+      const response = await apiClient.get<any>('/carga/proyectos/listado', {
+        params: { status: 'activo' }
+      })
       const proyectos = response.data.data || response.data || []
       setFilterProjects(proyectos)
     } catch (error) {
@@ -538,18 +540,13 @@ function CuentasCobrarPageContent() {
   const handleEditarCuenta = (cuenta: AccountReceivable) => {
     setSelectedCuenta(cuenta)
     
-    // Detectar tipo de IVA basándose en el valor
-    // Heurística: si IVA <= 100 → porcentaje, si IVA > 100 → monto fijo
-    const ivaValue = parseFloat(cuenta.iva?.toString() || '16')
-    const detectedIvaType: 'percentage' | 'amount' = ivaValue <= 100 ? 'percentage' : 'amount'
-    
     // Pre-llenar formulario con datos existentes
     setFormData({
       clientId: cuenta.clientId,
       projectId: cuenta.projectId || '',
       invoiceNumber: cuenta.invoiceNumber,
       iva: cuenta.iva?.toString() || '16',
-      ivaType: detectedIvaType,
+      ivaType: cuenta.ivaType || 'percentage',
       subtotal: cuenta.subtotal?.toString() || '',
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || '',

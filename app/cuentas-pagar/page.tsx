@@ -48,7 +48,6 @@ export default function CuentasPagarPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [projects, setProjects] = useState<Pick<Project, 'id' | 'name' | 'code'>[]>([])
-  console.log("🚀 ~ CuentasPagarPage ~ projects:", projects)
   const [loading, setLoading] = useState(true)
   const [loadingSelects, setLoadingSelects] = useState(false)
   const [applyingFilters, setApplyingFilters] = useState(false)
@@ -101,6 +100,7 @@ export default function CuentasPagarPage() {
   const [dashboardData, setDashboardData] = useState({
     totalPendiente: 0,
     totalVencido: 0,
+    totalPagado: 0,
     cuentasVencidas: 0,
     proximasVencer: 0,
   })
@@ -147,24 +147,26 @@ export default function CuentasPagarPage() {
   const calculateDashboardMetrics = useCallback((accountsData: AccountPayable[]) => {
     const now = new Date()
     const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-    
+
     const totalPendiente = accountsData.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
-    
+    const totalPagado = accountsData.reduce((sum, acc) => sum + Number(acc.paidAmount || 0), 0)
+
     const overdueAccounts = accountsData.filter(acc => {
       if (!acc.dueDate) return false
       return new Date(acc.dueDate) < now && acc.status !== 'paid' && acc.status !== 'cancelled'
     })
     const totalVencido = overdueAccounts.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
-    
+
     const proximasVencer = accountsData.filter(acc => {
       if (!acc.dueDate) return false
       const dueDate = new Date(acc.dueDate)
       return dueDate >= now && dueDate <= sevenDaysFromNow && acc.status !== 'paid' && acc.status !== 'cancelled'
     }).length
-    
+
     return {
       totalPendiente,
       totalVencido,
+      totalPagado,
       cuentasVencidas: overdueAccounts.length,
       proximasVencer,
     }
@@ -176,6 +178,7 @@ export default function CuentasPagarPage() {
       setDashboardData({
         totalPendiente: data.keyMetrics?.totalPayable || 0,
         totalVencido: data.keyMetrics?.totalOverdue || 0,
+        totalPagado: data.keyMetrics?.totalPaid || 0,
         cuentasVencidas: data.overdueAccounts?.length || 0,
         proximasVencer: data.keyMetrics?.upcomingThisWeek || 0,
       })
@@ -188,25 +191,25 @@ export default function CuentasPagarPage() {
   const loadSuppliersAndCategories = async () => {
     try {
       setLoadingSelects(true)
-      
+
       const [suppliersResp, categoriesResp, projectsData] = await Promise.all([
         suppliersService.getAll({ page: 1, limit: 100 }),
         categoriesService.getAll({ page: 1, limit: 100 }),
-        projectsService.listAll(),
+        projectsService.listAll(undefined, 'activo'),
       ]);
-      
+
       setSuppliers(suppliersResp.data)
-      
+
       // Filtrar solo categorías de tipo "expense" (egresos)
       const expenseCategories = categoriesResp.data.filter((cat) => cat.type === 'expense')
       console.log('📊 Total de categorías:', categoriesResp.data.length)
       console.log('💸 Categorías de egreso:', expenseCategories.length)
-      
+
       if (expenseCategories.length === 0 && categoriesResp.data.length > 0) {
         console.warn('⚠️ Hay categorías creadas pero ninguna es de tipo "Egreso"')
         toast.warning('No hay categorías de tipo "Egreso". Crea categorías de egreso en el módulo de Categorías.')
       }
-      
+
       setCategories(expenseCategories)
       setProjects(projectsData)
     } catch (error) {
@@ -848,6 +851,13 @@ export default function CuentasPagarPage() {
           value={`$${(dashboardData.totalVencido || 0).toLocaleString()}`}
           subtitle={`${dashboardData.cuentasVencidas || 0} cuentas vencidas`}
           icon={<AlertCircle className="h-4 w-4" />}
+          loading={loading}
+        />
+        <SuccessKpiCard
+          title="Total Pagado"
+          value={`$${(dashboardData.totalPagado || 0).toLocaleString()}`}
+          subtitle="Monto total pagado"
+          icon={<CheckCircle className="h-4 w-4" />}
           loading={loading}
         />
         <WarningKpiCard

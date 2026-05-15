@@ -336,9 +336,7 @@ export function DynamicForm<T extends Record<string, any>>({
           </DialogTitle>
           {description && (
             <DialogDescription className="text-xs sm:text-sm text-muted-foreground">
-              {isEditing 
-                ? `Modifica los datos de ${description}` 
-                : description}
+              {description}
             </DialogDescription>
           )}
         </DialogHeader>

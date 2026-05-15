@@ -126,6 +126,14 @@ export const projectsUploadService = {
     return response.data
   },
 
+  async toggleProyectoStatus(id: string): Promise<{
+    id: string
+    mensaje: string
+  }> {
+    const response = await apiClient.delete(`/carga/proyectos/${id}`)
+    return response.data
+  },
+
   // ========== CARGA MASIVA ==========
 
   async uploadFile(file: File, options: UploadFileData = {}): Promise<UploadResponse> {

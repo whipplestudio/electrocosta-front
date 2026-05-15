@@ -114,14 +114,17 @@ export interface CreateProjectDto {
 }
 
 export const projectsService = {
-  async listAll(clientId?: string): Promise<Pick<Project, 'id' | 'name' | 'code'>[]> {
+  async listAll(clientId?: string, status?: string): Promise<Pick<Project, 'id' | 'name' | 'code'>[]> {
     try {
       // Usar el endpoint de carga masiva que tiene los proyectos reales
       const params: any = {};
       if (clientId) {
         params.clientId = clientId;
       }
-      
+      if (status) {
+        params.status = status;
+      }
+
       const response = await apiClient.get<any>('/carga/proyectos/listado', { params });
       const proyectos = response.data.data || response.data || [];
       return proyectos.map((p: any) => ({

@@ -16,7 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Upload, Download, Plus, Search, FileText, Calendar as CalendarIcon, Loader2, Eye, Edit, AlertCircle, Check, ChevronsUpDown, Info, CheckCircle2, XCircle, Save, FileSpreadsheet, TrendingUp, TrendingDown, DollarSign, Briefcase, Percent, HelpCircle, Building2, User, Wallet, Users, HardHat, Package, FolderOpen, FileClock, ClipboardList, StickyNote, Flag } from "lucide-react"
+import { Upload, Download, Plus, Search, FileText, Calendar as CalendarIcon, Loader2, Eye, Edit, AlertCircle, Check, ChevronsUpDown, Info, CheckCircle2, XCircle, Save, FileSpreadsheet, TrendingUp, TrendingDown, DollarSign, Briefcase, Percent, HelpCircle, Building2, User, Wallet, Users, HardHat, Package, FolderOpen, FileClock, ClipboardList, StickyNote, Flag, Trash2, Power } from "lucide-react"
 import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command"
@@ -639,6 +639,26 @@ export default function ProyectosPage() {
     }
   }
 
+  // Función para cambiar estado de proyecto (activar/desactivar)
+  const toggleProyectoStatus = async (id: string, nombre: string, currentStatus: string) => {
+    const action = currentStatus === 'activo' ? 'desactivar' : 'activar'
+    if (!confirm(`¿Estás seguro de que deseas ${action} el proyecto "${nombre}"?`)) {
+      return
+    }
+
+    try {
+      setLoading(true)
+      await projectsUploadService.toggleProyectoStatus(id)
+      toast.success(`Proyecto ${action === 'activar' ? 'activado' : 'desactivado'} exitosamente`)
+      cargarProyectos(searchTerm, page, limit)
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || `Error al ${action} proyecto`
+      toast.error(errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Mapear proyectos del backend al formato de la UI
   const proyectosFormateados = proyectos.map((p: any) => ({
     id: p.id,
@@ -653,12 +673,10 @@ export default function ProyectosPage() {
     profitMargin: Number(p.profitMargin) || 0,
     fechaInicio: formatDateWithoutTimezone(p.fechaInicio),
     fechaFin: formatDateWithoutTimezone(p.fechaFinEstimada),
-    estado: p.estado === 'en_progreso' ? 'En Progreso' : 
-            p.estado === 'planificacion' ? 'Planificación' : 
-            p.estado === 'completado' ? 'Completado' : 
-            p.estado === 'pausado' ? 'Pausado' : 'Otro',
+    estado: p.status === 'activo' ? 'Activo' : 'Inactivo',
     responsable: p.responsable ? `${p.responsable.firstName} ${p.responsable.lastName}` : 'N/A',
     categoria: p.area?.name || 'General',
+    status: p.status || 'activo',
   }))
 
   // Calcular KPIs financieros reales
@@ -758,6 +776,18 @@ export default function ProyectosPage() {
       label: 'Editar',
       icon: <Edit size={16} />,
       onClick: (proyecto) => abrirEditarProyecto(proyecto.id),
+    },
+    {
+      label: 'Eliminar',
+      icon: <Trash2 size={16} />,
+      onClick: (proyecto) => toggleProyectoStatus(proyecto.id, proyecto.nombre, proyecto.status),
+      hidden: (proyecto) => proyecto.status !== 'activo',
+    },
+    {
+      label: 'Activar',
+      icon: <Power size={16} />,
+      onClick: (proyecto) => toggleProyectoStatus(proyecto.id, proyecto.nombre, proyecto.status),
+      hidden: (proyecto) => proyecto.status !== 'inactivo',
     },
   ], [])
 

@@ -206,6 +206,7 @@ export interface DashboardData {
   keyMetrics: {
     totalPayable: number;
     totalOverdue: number;
+    totalPaid: number;
     criticalOverdue: number;
     upcomingThisWeek: number;
     avgOverdueDays: number;

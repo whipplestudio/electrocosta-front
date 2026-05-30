@@ -16,7 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Upload, Download, Plus, Search, FileText, Calendar as CalendarIcon, Loader2, Eye, Edit, AlertCircle, Check, ChevronsUpDown, Info, CheckCircle2, XCircle, Save, FileSpreadsheet, TrendingUp, TrendingDown, DollarSign, Briefcase, Percent, HelpCircle, Building2, User, Wallet, Users, HardHat, Package, FolderOpen, FileClock, ClipboardList, StickyNote, Flag, Trash2, Power } from "lucide-react"
+import { Upload, Download, Plus, Search, FileText, Calendar as CalendarIcon, Loader2, Eye, Edit, AlertCircle, AlertTriangle, Check, ChevronsUpDown, Info, CheckCircle2, XCircle, Save, FileSpreadsheet, TrendingUp, TrendingDown, DollarSign, Briefcase, Percent, HelpCircle, Building2, User, Wallet, Users, HardHat, Package, FolderOpen, FileClock, ClipboardList, StickyNote, Flag, Trash2, Power } from "lucide-react"
 import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command"
@@ -34,6 +34,7 @@ import { clientsService, type ClientSimple } from "@/services/clients.service"
 import { areasService, type AreaSimple } from "@/services/areas.service"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
 import { BulkUploadGuideDialogProyectos } from "@/components/bulk-upload-guide-dialog-proyectos"
+import { DeleteProjectDialog } from "@/components/delete-project-dialog"
 import { CreateButton, ActionButton, DataTable, Column, Action, KpiCard } from "@/components/ui"
 import { FloatingInput } from "@/components/ui/floating-input"
 import { FloatingSelect } from "@/components/ui/floating-select"
@@ -146,6 +147,10 @@ export default function ProyectosPage() {
   // Estado para Ver proyecto
   const [verModalOpen, setVerModalOpen] = useState(false)
   const [proyectoSeleccionado, setProyectoSeleccionado] = useState<any>(null)
+
+  // Estado para eliminar proyecto permanentemente
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [proyectoAEliminar, setProyectoAEliminar] = useState<{ id: string; nombre: string } | null>(null)
 
   // Estados para validación de formulario
   const [formErrors, setFormErrors] = useState({
@@ -344,7 +349,7 @@ export default function ProyectosPage() {
         const subtotal = parseFloat(field === 'subtotalVenta' ? unformatted : updated.subtotalVenta) || 0
         const ivaValue = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
         const ivaAmount = ivaType === 'percentage' ? subtotal * (ivaValue / 100) : ivaValue
-        updated.valorVenta = (subtotal + ivaAmount).toString()
+        updated.valorVenta = Number((subtotal + ivaAmount).toFixed(2)).toString()
       }
       
       // Si se modificó alguno de los 3 campos de desglose, calcular el presupuestoTotal con IVA
@@ -355,7 +360,7 @@ export default function ProyectosPage() {
         const subtotalPresupuesto = materiales + manoObra + otros
         const ivaValue = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
         const ivaAmount = ivaType === 'percentage' ? subtotalPresupuesto * (ivaValue / 100) : ivaValue
-        updated.presupuestoTotal = (subtotalPresupuesto + ivaAmount).toString()
+        updated.presupuestoTotal = Number((subtotalPresupuesto + ivaAmount).toFixed(2)).toString()
       }
       
       return updated
@@ -639,6 +644,12 @@ export default function ProyectosPage() {
     }
   }
 
+  // Función para abrir diálogo de eliminación permanente
+  const abrirEliminarProyecto = (id: string, nombre: string) => {
+    setProyectoAEliminar({ id, nombre })
+    setDeleteDialogOpen(true)
+  }
+
   // Función para cambiar estado de proyecto (activar/desactivar)
   const toggleProyectoStatus = async (id: string, nombre: string, currentStatus: string) => {
     const action = currentStatus === 'activo' ? 'desactivar' : 'activar'
@@ -778,7 +789,7 @@ export default function ProyectosPage() {
       onClick: (proyecto) => abrirEditarProyecto(proyecto.id),
     },
     {
-      label: 'Eliminar',
+      label: 'Desactivar',
       icon: <Trash2 size={16} />,
       onClick: (proyecto) => toggleProyectoStatus(proyecto.id, proyecto.nombre, proyecto.status),
       hidden: (proyecto) => proyecto.status !== 'activo',
@@ -788,6 +799,11 @@ export default function ProyectosPage() {
       icon: <Power size={16} />,
       onClick: (proyecto) => toggleProyectoStatus(proyecto.id, proyecto.nombre, proyecto.status),
       hidden: (proyecto) => proyecto.status !== 'inactivo',
+    },
+    {
+      label: 'Eliminar permanentemente',
+      icon: <AlertTriangle size={16} />,
+      onClick: (proyecto) => abrirEliminarProyecto(proyecto.id, proyecto.nombre),
     },
   ], [])
 
@@ -1368,6 +1384,23 @@ export default function ProyectosPage() {
         open={guideOpen}
         onOpenChange={setGuideOpen}
       />
+
+      {/* Dialog de eliminación permanente */}
+      {proyectoAEliminar && (
+        <DeleteProjectDialog
+          open={deleteDialogOpen}
+          onOpenChange={(open) => {
+            setDeleteDialogOpen(open)
+            if (!open) setProyectoAEliminar(null)
+          }}
+          proyectoId={proyectoAEliminar.id}
+          proyectoNombre={proyectoAEliminar.nombre}
+          onDeleted={() => {
+            cargarProyectos(searchTerm, page, limit)
+            cargarDatosFinancieros()
+          }}
+        />
+      )}
     </div>
   )
 }

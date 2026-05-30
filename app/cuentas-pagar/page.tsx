@@ -1,27 +1,31 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, Edit, Trash2, AlertCircle, Clock, CheckCircle, XCircle, Loader2, Upload, FileDown, History, Receipt, CreditCard, DollarSign, Filter, Pencil, HelpCircle } from "lucide-react"
+import { Edit, Trash2, AlertCircle, Clock, CheckCircle, CheckCircle2, XCircle, Loader2, Upload, FileDown, History, Receipt, CreditCard, DollarSign, Filter, Pencil, HelpCircle } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { toast } from "sonner"
 import { accountsPayableService } from "@/services/accounts-payable.service"
-import { paymentSchedulingService } from "@/services/payment-scheduling.service"
 import { accountsPayableUploadService } from "@/services/accounts-payable-upload.service"
 import type { UploadResponse, ValidacionResultado, ImportacionResultado } from "@/services/accounts-payable-upload.service"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
 import { BulkUploadGuideDialog } from "@/components/bulk-upload-guide-dialog"
-import { KpiCard, ExpenseKpiCard, WarningKpiCard, SuccessKpiCard, TotalKpiCard } from "@/components/ui/kpi-card"
-import { ActionButton, CreateButton, CancelButton } from "@/components/ui/action-button"
+import { ExpenseKpiCard, WarningKpiCard, SuccessKpiCard, TotalKpiCard } from "@/components/ui/kpi-card"
+import { ActionButton } from "@/components/ui/action-button"
 import { DataTable, Column, Action, SelectFilter } from "@/components/ui/data-table"
-import { DynamicForm, FormSection } from "@/components/ui/dynamic-form"
+import { DynamicForm } from "@/components/ui/dynamic-form"
 import { FloatingSelect } from "@/components/ui/floating-select"
 import { FloatingDatePicker } from "@/components/ui/floating-date-picker"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { FloatingInput } from "@/components/ui/floating-input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -50,12 +54,25 @@ export default function CuentasPagarPage() {
   const [projects, setProjects] = useState<Pick<Project, 'id' | 'name' | 'code'>[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingSelects, setLoadingSelects] = useState(false)
-  const [applyingFilters, setApplyingFilters] = useState(false)
   const [savingAccount, setSavingAccount] = useState(false)
+  // Estados para filtros básicos (DataTable)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [filterStatus, setFilterStatus] = useState<string>("")
+
+  // Estados para filtros avanzados (aplicados)
   const [filters, setFilters] = useState({
-    status: "all" as string,
-    search: ""
+    projectId: "all",
+    categoryId: "all",
+    invoiceNumber: "",
+    dateFrom: undefined as Date | undefined,
+    dateTo: undefined as Date | undefined,
+    dueDateFrom: undefined as Date | undefined,
+    dueDateTo: undefined as Date | undefined,
   })
+
+  // Estado temporal para filtros avanzados (edición en el Sheet)
+  const [tempFilters, setTempFilters] = useState(filters)
+  const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false)
 
   // Estados para paginación server-side (DataTable)
   const [page, setPage] = useState(1)
@@ -114,21 +131,33 @@ export default function CuentasPagarPage() {
   const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
 
-  const fetchAccounts = useCallback(async () => {
+  // Construir DTO de filtros para la API
+  const buildFilterDto = useCallback((advancedFilters?: typeof filters): any => {
+    const filterDto: any = {}
+    const advFilters = advancedFilters || filters
+
+    if (searchQuery) filterDto.search = searchQuery
+    if (advFilters.projectId && advFilters.projectId !== "all") filterDto.projectId = advFilters.projectId
+    if (advFilters.categoryId && advFilters.categoryId !== "all") filterDto.categoryId = advFilters.categoryId
+    if (filterStatus && filterStatus !== "all") filterDto.status = filterStatus
+    if (advFilters.invoiceNumber) filterDto.invoiceNumber = advFilters.invoiceNumber
+    if (advFilters.dateFrom) filterDto.dateFrom = advFilters.dateFrom.toISOString()
+    if (advFilters.dateTo) filterDto.dateTo = advFilters.dateTo.toISOString()
+    if (advFilters.dueDateFrom) filterDto.dueDateFrom = advFilters.dueDateFrom.toISOString()
+    if (advFilters.dueDateTo) filterDto.dueDateTo = advFilters.dueDateTo.toISOString()
+
+    return filterDto
+  }, [searchQuery, filterStatus, filters])
+
+  const fetchAccounts = useCallback(async (filterDto?: any, currentPage = page, currentLimit = limit) => {
     try {
       setLoading(true)
       const params: any = {
-        page,
-        limit,
+        page: currentPage,
+        limit: currentLimit,
         sortBy: 'createdAt',
         order: 'desc',
-      }
-
-      if (filters.status && filters.status !== "all") {
-        params.status = filters.status
-      }
-      if (filters.search) {
-        params.search = filters.search
+        ...filterDto,
       }
 
       const response = await accountsPayableService.getAll(params)
@@ -141,7 +170,7 @@ export default function CuentasPagarPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, limit, filters])
+  }, [])
 
   // Calcular métricas del dashboard basadas en las cuentas (filtradas o totales)
   const calculateDashboardMetrics = useCallback((accountsData: AccountPayable[]) => {
@@ -221,10 +250,18 @@ export default function CuentasPagarPage() {
   }
 
   useEffect(() => {
-    fetchAccounts()
+    const filterDto = buildFilterDto()
+    fetchAccounts(filterDto, page, limit)
     fetchDashboard()
     loadSuppliersAndCategories()
-  }, [fetchAccounts, fetchDashboard])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Recargar datos cuando cambian filtros básicos o paginación
+  useEffect(() => {
+    const filterDto = buildFilterDto()
+    fetchAccounts(filterDto, page, limit)
+  }, [page, limit, searchQuery, filterStatus, buildFilterDto])
 
   // Recalcular métricas del dashboard cuando cambian las cuentas (por filtros)
   useEffect(() => {
@@ -403,7 +440,7 @@ export default function CuentasPagarPage() {
         toast.success("Cuenta creada exitosamente")
       }
       setIsDialogOpen(false)
-      fetchAccounts()
+      fetchAccounts(buildFilterDto())
       fetchDashboard()
     } catch (error: any) {
       console.error("Error al guardar cuenta:", error)
@@ -420,12 +457,12 @@ export default function CuentasPagarPage() {
     try {
       await accountsPayableService.delete(id)
       toast.success("Cuenta eliminada")
-      fetchAccounts()
+      fetchAccounts(buildFilterDto())
       fetchDashboard()
     } catch (error) {
       toast.error("Error al eliminar")
     }
-  }, [fetchAccounts, fetchDashboard])
+  }, [fetchAccounts, fetchDashboard, buildFilterDto])
 
   const handleVerHistorial = useCallback(async (account: AccountPayable) => {
     setSelectedAccount(account)
@@ -484,7 +521,7 @@ export default function CuentasPagarPage() {
       // Recargar cuenta para actualizar saldos
       const updatedAccount = await accountsPayableService.getById(selectedAccount.id)
       setSelectedAccount(updatedAccount)
-      fetchAccounts()
+      fetchAccounts(buildFilterDto())
       fetchDashboard()
     } catch (error: any) {
       console.error("Error al actualizar pago:", error)
@@ -492,23 +529,33 @@ export default function CuentasPagarPage() {
     } finally {
       setSavingPayment(false)
     }
-  }, [selectedAccount, selectedPayment, editPaymentFormData, fetchAccounts, fetchDashboard])
+  }, [selectedAccount, selectedPayment, editPaymentFormData, fetchAccounts, fetchDashboard, buildFilterDto])
 
   const handleClearFilters = useCallback(async () => {
-    setFilters({ status: "all", search: "" })
+    setSearchQuery("")
+    setFilterStatus("")
+    setFilters({
+      projectId: "all",
+      categoryId: "all",
+      invoiceNumber: "",
+      dateFrom: undefined,
+      dateTo: undefined,
+      dueDateFrom: undefined,
+      dueDateTo: undefined,
+    })
     setPage(1)
-    // El useEffect se encargará de hacer el fetch automáticamente
+    await fetchAccounts({}, 1, limit)
     toast.success('Filtros limpiados')
-  }, [])
+  }, [fetchAccounts, limit])
 
   // Callbacks para DataTable - memoizados para evitar bucles infinitos
   const handleSearchChange = useCallback((value: string) => {
-    setFilters((prev) => ({ ...prev, search: value }))
+    setSearchQuery(value)
     setPage(1)
   }, [])
 
   const handleFilterChange = useCallback((key: string, value: string | string[]) => {
-    setFilters((prev) => ({ ...prev, [key]: value as string }))
+    if (key === 'status') setFilterStatus(value as string)
     setPage(1)
   }, [])
 
@@ -530,8 +577,8 @@ export default function CuentasPagarPage() {
   }), [])
 
   const filterValues = useMemo(() => ({
-    status: filters.status,
-  }), [filters.status])
+    status: filterStatus,
+  }), [filterStatus])
 
   const pagination = useMemo(() => ({
     page,
@@ -588,7 +635,7 @@ export default function CuentasPagarPage() {
       const resultado = await accountsPayableUploadService.importarDatos(uploadResponse.uploadId)
       setImportacionResultado(resultado)
       toast.success(`${resultado.registrosImportados} cuentas por pagar importadas`)
-      fetchAccounts()
+      fetchAccounts(buildFilterDto())
       fetchDashboard()
     } catch (error: any) {
       toast.error(error.message || 'Error al importar datos')
@@ -625,8 +672,13 @@ export default function CuentasPagarPage() {
   }
 
   const activeFiltersCount = [
-    filters.status !== "all",
-    filters.search !== ""
+    filterStatus !== "all" && filterStatus !== "",
+    searchQuery !== "",
+    filters.projectId !== "all",
+    filters.categoryId !== "all",
+    filters.invoiceNumber,
+    filters.dateFrom,
+    filters.dueDateFrom,
   ].filter(Boolean).length
 
   // Configuración de columnas para el DataTable - memoizada para estabilidad
@@ -726,7 +778,7 @@ export default function CuentasPagarPage() {
       key: 'status',
       label: 'Estado',
       options: [
-        { value: 'all', label: 'Todos' },
+        { value: '', label: 'Todos' },
         { value: 'pending', label: 'Pendiente' },
         { value: 'paid', label: 'Pagado' },
         { value: 'overdue', label: 'Vencido' },
@@ -880,19 +932,180 @@ export default function CuentasPagarPage() {
         emptyMessage="No se encontraron cuentas por pagar"
         // Filtros de búsqueda
         searchFilter={searchFilterConfig}
-        searchValue={filters.search}
+        searchValue={searchQuery}
         onSearchChange={handleSearchChange}
         // Filtros de selección
         selectFilters={selectFilters}
         filterValues={filterValues}
         onFilterChange={handleFilterChange}
         onClearFilters={handleClearFilters}
+        // Botones del toolbar
+        toolbarButtons={
+          <ActionButton
+            variant="filter"
+            size="sm"
+            className="md:h-9 md:px-3"
+            startIcon={<Filter className="h-4 w-4" />}
+            onClick={() => setIsAdvancedFiltersOpen(true)}
+          >
+            Más Filtros
+            {activeFiltersCount > 0 && (
+              <Badge variant="secondary" className="ml-2">{activeFiltersCount}</Badge>
+            )}
+          </ActionButton>
+        }
         // Paginación server-side
         pagination={pagination}
-        onPageChange={handlePageChange}
-        onRowsPerPageChange={handleRowsPerPageChange}
+        onPageChange={(newPage) => {
+          setPage(newPage)
+          fetchAccounts(buildFilterDto(), newPage, limit)
+        }}
+        onRowsPerPageChange={(newLimit) => {
+          setLimit(newLimit)
+          setPage(1)
+          fetchAccounts(buildFilterDto(), 1, newLimit)
+        }}
         rowsPerPageOptions={rowsPerPageOptions}
       />
+
+      {/* Sheet de Filtros Avanzados - Mobile First */}
+      <Sheet
+        open={isAdvancedFiltersOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setTempFilters(filters)
+          }
+          setIsAdvancedFiltersOpen(open)
+        }}
+      >
+        <SheetContent className="w-[95vw] sm:w-[400px] sm:max-w-[400px] overflow-y-auto">
+          <SheetHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+            <SheetTitle className="text-lg sm:text-xl">Filtros Avanzados</SheetTitle>
+            <SheetDescription className="text-xs sm:text-sm">
+              Configura filtros adicionales
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="space-y-5 mt-4 sm:mt-6 px-4 sm:px-6 pb-4 sm:pb-6">
+            {/* Proyecto */}
+            <FloatingSelect
+              label="Proyecto"
+              value={tempFilters.projectId}
+              onChange={(value) => setTempFilters({ ...tempFilters, projectId: value as string })}
+              options={[
+                { value: 'all', label: 'Todos los proyectos' },
+                ...projects.map((project) => ({
+                  value: project.id,
+                  label: project.name || project.code,
+                })),
+              ]}
+              placeholder="Todos los proyectos"
+            />
+
+            {/* Categoría */}
+            <FloatingSelect
+              label="Categoría"
+              value={tempFilters.categoryId}
+              onChange={(value) => setTempFilters({ ...tempFilters, categoryId: value as string })}
+              options={[
+                { value: 'all', label: 'Todas las categorías' },
+                ...categories.map((category) => ({
+                  value: category.id,
+                  label: category.name,
+                })),
+              ]}
+              placeholder="Todas las categorías"
+            />
+
+            {/* Folio de Factura */}
+            <FloatingInput
+              label="Folio de Factura"
+              placeholder="Ej: FAC-001"
+              value={tempFilters.invoiceNumber}
+              onChange={(e) => setTempFilters({ ...tempFilters, invoiceNumber: e.target.value })}
+            />
+
+            {/* Fechas de Emisión */}
+            <FloatingDatePicker
+              label="Fecha de Emisión"
+              value={{
+                from: tempFilters.dateFrom,
+                to: tempFilters.dateTo,
+              }}
+              onChange={(range) => {
+                if (range && 'from' in range) {
+                  setTempFilters({
+                    ...tempFilters,
+                    dateFrom: range.from,
+                    dateTo: range.to,
+                  })
+                }
+              }}
+              mode="range"
+              placeholder="Seleccionar rango"
+            />
+
+            {/* Fechas de Vencimiento */}
+            <FloatingDatePicker
+              label="Fecha de Vencimiento"
+              value={{
+                from: tempFilters.dueDateFrom,
+                to: tempFilters.dueDateTo,
+              }}
+              onChange={(range) => {
+                if (range && 'from' in range) {
+                  setTempFilters({
+                    ...tempFilters,
+                    dueDateFrom: range.from,
+                    dueDateTo: range.to,
+                  })
+                }
+              }}
+              mode="range"
+              placeholder="Seleccionar rango"
+            />
+
+            {/* Botones */}
+            <div className="flex gap-3 pt-6 mt-2 border-t">
+              <ActionButton
+                variant="outline"
+                size="md"
+                fullWidth
+                startIcon={<XCircle className="h-4 w-4" />}
+                onClick={() => {
+                  setTempFilters({
+                    projectId: "all",
+                    categoryId: "all",
+                    invoiceNumber: "",
+                    dateFrom: undefined,
+                    dateTo: undefined,
+                    dueDateFrom: undefined,
+                    dueDateTo: undefined,
+                  })
+                  handleClearFilters()
+                  setIsAdvancedFiltersOpen(false)
+                }}
+              >
+                Limpiar
+              </ActionButton>
+              <ActionButton
+                variant="primary"
+                size="md"
+                fullWidth
+                startIcon={<CheckCircle2 className="h-4 w-4" />}
+                onClick={() => {
+                  setFilters(tempFilters)
+                  const filterDto = buildFilterDto(tempFilters)
+                  fetchAccounts(filterDto, page, limit)
+                  setIsAdvancedFiltersOpen(false)
+                }}
+              >
+                Aplicar
+              </ActionButton>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Formulario de Cuenta por Pagar usando DynamicForm */}
       <DynamicForm

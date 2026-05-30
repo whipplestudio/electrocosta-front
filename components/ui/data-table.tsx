@@ -131,6 +131,38 @@ function MD3TablePagination({
   onRowsPerPageChange?: (event: React.ChangeEvent<HTMLInputElement>) => void
   rowsPerPageOptions?: number[]
 }) {
+  const totalPages = Math.max(1, Math.ceil(count / rowsPerPage))
+  const [inputPage, setInputPage] = React.useState(String(page))
+
+  React.useEffect(() => {
+    setInputPage(String(page))
+  }, [page])
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/\D/g, '')
+    setInputPage(val)
+  }
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const target = Math.min(Math.max(1, parseInt(inputPage || '1', 10)), totalPages)
+      if (target !== page) {
+        onPageChange(e, target)
+      } else {
+        setInputPage(String(page))
+      }
+    }
+  }
+
+  const handleInputBlur = () => {
+    const target = Math.min(Math.max(1, parseInt(inputPage || '1', 10)), totalPages)
+    if (target !== page) {
+      onPageChange(null, target)
+    } else {
+      setInputPage(String(page))
+    }
+  }
+
   return (
     <Box
       sx={{
@@ -138,7 +170,7 @@ function MD3TablePagination({
         flexDirection: { xs: 'column', sm: 'row' },
         alignItems: 'center',
         justifyContent: { xs: 'center', sm: 'flex-end' },
-        gap: { xs: 1, sm: 0 },
+        gap: { xs: 1, sm: 1.5 },
         px: { xs: 1.5, sm: 2 },
         py: { xs: 1, sm: 1.5 },
         borderTop: `1px solid ${SYSTEM_COLORS.border}`,
@@ -149,13 +181,15 @@ function MD3TablePagination({
         variant="body2"
         sx={{
           color: SYSTEM_COLORS.foregroundMuted,
-          mr: { sm: 2 },
+          mr: { sm: 1.5 },
           fontSize: { xs: '12px', sm: '14px' },
           order: { xs: 2, sm: 1 },
+          whiteSpace: 'nowrap',
         }}
       >
         {(page - 1) * rowsPerPage + 1}-{Math.min(page * rowsPerPage, count)} de {count}
       </Typography>
+
       <Box sx={{ 
         display: 'flex', 
         alignItems: 'center', 
@@ -175,21 +209,55 @@ function MD3TablePagination({
         >
           <KeyboardArrowLeft sx={{ fontSize: { xs: '20px', sm: '24px' } }} />
         </IconButton>
-        <Typography
-          variant="body2"
-          sx={{
-            color: SYSTEM_COLORS.foreground,
-            minWidth: { xs: '32px', sm: '40px' },
-            textAlign: 'center',
-            fontSize: { xs: '13px', sm: '14px' },
-            fontWeight: 500,
-          }}
-        >
-          {page}
-        </Typography>
+
+        {/* Input de página editable */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={inputPage}
+            onChange={handleInputChange}
+            onKeyDown={handleInputKeyDown}
+            onBlur={handleInputBlur}
+            aria-label="Ir a página"
+            style={{
+              width: '40px',
+              height: '32px',
+              textAlign: 'center',
+              fontSize: '14px',
+              fontWeight: 500,
+              color: SYSTEM_COLORS.foreground,
+              backgroundColor: SYSTEM_COLORS.background,
+              border: `1px solid ${SYSTEM_COLORS.border}`,
+              borderRadius: '8px',
+              outline: 'none',
+              padding: '0 4px',
+              transition: 'border-color 0.2s',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = SYSTEM_COLORS.primary
+              e.currentTarget.select()
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.borderColor = SYSTEM_COLORS.border
+            }}
+          />
+          <Typography
+            variant="body2"
+            sx={{
+              color: SYSTEM_COLORS.foregroundMuted,
+              fontSize: { xs: '13px', sm: '14px' },
+              fontWeight: 400,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            de {totalPages}
+          </Typography>
+        </Box>
+
         <IconButton
           size="small"
-          disabled={page >= Math.ceil(count / rowsPerPage)}
+          disabled={page >= totalPages}
           onClick={(e) => onPageChange(e, page + 1)}
           sx={{
             color: SYSTEM_COLORS.foreground,

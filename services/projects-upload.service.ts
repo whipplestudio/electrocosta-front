@@ -134,6 +134,41 @@ export const projectsUploadService = {
     return response.data
   },
 
+  async obtenerCuentasVinculadas(id: string): Promise<{
+    nombreProyecto: string
+    cuentasCobrar: Array<{
+      id: string
+      tipo: string
+      numeroFactura: string
+      monto: number
+      saldo: number
+      estado: string
+      entidad: string
+    }>
+    cuentasPagar: Array<{
+      id: string
+      tipo: string
+      numeroFactura: string
+      monto: number
+      saldo: number
+      estado: string
+      entidad: string
+    }>
+    totalCuentasCobrar: number
+    totalCuentasPagar: number
+  }> {
+    const response = await apiClient.get(`/carga/proyectos/${id}/linked-accounts`)
+    return response.data
+  },
+
+  async eliminarProyectoPermanente(id: string): Promise<{
+    id: string
+    mensaje: string
+  }> {
+    const response = await apiClient.delete(`/carga/proyectos/${id}/permanente`)
+    return response.data
+  },
+
   // ========== CARGA MASIVA ==========
 
   async uploadFile(file: File, options: UploadFileData = {}): Promise<UploadResponse> {

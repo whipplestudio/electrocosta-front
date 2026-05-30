@@ -349,7 +349,7 @@ export default function ProyectosPage() {
         const subtotal = parseFloat(field === 'subtotalVenta' ? unformatted : updated.subtotalVenta) || 0
         const ivaValue = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
         const ivaAmount = ivaType === 'percentage' ? subtotal * (ivaValue / 100) : ivaValue
-        updated.valorVenta = (subtotal + ivaAmount).toString()
+        updated.valorVenta = Number((subtotal + ivaAmount).toFixed(2)).toString()
       }
       
       // Si se modificó alguno de los 3 campos de desglose, calcular el presupuestoTotal con IVA
@@ -360,7 +360,7 @@ export default function ProyectosPage() {
         const subtotalPresupuesto = materiales + manoObra + otros
         const ivaValue = parseFloat(field === 'iva' ? unformatted : updated.iva) || 0
         const ivaAmount = ivaType === 'percentage' ? subtotalPresupuesto * (ivaValue / 100) : ivaValue
-        updated.presupuestoTotal = (subtotalPresupuesto + ivaAmount).toString()
+        updated.presupuestoTotal = Number((subtotalPresupuesto + ivaAmount).toFixed(2)).toString()
       }
       
       return updated

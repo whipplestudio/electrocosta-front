@@ -164,40 +164,23 @@ export default function CuentasPagarPage() {
       setAccounts(response.data)
       setTotal(response.total)
       setTotalPages(response.totalPages)
+
+      // Actualizar KPIs con los totales filtrados del backend (sobre TODOS los registros, no solo la pagina)
+      const summary = response.summary
+      if (summary) {
+        setDashboardData({
+          totalPendiente: Number(summary.totalPending || 0) + Number(summary.totalScheduled || 0),
+          totalVencido: Number(summary.totalOverdue || 0),
+          totalPagado: Number(summary.totalPaid || 0),
+          cuentasVencidas: Number(summary.countOverdue || 0),
+          proximasVencer: Number(summary.upcomingThisWeek || 0),
+        })
+      }
     } catch (error) {
       console.error("Error al cargar cuentas por pagar:", error)
       toast.error("Error al cargar las cuentas por pagar")
     } finally {
       setLoading(false)
-    }
-  }, [])
-
-  // Calcular métricas del dashboard basadas en las cuentas (filtradas o totales)
-  const calculateDashboardMetrics = useCallback((accountsData: AccountPayable[]) => {
-    const now = new Date()
-    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-
-    const totalPendiente = accountsData.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
-    const totalPagado = accountsData.reduce((sum, acc) => sum + Number(acc.paidAmount || 0), 0)
-
-    const overdueAccounts = accountsData.filter(acc => {
-      if (!acc.dueDate) return false
-      return new Date(acc.dueDate) < now && acc.status !== 'paid' && acc.status !== 'cancelled'
-    })
-    const totalVencido = overdueAccounts.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
-
-    const proximasVencer = accountsData.filter(acc => {
-      if (!acc.dueDate) return false
-      const dueDate = new Date(acc.dueDate)
-      return dueDate >= now && dueDate <= sevenDaysFromNow && acc.status !== 'paid' && acc.status !== 'cancelled'
-    }).length
-
-    return {
-      totalPendiente,
-      totalVencido,
-      totalPagado,
-      cuentasVencidas: overdueAccounts.length,
-      proximasVencer,
     }
   }, [])
 
@@ -262,14 +245,6 @@ export default function CuentasPagarPage() {
     const filterDto = buildFilterDto()
     fetchAccounts(filterDto, page, limit)
   }, [page, limit, searchQuery, filterStatus, buildFilterDto])
-
-  // Recalcular métricas del dashboard cuando cambian las cuentas (por filtros)
-  useEffect(() => {
-    if (accounts.length > 0) {
-      const filteredMetrics = calculateDashboardMetrics(accounts)
-      setDashboardData(filteredMetrics)
-    }
-  }, [accounts, calculateDashboardMetrics])
 
   // Auto-completar macroClasificacion cuando se selecciona una categoría (solo al crear, no al editar)
   useEffect(() => {

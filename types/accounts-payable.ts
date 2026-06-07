@@ -190,12 +190,24 @@ export interface AccountPayableFiltersDto {
 // RESPONSES - PAGINATION
 // ============================================
 
+export interface AccountsPayableSummary {
+  totalPending: number;
+  countPending: number;
+  totalScheduled: number;
+  countScheduled: number;
+  totalOverdue: number;
+  countOverdue: number;
+  totalPaid: number;
+  upcomingThisWeek: number;
+}
+
 export interface PaginatedAccountsPayableResponse {
   data: AccountPayable[];
   total: number;
   page: number;
   limit: number;
   totalPages: number;
+  summary: AccountsPayableSummary;
 }
 
 // ============================================

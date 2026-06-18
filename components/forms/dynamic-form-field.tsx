@@ -298,47 +298,58 @@ export function DynamicFormField({
         );
 
       case 'currency': {
-        // Formatear número con separadores de miles (mientras se escribe)
-        const formatNumber = (val: string): string => {
-          const num = val.replace(/,/g, '');
-          if (!num) return '';
-
-          const parts = num.split('.');
-          const wholePart = parts[0];
-          const decimalPart = parts[1] || '';
-
-          // Agregar separadores de miles a la parte entera
-          const withSeparators = wholePart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-
-          return decimalPart ? `${withSeparators}.${decimalPart}` : withSeparators;
+        // Formatear la parte entera con separadores de miles, preservar decimales tal como el usuario los escribe
+        const formatWithThousands = (raw: string): string => {
+          const parts = raw.split('.');
+          const whole = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+          return parts.length > 1 ? `${whole}.${parts[1]}` : whole;
         };
 
-        // Manejar cambio - formatear mientras se escribe
-        const handleChange = (inputValue: string) => {
-          // Remover todo excepto números y punto decimal
-          const cleanValue = inputValue.replace(/[^\d.]/g, '');
+        // Estado local para mantener el string de display mientras se escribe (permite "100." o "100.0")
+        const [currencyDisplay, setCurrencyDisplay] = React.useState<string>(
+          value !== undefined && value !== '' ? formatWithThousands(String(value)) : ''
+        );
 
-          // Asegurar solo un punto decimal
-          const parts = cleanValue.split('.');
+        // Sincronizar display si el valor externo cambia (ej. defaultValues)
+        React.useEffect(() => {
+          if (value === undefined || value === '') {
+            setCurrencyDisplay('');
+          } else {
+            // Solo sobreescribir si el valor numérico difiere del string actual
+            const currentNum = parseFloat(currencyDisplay.replace(/,/g, ''));
+            if (isNaN(currentNum) || currentNum !== Number(value)) {
+              setCurrencyDisplay(formatWithThousands(String(value)));
+            }
+          }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [value]);
+
+        const handleChange = (inputValue: string) => {
+          // Remover todo excepto dígitos y punto decimal
+          const clean = inputValue.replace(/,/g, '').replace(/[^\d.]/g, '');
+
+          // Asegurar solo un punto decimal, máximo 2 decimales
+          const parts = clean.split('.');
           let sanitized = parts[0];
           if (parts.length > 1) {
             sanitized += '.' + parts.slice(1).join('').slice(0, 2);
           }
 
           if (sanitized === '' || sanitized === '.') {
-            onChange(undefined);
+            setCurrencyDisplay('');
+            onChange('');
             return;
           }
 
-          // Actualizar el valor numérico en el formulario (sin formato)
+          // Actualizar el display preservando el punto y ceros finales mientras se escribe
+          setCurrencyDisplay(formatWithThousands(sanitized));
+
+          // Solo guardar el número en el form si es válido
           const numValue = parseFloat(sanitized);
           if (!isNaN(numValue)) {
             onChange(numValue);
           }
         };
-
-        // El valor mostrado está formateado con separadores
-        const displayValue = formatNumber(value ? String(value) : '');
 
         return (
           <FloatingInput
@@ -348,7 +359,7 @@ export function DynamicFormField({
             placeholder={field.placeholder || '0.00'}
             disabled={field.disabled}
             readOnly={field.readOnly}
-            value={displayValue}
+            value={currencyDisplay}
             onChange={(e) => handleChange(e.target.value)}
             startAdornment={<span className="font-medium">$</span>}
           />

@@ -23,6 +23,7 @@ export interface CrearProyectoData {
   prioridad: string
   descripcion?: string
   observaciones?: string
+  empresa?: string
 }
 
 export interface ProyectoCreado {

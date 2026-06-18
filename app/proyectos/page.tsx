@@ -141,7 +141,8 @@ export default function ProyectosPage() {
     estado: 'planificacion',
     prioridad: 'media',
     descripcion: '',
-    observaciones: ''
+    observaciones: '',
+    empresa: ''
   })
 
   // Estado para Ver proyecto
@@ -324,7 +325,8 @@ export default function ProyectosPage() {
       estado: 'planificacion',
       prioridad: 'media',
       descripcion: '',
-      observaciones: ''
+      observaciones: '',
+      empresa: ''
     })
     setFormErrors({
       nombreProyecto: '',
@@ -438,6 +440,7 @@ export default function ProyectosPage() {
         prioridad: nuevoProyecto.prioridad,
         descripcion: nuevoProyecto.descripcion,
         observaciones: nuevoProyecto.observaciones,
+        empresa: nuevoProyecto.empresa,
       }
 
       if (modoFormulario === 'editar') {
@@ -632,7 +635,8 @@ export default function ProyectosPage() {
         estado: proyecto.estado || 'planificacion',
         prioridad: proyecto.prioridad || 'media',
         descripcion: proyecto.descripcion || '',
-        observaciones: proyecto.observaciones || ''
+        observaciones: proyecto.observaciones || '',
+        empresa: proyecto.empresa || ''
       })
       
       setModoFormulario('editar')
@@ -687,6 +691,7 @@ export default function ProyectosPage() {
     estado: p.status === 'activo' ? 'Activo' : 'Inactivo',
     responsable: p.responsable ? `${p.responsable.firstName} ${p.responsable.lastName}` : 'N/A',
     categoria: p.area?.name || 'General',
+    empresa: p.empresa || '',
     status: p.status || 'activo',
   }))
 
@@ -733,6 +738,15 @@ export default function ProyectosPage() {
         <div>
           <div className="font-medium text-[#374151]">{proyecto.cliente}</div>
           <div className="text-sm text-[#6b7280]">{proyecto.categoria}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'empresa',
+      header: 'Empresa',
+      render: (proyecto) => (
+        <div className="text-sm text-[#374151]">
+          {proyecto.empresa || <span className="text-[#d1d5db]">—</span>}
         </div>
       ),
     },
@@ -922,6 +936,14 @@ export default function ProyectosPage() {
                     colSpan: 1,
                   },
                   {
+                    name: 'empresa',
+                    type: 'text',
+                    label: 'Empresa',
+                    placeholder: 'Ej: Constructora XYZ S.A. de C.V.',
+                    helperText: 'Empresa relacionada al proyecto (opcional)',
+                    colSpan: 1,
+                  },
+                  {
                     name: 'clientId',
                     type: 'select',
                     label: 'Cliente',
@@ -937,7 +959,7 @@ export default function ProyectosPage() {
                     required: true,
                     searchPlaceholder: 'Buscar por nombre o RFC...',
                     helperText: 'Busca y selecciona un cliente existente o déjalo vacío',
-                    colSpan: 1,
+                    colSpan: 'full',
                   },
                 ],
               },
@@ -1175,7 +1197,7 @@ export default function ProyectosPage() {
         emptyMessage="No se encontraron proyectos. Intenta con otra búsqueda o crea un nuevo proyecto."
         
         // Search filter
-        searchFilter={{ placeholder: 'Buscar por nombre, cliente o ID...', debounceMs: 1000 }}
+        searchFilter={{ placeholder: 'Buscar por nombre, cliente o empresa...', debounceMs: 1000 }}
         searchValue={searchTerm}
         onSearchChange={handleSearchChange}
         
@@ -1208,6 +1230,12 @@ export default function ProyectosPage() {
                 <div className="flex items-center gap-2 text-white/90 text-sm">
                   <Building2 className="h-4 w-4" />
                   <span>{proyectoSeleccionado.cliente.name}</span>
+                </div>
+              )}
+              {proyectoSeleccionado?.empresa && (
+                <div className="flex items-center gap-2 text-white/80 text-sm">
+                  <Briefcase className="h-4 w-4" />
+                  <span>Empresa: {proyectoSeleccionado.empresa}</span>
                 </div>
               )}
             </DialogHeader>

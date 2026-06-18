@@ -36,7 +36,9 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     // Si el error es 401 y no es un retry, intentar refrescar el token
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Excluir el endpoint de login para que los errores de credenciales se propaguen normalmente
+    const isAuthLogin = originalRequest.url?.includes('/auth/login');
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthLogin) {
       originalRequest._retry = true;
 
       try {

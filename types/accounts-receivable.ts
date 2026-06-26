@@ -60,6 +60,7 @@ export interface Project {
   description?: string;
   clientId?: string;
   status: string;
+  empresa?: string;
 }
 
 export interface Category {

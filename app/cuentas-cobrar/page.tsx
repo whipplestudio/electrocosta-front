@@ -892,6 +892,13 @@ function CuentasCobrarPageContent() {
       ),
     },
     {
+      key: 'empresa',
+      header: 'Empresa',
+      render: (row) => (
+        <span className="text-sm">{row.project?.empresa || <span className="text-muted-foreground">—</span>}</span>
+      ),
+    },
+    {
       key: 'invoiceNumber',
       header: 'Factura',
     },

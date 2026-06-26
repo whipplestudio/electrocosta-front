@@ -696,13 +696,12 @@ export default function ProyectosPage() {
   }))
 
   // Calcular KPIs financieros reales
+  // Nota: el endpoint /listado no devuelve totalIncome/totalExpenses, usamos valorVenta y presupuestoTotal
   const totalPresupuesto = proyectosFormateados.reduce((sum, p) => sum + p.valorContrato, 0)
-  const totalIngresos = proyectosFormateados.reduce((sum, p) => sum + p.totalIncome, 0)
-  const totalGastos = proyectosFormateados.reduce((sum, p) => sum + p.totalExpenses, 0)
-  const totalGanancia = proyectosFormateados.reduce((sum, p) => sum + p.netProfit, 0)
-  const margenPromedio = proyectosFormateados.length > 0 
-    ? proyectosFormateados.reduce((sum, p) => sum + p.profitMargin, 0) / proyectosFormateados.length 
-    : 0
+  const totalIngresos = proyectosFormateados.reduce((sum, p) => sum + p.valorVenta, 0)
+  const totalGastos = proyectosFormateados.reduce((sum, p) => sum + p.valorContrato, 0)
+  const totalGanancia = totalIngresos - totalGastos
+  const margenPromedio = totalIngresos > 0 ? (totalGanancia / totalIngresos) * 100 : 0
 
   const getStatusBadge = (estado: string) => {
     switch (estado) {
@@ -1136,35 +1135,35 @@ export default function ProyectosPage() {
       <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title="Ingresos Totales"
-          value={`$${financialData.totalIncome.toLocaleString()}`}
-          subtitle={`${total} proyectos`}
+          value={`$${(searchTerm ? totalIngresos : financialData.totalIncome).toLocaleString()}`}
+          subtitle={searchTerm ? `${total} resultados` : `${total} proyectos`}
           icon={<DollarSign className="h-4 w-4" />}
           variant="success"
-          loading={loadingFinancial}
+          loading={loadingFinancial || (!!searchTerm && loadingProyectos)}
         />
         <KpiCard
           title="Gastos Totales"
-          value={`$${financialData.totalExpenses.toLocaleString()}`}
-          subtitle="Cuentas por pagar"
+          value={`$${(searchTerm ? totalGastos : financialData.totalExpenses).toLocaleString()}`}
+          subtitle={searchTerm ? "Presupuesto estimado" : "Cuentas por pagar"}
           icon={<TrendingDown className="h-4 w-4" />}
           variant="danger"
-          loading={loadingFinancial}
+          loading={loadingFinancial || (!!searchTerm && loadingProyectos)}
         />
         <KpiCard
           title="Ganancia Neta"
-          value={`$${financialData.totalProfit.toLocaleString()}`}
+          value={`$${(searchTerm ? totalGanancia : financialData.totalProfit).toLocaleString()}`}
           subtitle="Ingresos - Gastos"
           icon={<TrendingUp className="h-4 w-4" />}
-          variant={financialData.totalProfit >= 0 ? "info" : "danger"}
-          loading={loadingFinancial}
+          variant={(searchTerm ? totalGanancia : financialData.totalProfit) >= 0 ? "info" : "danger"}
+          loading={loadingFinancial || (!!searchTerm && loadingProyectos)}
         />
         <KpiCard
           title="Margen Promedio"
-          value={`${financialData.profitMargin.toFixed(1)}%`}
+          value={`${(searchTerm ? margenPromedio : financialData.profitMargin).toFixed(1)}%`}
           subtitle="Rentabilidad"
           icon={<Percent className="h-4 w-4" />}
-          variant={financialData.profitMargin >= 20 ? "success" : financialData.profitMargin >= 10 ? "info" : "warning"}
-          loading={loadingFinancial}
+          variant={(searchTerm ? margenPromedio : financialData.profitMargin) >= 20 ? "success" : (searchTerm ? margenPromedio : financialData.profitMargin) >= 10 ? "info" : "warning"}
+          loading={loadingFinancial || (!!searchTerm && loadingProyectos)}
         />
       </div>
 

@@ -188,6 +188,7 @@ function FormField<T extends Record<string, any>>({
       return (
         <FloatingSelect
           {...commonProps}
+          containerClassName="w-full min-w-0"
           placeholder={field.placeholder || 'Seleccionar...'}
           value={value || ''}
           onChange={(newValue) => handleChange(newValue as string)}
@@ -369,7 +370,7 @@ export function DynamicForm<T extends Record<string, any>>({
                 {section.fields.map((field) => (
                   <div 
                     key={field.name}
-                    className={field.colSpan ? colSpanClasses[field.colSpan] : undefined}
+                    className={cn('min-w-0', field.colSpan ? colSpanClasses[field.colSpan] : undefined)}
                   >
                     <FormField
                       field={field}
@@ -388,7 +389,7 @@ export function DynamicForm<T extends Record<string, any>>({
               {enhancedFields.map((field) => (
                 <div 
                   key={field.name}
-                  className={field.colSpan ? colSpanClasses[field.colSpan] : undefined}
+                  className={cn('min-w-0', field.colSpan ? colSpanClasses[field.colSpan] : undefined)}
                 >
                   <FormField
                     field={field}

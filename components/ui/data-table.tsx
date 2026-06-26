@@ -494,7 +494,7 @@ function FiltersToolbar({
 
         {/* Select filters */}
         {selectFilters?.map((filter) => (
-          <Box key={filter.key} sx={{ width: { xs: '100%', sm: 'auto' }, minWidth: { sm: 180 } }}>
+          <Box key={filter.key} sx={{ width: { xs: '100%', sm: 200 }, flexShrink: 0 }}>
             <FloatingSelect
               label={filter.label}
               value={filterValues[filter.key] || (filter.multiple ? [] : '')}

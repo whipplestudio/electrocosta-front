@@ -127,7 +127,7 @@ export function FloatingSelect({
         )}
       >
         {/* Selected value / placeholder - only show placeholder when label is up (isActive) */}
-        <div className="flex-1 flex flex-wrap gap-1 min-w-0">
+        <div className="flex-1 flex flex-wrap gap-1 min-w-0 overflow-hidden">
           {multiple ? (
             selectedLabels.map((labelText, idx) => (
               <span
@@ -138,7 +138,7 @@ export function FloatingSelect({
               </span>
             ))
           ) : hasValue ? (
-            <span className="text-[#374151] text-base">{selectedLabels[0]}</span>
+            <span className="text-[#374151] text-base truncate block">{selectedLabels[0]}</span>
           ) : isActive ? (
             <span className="text-[#6b7280]/60 text-base">{placeholder}</span>
           ) : (

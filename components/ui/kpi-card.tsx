@@ -65,6 +65,14 @@ const variantStyles: Record<KpiVariant, { container: string; icon: string; title
   },
 }
 
+function getValueFontSize(value: string | number): string {
+  const len = String(value).length
+  if (len <= 10) return 'text-xl md:text-2xl lg:text-3xl'
+  if (len <= 14) return 'text-lg md:text-xl lg:text-2xl'
+  if (len <= 18) return 'text-base md:text-lg lg:text-xl'
+  return 'text-sm md:text-base lg:text-lg'
+}
+
 export function KpiCard({
   title,
   value,
@@ -98,7 +106,7 @@ export function KpiCard({
         ) : (
           <>
             <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
-              <div className={cn('text-xl md:text-2xl lg:text-3xl font-bold truncate', styles.value)}>
+              <div className={cn(getValueFontSize(value), 'font-bold break-words min-w-0', styles.value)}>
                 {value}
               </div>
               {trend && (

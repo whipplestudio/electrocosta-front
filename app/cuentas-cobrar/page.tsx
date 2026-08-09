@@ -97,6 +97,7 @@ import { accountsReceivableService, paymentsService } from "@/services/accounts-
 import apiClient from "@/lib/api-client"
 import { RouteProtection } from "@/components/route-protection"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
+import { formatCurrency as fmtCurrency, formatNumber as fmtNumber } from "@/lib/format"
 
 // Helper para mapear estados del backend al frontend
 const mapEstado = (status: AccountReceivableStatus): string => {
@@ -693,7 +694,7 @@ function CuentasCobrarPageContent() {
     const newBalance = accountTotal - (currentPaid + difference)
 
     if (newBalance < 0) {
-      toast.error(`El nuevo monto excede el total de la factura. Máximo permitido: $${(accountTotal - (currentPaid - oldAmount)).toLocaleString()}`)
+      toast.error(`El nuevo monto excede el total de la factura. Máximo permitido: ${fmtCurrency(accountTotal - (currentPaid - oldAmount))}`)
       return
     }
 
@@ -709,7 +710,7 @@ function CuentasCobrarPageContent() {
       
       const result = await paymentsService.updatePayment(selectedPaymentForEdit.id, paymentData)
       
-      toast.success(`Pago actualizado. Nuevo balance: $${Number(result.account.balance).toLocaleString()}`)
+      toast.success(`Pago actualizado. Nuevo balance: ${fmtCurrency(result.account.balance)}`)
       setIsEditPaymentDialogOpen(false)
       setSelectedPaymentForEdit(null)
       
@@ -918,13 +919,13 @@ function CuentasCobrarPageContent() {
       key: 'amount',
       header: 'Monto Total',
       align: 'right',
-      render: (row) => `$${Number(row.amount).toLocaleString()}`,
+      render: (row) => fmtCurrency(row.amount),
     },
     {
       key: 'balance',
       header: 'Saldo Pendiente',
       align: 'right',
-      render: (row) => <span className="font-medium">${Number(row.balance).toLocaleString()}</span>,
+      render: (row) => <span className="font-medium">{fmtCurrency(row.balance)}</span>,
     },
     {
       key: 'status',
@@ -1088,7 +1089,7 @@ function CuentasCobrarPageContent() {
       <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KpiCard
           title="Total Facturado"
-          value={`$${totals.totalAmount.toLocaleString()}`}
+          value={fmtCurrency(totals.totalAmount)}
           subtitle="= Cobrado + Por Cobrar"
           icon={<DollarSign className="h-4 w-4" />}
           variant="primary"
@@ -1096,7 +1097,7 @@ function CuentasCobrarPageContent() {
 
         <KpiCard
           title="Total por Cobrar"
-          value={`$${totals.totalBalance.toLocaleString()}`}
+          value={fmtCurrency(totals.totalBalance)}
           subtitle={`${totals.totalCount} cuentas pendientes`}
           icon={<TrendingUp className="h-4 w-4" />}
           variant="warning"
@@ -1104,7 +1105,7 @@ function CuentasCobrarPageContent() {
 
         <KpiCard
           title="Total Cobrado"
-          value={`$${totals.totalPaid.toLocaleString()}`}
+          value={fmtCurrency(totals.totalPaid)}
           subtitle="Monto cobrado"
           icon={<CheckCircle className="h-4 w-4" />}
           variant="success"
@@ -1112,7 +1113,7 @@ function CuentasCobrarPageContent() {
 
         <KpiCard
           title="Vencidas"
-          value={`$${accounts.filter(c => c.status === AccountReceivableStatus.OVERDUE).reduce((sum, c) => sum + Number(c.balance || 0), 0).toLocaleString()}`}
+          value={fmtCurrency(accounts.filter(c => c.status === AccountReceivableStatus.OVERDUE).reduce((sum, c) => sum + Number(c.balance || 0), 0))}
           subtitle={`${accounts.filter(c => c.status === AccountReceivableStatus.OVERDUE).length} cuentas vencidas`}
           icon={<AlertCircle className="h-4 w-4" />}
           variant="danger"
@@ -1688,13 +1689,13 @@ function CuentasCobrarPageContent() {
                 <div className="grid grid-cols-2 gap-3">
                   <KpiCard
                     title="Monto Total"
-                    value={`$${Number(cuentaDetalle.amount).toLocaleString()} ${cuentaDetalle.currency}`}
+                    value={`${fmtCurrency(cuentaDetalle.amount)} ${cuentaDetalle.currency}`}
                     variant="primary"
                     icon={<Receipt className="h-4 w-4" />}
                   />
                   <KpiCard
                     title="Monto Pagado"
-                    value={`$${Number(cuentaDetalle.paidAmount).toLocaleString()} ${cuentaDetalle.currency}`}
+                    value={`${fmtCurrency(cuentaDetalle.paidAmount)} ${cuentaDetalle.currency}`}
                     variant="success"
                     icon={<CheckCircle className="h-4 w-4" />}
                   />
@@ -1702,7 +1703,7 @@ function CuentasCobrarPageContent() {
                 <div className="col-span-2">
                   <KpiCard
                     title="Saldo Pendiente"
-                    value={`$${Number(cuentaDetalle.balance).toLocaleString()} ${cuentaDetalle.currency}`}
+                    value={`${fmtCurrency(cuentaDetalle.balance)} ${cuentaDetalle.currency}`}
                     variant={Number(cuentaDetalle.balance) > 0 ? 'warning' : 'success'}
                     icon={<AlertCircle className="h-4 w-4" />}
                   />
@@ -1736,7 +1737,7 @@ function CuentasCobrarPageContent() {
                     {cuentaDetalle.payments.map((payment) => (
                       <div key={payment.id} className="flex justify-between items-center p-2 bg-muted rounded">
                         <div>
-                          <p className="font-medium">${Number(payment.amount).toLocaleString()}</p>
+                          <p className="font-medium">{fmtCurrency(payment.amount)}</p>
                           <p className="text-xs text-muted-foreground">
                             {format(new Date(payment.paymentDate), "dd/MM/yyyy", { locale: es })} - {payment.paymentMethod}
                           </p>
@@ -1819,18 +1820,18 @@ function CuentasCobrarPageContent() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <KpiCard
                 title="Monto Original"
-                value={`$${Number(selectedAccountForHistory?.amount || 0).toLocaleString()}`}
+                value={fmtCurrency(selectedAccountForHistory?.amount || 0)}
                 icon={<FileText className="h-4 w-4" />}
               />
               <KpiCard
                 title="Total Cobrado"
-                value={`$${accountPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0).toLocaleString()}`}
+                value={fmtCurrency(accountPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0))}
                 icon={<DollarSign className="h-4 w-4" />}
                 variant="success"
               />
               <KpiCard
                 title="Saldo Pendiente"
-                value={`$${Number(selectedAccountForHistory?.balance || 0).toLocaleString()}`}
+                value={fmtCurrency(selectedAccountForHistory?.balance || 0)}
                 icon={<Clock className="h-4 w-4" />}
                 variant="warning"
               />
@@ -1907,7 +1908,7 @@ function CuentasCobrarPageContent() {
                     const isFullPayment = Number(row.amount) === Number(selectedAccountForHistory?.amount)
                     return (
                       <div className="flex flex-col items-end gap-1">
-                        <span className="font-bold text-green-600">${Number(row.amount).toLocaleString()}</span>
+                        <span className="font-bold text-green-600">{fmtCurrency(row.amount)}</span>
                         {isFullPayment && (
                           <Badge variant="default" className="bg-green-600 text-xs h-5">Completo</Badge>
                         )}
@@ -1968,7 +1969,7 @@ function CuentasCobrarPageContent() {
                 <div className="mt-2 space-y-1">
                   <p><strong>Factura:</strong> {selectedAccountForHistory.invoiceNumber}</p>
                   <p><strong>Cliente:</strong> {selectedAccountForHistory.client?.name}</p>
-                  <p><strong>Monto Actual:</strong> ${Number(selectedPaymentForEdit.amount).toLocaleString()}</p>
+                  <p><strong>Monto Actual:</strong> {fmtCurrency(selectedPaymentForEdit.amount)}</p>
                 </div>
               )}
             </DialogDescription>
@@ -2046,7 +2047,7 @@ function CuentasCobrarPageContent() {
                 const newBalance = Number(selectedAccountForHistory.balance) + balanceDifference
 
                 if (newBalance < 0) {
-                  toast.error(`El nuevo balance sería negativo (${newBalance.toLocaleString()})`)
+                  toast.error(`El nuevo balance sería negativo (${fmtNumber(newBalance)})`)
                   return
                 }
 
@@ -2065,7 +2066,7 @@ function CuentasCobrarPageContent() {
                     updateData
                   )
                   
-                  toast.success(`Pago actualizado. Nuevo balance: $${Number(result.account.balance).toLocaleString()}`)
+                  toast.success(`Pago actualizado. Nuevo balance: ${fmtCurrency(result.account.balance)}`)
                   setIsEditPaymentDialogOpen(false)
                   setSelectedPaymentForEdit(null)
                   

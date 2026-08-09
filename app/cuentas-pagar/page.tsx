@@ -35,6 +35,7 @@ import { suppliersService, type Supplier } from "@/services/suppliers.service"
 import { categoriesService, type Category } from "@/services/categories.service"
 import { projectsService, type Project } from "@/services/projects.service"
 import type { AccountPayable, AccountPayableStatus, CreateAccountPayableDto, UpdateAccountPayableDto } from "@/types/accounts-payable"
+import { formatCurrency as fmtCurrency } from "@/lib/format"
 
 // Helper para formatear fechas sin conversión de zona horaria
 const formatDateWithoutTimezone = (dateString: string): string => {
@@ -719,14 +720,14 @@ export default function CuentasPagarPage() {
       key: 'amount',
       header: 'Monto Total',
       align: 'right',
-      render: (row) => `$${parseFloat(row.amount).toLocaleString()}`,
+      render: (row) => fmtCurrency(row.amount),
     },
     {
       key: 'paidAmount',
       header: 'Pagado',
       align: 'right',
       render: (row) => (
-        <span className="text-green-600">${parseFloat(row.paidAmount || '0').toLocaleString()}</span>
+        <span className="text-green-600">{fmtCurrency(row.paidAmount || '0')}</span>
       ),
     },
     {
@@ -734,7 +735,7 @@ export default function CuentasPagarPage() {
       header: 'Faltante',
       align: 'right',
       render: (row) => (
-        <span className="font-medium text-red-600">${parseFloat(row.balance || '0').toLocaleString()}</span>
+        <span className="font-medium text-red-600">{fmtCurrency(row.balance || '0')}</span>
       ),
     },
     {
@@ -893,21 +894,21 @@ export default function CuentasPagarPage() {
       <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <TotalKpiCard
           title="Total Pendiente"
-          value={`$${(dashboardData.totalPendiente || 0).toLocaleString()}`}
+          value={fmtCurrency(dashboardData.totalPendiente || 0)}
           subtitle="Monto total por pagar"
           icon={<DollarSign className="h-4 w-4" />}
           loading={loading}
         />
         <ExpenseKpiCard
           title="Total Vencido"
-          value={`$${(dashboardData.totalVencido || 0).toLocaleString()}`}
+          value={fmtCurrency(dashboardData.totalVencido || 0)}
           subtitle={`${dashboardData.cuentasVencidas || 0} cuentas vencidas`}
           icon={<AlertCircle className="h-4 w-4" />}
           loading={loading}
         />
         <SuccessKpiCard
           title="Total Pagado"
-          value={`$${(dashboardData.totalPagado || 0).toLocaleString()}`}
+          value={fmtCurrency(dashboardData.totalPagado || 0)}
           subtitle="Monto total pagado"
           icon={<CheckCircle className="h-4 w-4" />}
           loading={loading}

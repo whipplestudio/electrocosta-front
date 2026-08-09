@@ -42,6 +42,7 @@ import { FloatingDatePicker } from "@/components/ui/floating-date-picker"
 import { DynamicForm, FormSection, useDynamicForm } from "@/components/ui/dynamic-form"
 import { FinancialAmountSection } from "@/components/financial"
 import type { IvaType } from "@/components/financial"
+import { formatCurrency as fmtCurrency } from "@/lib/format"
 
 // Helper para convertir string YYYY-MM-DD a Date local sin problemas de zona horaria
 const stringToLocalDate = (dateString: string | undefined): Date | undefined => {
@@ -762,14 +763,14 @@ export default function ProyectosPage() {
       key: 'valorVenta',
       header: 'Valor Venta',
       render: (proyecto) => (
-        <span className="font-medium text-green-600">${proyecto.valorVenta.toLocaleString()}</span>
+        <span className="font-medium text-green-600">{fmtCurrency(proyecto.valorVenta)}</span>
       ),
     },
     {
       key: 'valorContrato',
       header: 'Presupuesto',
       render: (proyecto) => (
-        <span className="font-medium text-[#374151]">${proyecto.valorContrato.toLocaleString()}</span>
+        <span className="font-medium text-[#374151]">{fmtCurrency(proyecto.valorContrato)}</span>
       ),
     },
     {
@@ -1135,7 +1136,7 @@ export default function ProyectosPage() {
       <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title="Ingresos Totales"
-          value={`$${(searchTerm ? totalIngresos : financialData.totalIncome).toLocaleString()}`}
+          value={fmtCurrency(searchTerm ? totalIngresos : financialData.totalIncome)}
           subtitle={searchTerm ? `${total} resultados` : `${total} proyectos`}
           icon={<DollarSign className="h-4 w-4" />}
           variant="success"
@@ -1143,7 +1144,7 @@ export default function ProyectosPage() {
         />
         <KpiCard
           title="Gastos Totales"
-          value={`$${(searchTerm ? totalGastos : financialData.totalExpenses).toLocaleString()}`}
+          value={fmtCurrency(searchTerm ? totalGastos : financialData.totalExpenses)}
           subtitle={searchTerm ? "Presupuesto estimado" : "Cuentas por pagar"}
           icon={<TrendingDown className="h-4 w-4" />}
           variant="danger"
@@ -1151,7 +1152,7 @@ export default function ProyectosPage() {
         />
         <KpiCard
           title="Ganancia Neta"
-          value={`$${(searchTerm ? totalGanancia : financialData.totalProfit).toLocaleString()}`}
+          value={fmtCurrency(searchTerm ? totalGanancia : financialData.totalProfit)}
           subtitle="Ingresos - Gastos"
           icon={<TrendingUp className="h-4 w-4" />}
           variant={(searchTerm ? totalGanancia : financialData.totalProfit) >= 0 ? "info" : "danger"}
@@ -1290,7 +1291,7 @@ export default function ProyectosPage() {
                     <span>Presupuesto</span>
                   </div>
                   <div className="text-2xl font-bold text-[#166534]">
-                    ${Number(proyectoSeleccionado.presupuestoTotal || 0).toLocaleString()}
+                    {fmtCurrency(proyectoSeleccionado.presupuestoTotal || 0)}
                   </div>
                   <div className="text-xs text-[#15803d]">Total estimado</div>
                 </div>
@@ -1306,17 +1307,17 @@ export default function ProyectosPage() {
                   <div className="text-center p-3 bg-slate-50 rounded-lg">
                     <Package className="h-4 w-4 mx-auto mb-1.5 text-[#6b7280]" />
                     <div className="text-xs text-muted-foreground">Materiales</div>
-                    <div className="font-semibold text-sm">${Number(proyectoSeleccionado.presupuestoMateriales || 0).toLocaleString()}</div>
+                    <div className="font-semibold text-sm">{fmtCurrency(proyectoSeleccionado.presupuestoMateriales || 0)}</div>
                   </div>
                   <div className="text-center p-3 bg-slate-50 rounded-lg">
                     <HardHat className="h-4 w-4 mx-auto mb-1.5 text-[#6b7280]" />
                     <div className="text-xs text-muted-foreground">Mano de Obra</div>
-                    <div className="font-semibold text-sm">${Number(proyectoSeleccionado.presupuestoManoObra || 0).toLocaleString()}</div>
+                    <div className="font-semibold text-sm">{fmtCurrency(proyectoSeleccionado.presupuestoManoObra || 0)}</div>
                   </div>
                   <div className="text-center p-3 bg-slate-50 rounded-lg col-span-2 sm:col-span-1">
                     <FileClock className="h-4 w-4 mx-auto mb-1.5 text-[#6b7280]" />
                     <div className="text-xs text-muted-foreground">Otros</div>
-                    <div className="font-semibold text-sm">${Number(proyectoSeleccionado.presupuestoOtros || 0).toLocaleString()}</div>
+                    <div className="font-semibold text-sm">{fmtCurrency(proyectoSeleccionado.presupuestoOtros || 0)}</div>
                   </div>
                 </div>
               </div>

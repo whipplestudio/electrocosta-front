@@ -30,6 +30,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import { formatCurrency as fmtCurrency, formatNumber as fmtNumber } from "@/lib/format"
 
 const paymentMethodLabels: Record<string, string> = {
   transfer: 'Transferencia',
@@ -292,7 +293,7 @@ function AplicacionPagosContent() {
     const newBalance = accountTotal - (currentPaid + difference)
 
     if (newBalance < 0) {
-      toast.error(`El nuevo monto excede el total de la factura. Máximo permitido: $${(accountTotal - (currentPaid - oldAmount)).toLocaleString()}`)
+      toast.error(`El nuevo monto excede el total de la factura. Máximo permitido: ${fmtCurrency(accountTotal - (currentPaid - oldAmount))}`)
       return
     }
 
@@ -306,7 +307,7 @@ function AplicacionPagosContent() {
       
       const result = await paymentsService.updatePayment(selectedPayment.id, paymentData)
       
-      toast.success(`Pago actualizado. Nuevo balance: $${Number(result.account.balance).toLocaleString()}`)
+      toast.success(`Pago actualizado. Nuevo balance: ${fmtCurrency(result.account.balance)}`)
       setShowEditDialog(false)
       setSelectedPayment(null)
       
@@ -374,7 +375,7 @@ function AplicacionPagosContent() {
         const isFullPayment = Number(row.amount) === Number(selectedAccount?.amount)
         return (
           <div className="flex flex-col items-end gap-1">
-            <span className="font-bold text-green-600">${Number(row.amount).toLocaleString()}</span>
+            <span className="font-bold text-green-600">{fmtCurrency(row.amount)}</span>
             {isFullPayment && (
               <Badge variant="default" className="bg-green-600 text-xs h-5">Completo</Badge>
             )}
@@ -431,7 +432,7 @@ function AplicacionPagosContent() {
       <div className="grid gap-4 md:grid-cols-4">
         <KpiCard
           title="Pagos Pendientes"
-          value={`$${totalPending.toLocaleString()}`}
+          value={fmtCurrency(totalPending)}
           subtitle={`${accounts.length} facturas pendientes`}
           icon={<Clock className="h-4 w-4" />}
           variant="warning"
@@ -439,7 +440,7 @@ function AplicacionPagosContent() {
 
         <KpiCard
           title="Vencidos"
-          value={`$${totalOverdue.toLocaleString()}`}
+          value={fmtCurrency(totalOverdue)}
           subtitle={`${overdueAccounts.length} cuentas vencidas`}
           icon={<AlertCircle className="h-4 w-4" />}
           variant="danger"
@@ -455,7 +456,7 @@ function AplicacionPagosContent() {
 
         <KpiCard
           title="Promedio por Factura"
-          value={`$${accounts.length > 0 ? Math.round(totalPending / accounts.length).toLocaleString() : '0'}`}
+          value={accounts.length > 0 ? fmtCurrency(Math.round(totalPending / accounts.length)) : '$0'}
           subtitle="Monto promedio"
           icon={<TrendingUp className="h-4 w-4" />}
           variant="info"
@@ -468,8 +469,8 @@ function AplicacionPagosContent() {
           columns={[
             { key: 'invoiceNumber', header: 'Factura', align: 'left' },
             { key: 'client', header: 'Cliente', render: (row) => row.client?.name || 'N/A' },
-            { key: 'amount', header: 'Monto Total', align: 'right', render: (row) => `$${Number(row.amount).toLocaleString()}` },
-            { key: 'balance', header: 'Saldo Pendiente', align: 'right', render: (row) => `$${Number(row.balance).toLocaleString()}` },
+            { key: 'amount', header: 'Monto Total', align: 'right', render: (row) => fmtCurrency(row.amount) },
+            { key: 'balance', header: 'Saldo Pendiente', align: 'right', render: (row) => fmtCurrency(row.balance) },
             { 
               key: 'dueDate', 
               header: 'Vencimiento', 
@@ -535,7 +536,7 @@ function AplicacionPagosContent() {
                 <div className="mt-2 space-y-1">
                   <p><strong>Factura:</strong> {selectedAccount.invoiceNumber}</p>
                   <p><strong>Cliente:</strong> {selectedAccount.client?.name}</p>
-                  <p><strong>Saldo Pendiente:</strong> ${Number(selectedAccount.balance).toLocaleString()}</p>
+                  <p><strong>Saldo Pendiente:</strong> {fmtCurrency(selectedAccount.balance)}</p>
                 </div>
               )}
             </DialogDescription>
@@ -666,18 +667,18 @@ function AplicacionPagosContent() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <KpiCard
                 title="Monto Original"
-                value={`$${Number(selectedAccount?.amount || 0).toLocaleString()}`}
+                value={fmtCurrency(selectedAccount?.amount || 0)}
                 icon={<FileText className="h-4 w-4" />}
               />
               <KpiCard
                 title="Total Pagado"
-                value={`$${payments.reduce((sum, p) => sum + Number(p.amount || 0), 0).toLocaleString()}`}
+                value={fmtCurrency(payments.reduce((sum, p) => sum + Number(p.amount || 0), 0))}
                 icon={<DollarSign className="h-4 w-4" />}
                 variant="success"
               />
               <KpiCard
                 title="Saldo Pendiente"
-                value={`$${Number(selectedAccount?.balance || 0).toLocaleString()}`}
+                value={fmtCurrency(selectedAccount?.balance || 0)}
                 icon={<Clock className="h-4 w-4" />}
                 variant="warning"
               />
@@ -706,7 +707,7 @@ function AplicacionPagosContent() {
             {payments.length > 0 && Number(selectedAccount?.balance || 0) > 0 && (
               <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <div>
-                  <p className="text-sm font-medium">Saldo pendiente: ${Number(selectedAccount?.balance || 0).toLocaleString()}</p>
+                  <p className="text-sm font-medium">Saldo pendiente: {fmtCurrency(selectedAccount?.balance || 0)}</p>
                   <p className="text-xs text-muted-foreground">¿Deseas aplicar un nuevo pago a esta cuenta?</p>
                 </div>
                 <ActionButton
@@ -753,7 +754,7 @@ function AplicacionPagosContent() {
                 <div className="mt-2 space-y-1">
                   <p><strong>Factura:</strong> {selectedAccount.invoiceNumber}</p>
                   <p><strong>Cliente:</strong> {selectedAccount.client?.name}</p>
-                  <p><strong>Monto Actual:</strong> ${Number(selectedPayment.amount).toLocaleString()}</p>
+                  <p><strong>Monto Actual:</strong> {fmtCurrency(selectedPayment.amount)}</p>
                 </div>
               )}
             </DialogDescription>
@@ -831,7 +832,7 @@ function AplicacionPagosContent() {
                 const newBalance = Number(selectedAccount.balance) + balanceDifference
 
                 if (newBalance < 0) {
-                  toast.error(`El nuevo balance sería negativo (${newBalance.toLocaleString()})`)
+                  toast.error(`El nuevo balance sería negativo (${fmtNumber(newBalance)})`)
                   return
                 }
 
@@ -851,7 +852,7 @@ function AplicacionPagosContent() {
                   )
                   
                   if (result) {
-                    toast.success(`Pago actualizado. Nuevo balance: $${Number(result.account.balance).toLocaleString()}`)
+                    toast.success(`Pago actualizado. Nuevo balance: ${fmtCurrency(result.account.balance)}`)
                     setShowEditDialog(false)
                     setSelectedPayment(null)
                     await loadData()

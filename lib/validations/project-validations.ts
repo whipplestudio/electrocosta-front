@@ -1,3 +1,5 @@
+import { formatCurrency } from "@/lib/format"
+
 export interface ProjectFormData {
   name: string
   code: string
@@ -31,7 +33,7 @@ export function validateProjectFinancials(data: ProjectFormData): ValidationResu
 
   if (sumPartialBudgets > 0 && sumPartialBudgets > data.initialBudget) {
     errors.push(
-      `La suma de presupuestos parciales ($${sumPartialBudgets.toLocaleString()}) excede el presupuesto inicial ($${data.initialBudget.toLocaleString()})`
+      `La suma de presupuestos parciales (${formatCurrency(sumPartialBudgets)}) excede el presupuesto inicial (${formatCurrency(data.initialBudget)})`
     )
   }
 
@@ -39,14 +41,14 @@ export function validateProjectFinancials(data: ProjectFormData): ValidationResu
   if (sumPartialBudgets > 0 && sumPartialBudgets < data.initialBudget) {
     const difference = data.initialBudget - sumPartialBudgets
     warnings.push(
-      `Los presupuestos parciales suman $${sumPartialBudgets.toLocaleString()}, faltan $${difference.toLocaleString()} para completar el presupuesto inicial`
+      `Los presupuestos parciales suman ${formatCurrency(sumPartialBudgets)}, faltan ${formatCurrency(difference)} para completar el presupuesto inicial`
     )
   }
 
   // Validar monto de contrato vs presupuesto
   if (data.contractAmount && data.contractAmount < data.initialBudget) {
     warnings.push(
-      `El monto del contrato ($${data.contractAmount.toLocaleString()}) es menor al presupuesto inicial ($${data.initialBudget.toLocaleString()}). Esto podría resultar en pérdidas.`
+      `El monto del contrato (${formatCurrency(data.contractAmount)}) es menor al presupuesto inicial (${formatCurrency(data.initialBudget)}). Esto podría resultar en pérdidas.`
     )
   }
 

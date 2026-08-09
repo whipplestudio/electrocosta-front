@@ -153,7 +153,7 @@ export default function PagosPage() {
 
     const maxPayment = Number(selectedAccount.balance || 0)
     if (formData.amount > maxPayment) {
-      toast.error(`El monto no puede exceder el saldo pendiente: $${maxPayment.toLocaleString()}`)
+      toast.error(`El monto no puede exceder el saldo pendiente: $${formatCurrency(maxPayment)}`)
       return
     }
 
@@ -290,14 +290,14 @@ export default function PagosPage() {
       key: 'amount',
       header: 'Monto Total',
       align: 'right',
-      render: (row) => `$${parseFloat(row.amount).toLocaleString()}`,
+      render: (row) => `$${formatCurrency(row.amount)}`,
     },
     {
       key: 'paidAmount',
       header: 'Pagado',
       align: 'right',
       render: (row) => (
-        <span className="text-green-600">${parseFloat(row.paidAmount || '0').toLocaleString()}</span>
+        <span className="text-green-600">${formatCurrency(row.paidAmount || '0')}</span>
       ),
     },
     {
@@ -305,7 +305,7 @@ export default function PagosPage() {
       header: 'Saldo Pendiente',
       align: 'right',
       render: (row) => (
-        <span className="font-medium text-red-600">${parseFloat(row.balance || '0').toLocaleString()}</span>
+        <span className="font-medium text-red-600">${formatCurrency(row.balance || '0')}</span>
       ),
     },
     {
@@ -347,7 +347,7 @@ export default function PagosPage() {
       key: 'amount',
       header: 'Monto',
       align: 'right',
-      render: (row: Payment) => `$${parseFloat(row.amount).toLocaleString()}`,
+      render: (row: Payment) => `$${formatCurrency(row.amount)}`,
     },
     {
       key: 'paymentMethod',
@@ -404,13 +404,13 @@ export default function PagosPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <KpiCard
           title="Total Pendiente"
-          value={`$${dashboardData.totalPendiente.toLocaleString()}`}
+          value={`$${formatCurrency(dashboardData.totalPendiente)}`}
           icon={<Wallet className="h-4 w-4" />}
           loading={loading}
         />
         <KpiCard
           title="Total Pagado"
-          value={`$${dashboardData.totalPagado.toLocaleString()}`}
+          value={`$${formatCurrency(dashboardData.totalPagado)}`}
           icon={<CheckCircle className="h-4 w-4 text-green-600" />}
           loading={loading}
         />
@@ -471,15 +471,15 @@ export default function PagosPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Monto Total:</span>
-                  <span className="font-medium">${Number(selectedAccount.amount).toLocaleString()}</span>
+                  <span className="font-medium">${formatCurrency(selectedAccount.amount)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Pagado:</span>
-                  <span className="font-medium text-green-600">${Number(selectedAccount.paidAmount || 0).toLocaleString()}</span>
+                  <span className="font-medium text-green-600">${formatCurrency(selectedAccount.paidAmount || 0)}</span>
                 </div>
                 <div className="flex justify-between border-t pt-2">
                   <span className="text-sm font-medium text-gray-700">Saldo Pendiente:</span>
-                  <span className="font-bold text-red-600">${Number(selectedAccount.balance || 0).toLocaleString()}</span>
+                  <span className="font-bold text-red-600">${formatCurrency(selectedAccount.balance || 0)}</span>
                 </div>
               </div>
 
@@ -647,18 +647,18 @@ export default function PagosPage() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <KpiCard
                   title="Monto Original"
-                  value={`$${Number(selectedAccount.amount || 0).toLocaleString()}`}
+                  value={`$${formatCurrency(selectedAccount.amount || 0)}`}
                   icon={<Receipt className="h-4 w-4" />}
                 />
                 <KpiCard
                   title="Total Pagado"
-                  value={`$${payments.reduce((sum, p) => sum + Number(p.amount || 0), 0).toLocaleString()}`}
+                  value={`$${formatCurrency(payments.reduce((sum, p) => sum + Number(p.amount || 0), 0))}`}
                   icon={<DollarSign className="h-4 w-4" />}
                   variant="success"
                 />
                 <KpiCard
                   title="Saldo Pendiente"
-                  value={`$${Number(selectedAccount.balance || 0).toLocaleString()}`}
+                  value={`$${formatCurrency(selectedAccount.balance || 0)}`}
                   icon={<Clock className="h-4 w-4" />}
                   variant="warning"
                 />
@@ -728,7 +728,7 @@ export default function PagosPage() {
                       const isFullPayment = Number(row.amount) === Number(selectedAccount?.amount)
                       return (
                         <div className="flex flex-col items-end gap-1">
-                          <span className="font-bold text-emerald-600">${Number(row.amount).toLocaleString()}</span>
+                          <span className="font-bold text-emerald-600">${formatCurrency(row.amount)}</span>
                           {isFullPayment && (
                             <Badge variant="default" className="bg-emerald-600 text-xs h-5">Completo</Badge>
                           )}

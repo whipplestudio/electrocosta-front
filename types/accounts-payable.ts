@@ -2,7 +2,7 @@
 // ENUMS
 // ============================================
 
-export type AccountPayableStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
+export type AccountPayableStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'cancelled';
 export type PaymentMethod = 'cash' | 'check' | 'transfer' | 'card' | 'other';
 
 // ============================================
@@ -178,6 +178,8 @@ export interface AccountPayableFiltersDto {
   dateTo?: string;
   minAmount?: number;
   maxAmount?: number;
+  minBalance?: number;
+  maxBalance?: number;
   search?: string;
   page?: number;
   limit?: number;

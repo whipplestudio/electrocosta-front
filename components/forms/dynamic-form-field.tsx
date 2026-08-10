@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 import { cn } from '@/lib/utils';
+import { parseLocalDate, formatLocalDateISO } from '@/lib/date-utils';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -230,12 +231,12 @@ export function DynamicFormField({
         return (
           <FloatingDatePicker
             label={field.label + (field.required ? ' *' : '')}
-            value={value ? new Date(value) : undefined}
+            value={value ? parseLocalDate(value) : undefined}
             onChange={(date) => {
               if (date instanceof Date) {
-                onChange(date.toISOString());
+                onChange(formatLocalDateISO(date));
               } else if (date && 'from' in date && date.from) {
-                onChange(date.from.toISOString());
+                onChange(formatLocalDateISO(date.from));
               } else {
                 onChange(undefined);
               }

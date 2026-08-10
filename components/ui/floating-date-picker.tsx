@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { createPortal } from 'react-dom'
 import { CalendarIcon, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, getYear, setYear, setMonth, isToday } from 'date-fns'
@@ -53,6 +54,8 @@ export function FloatingDatePicker({
     return range?.from || new Date()
   })
   const containerRef = React.useRef<HTMLDivElement>(null)
+  const dropdownRef = React.useRef<HTMLDivElement>(null)
+  const [dropdownPosition, setDropdownPosition] = React.useState<{ top: number; left: number } | null>(null)
 
   // Determine if has value
   const hasValue = React.useMemo(() => {
@@ -65,16 +68,47 @@ export function FloatingDatePicker({
 
   const isActive = isOpen || isFocused || hasValue
 
-  // Close on click outside
+  // Close on click outside (the dropdown is portaled, so it must be checked separately)
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node
+      if (
+        containerRef.current && !containerRef.current.contains(target) &&
+        (!dropdownRef.current || !dropdownRef.current.contains(target))
+      ) {
         setIsOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // Position the portaled dropdown against the trigger, flipping above it
+  // when there isn't enough room below (e.g. inside a scrollable dialog).
+  React.useLayoutEffect(() => {
+    if (!isOpen) return
+
+    const updatePosition = () => {
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const dropdownHeight = dropdownRef.current?.offsetHeight ?? 380
+      const spaceBelow = window.innerHeight - rect.bottom
+      const openUpward = spaceBelow < dropdownHeight && rect.top > dropdownHeight
+
+      setDropdownPosition({
+        top: openUpward ? rect.top - dropdownHeight - 4 : rect.bottom + 4,
+        left: rect.left,
+      })
+    }
+
+    updatePosition()
+    window.addEventListener('scroll', updatePosition, true)
+    window.addEventListener('resize', updatePosition)
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true)
+      window.removeEventListener('resize', updatePosition)
+    }
+  }, [isOpen])
 
   // Update view date when value changes
   React.useEffect(() => {
@@ -251,9 +285,26 @@ export function FloatingDatePicker({
         </label>
       </div>
 
-      {/* Calendar Dropdown */}
-      {isOpen && (
-        <div className="absolute z-50 mt-1 bg-white rounded-lg border border-[#e5e7eb] shadow-xl p-4 min-w-[320px]">
+      {/* Calendar Dropdown — portaled to <body> so it escapes any
+          overflow-hidden/auto ancestor (e.g. a scrollable dialog) that
+          would otherwise clip it. Positioned with `fixed` against the
+          trigger's real screen position, computed above.
+          Radix Dialog sets `body { pointer-events: none }` while open and
+          only re-enables it on the DialogContent's own subtree, so this
+          portal (rendered outside that subtree) needs pointer-events
+          forced back on or clicks would fall through to the dialog. */}
+      {isOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={dropdownRef}
+          style={{
+            position: 'fixed',
+            top: dropdownPosition?.top ?? -9999,
+            left: dropdownPosition?.left ?? -9999,
+            visibility: dropdownPosition ? 'visible' : 'hidden',
+            pointerEvents: 'auto',
+          }}
+          className="z-[100] bg-white rounded-lg border border-[#e5e7eb] shadow-xl p-4 min-w-[320px]"
+        >
           {/* Header with Month/Year selectors */}
           <div className="flex items-center justify-between mb-4">
             <button
@@ -376,7 +427,8 @@ export function FloatingDatePicker({
               </button>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Helper text or error */}

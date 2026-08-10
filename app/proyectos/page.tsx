@@ -24,9 +24,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Calendar } from "@/components/ui/calendar"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
+import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 import { projectsUploadService, type CrearProyectoData } from "@/services/projects-upload.service"
 import { projectsService } from "@/services/projects.service"
 import { handleApiError } from "@/lib/api-client"
@@ -43,13 +43,6 @@ import { DynamicForm, FormSection, useDynamicForm } from "@/components/ui/dynami
 import { FinancialAmountSection } from "@/components/financial"
 import type { IvaType } from "@/components/financial"
 import { formatCurrency as fmtCurrency } from "@/lib/format"
-
-// Helper para convertir string YYYY-MM-DD a Date local sin problemas de zona horaria
-const stringToLocalDate = (dateString: string | undefined): Date | undefined => {
-  if (!dateString) return undefined
-  const [year, month, day] = dateString.split('-').map(Number)
-  return new Date(year, month - 1, day)
-}
 
 // Helper para formatear fechas ISO sin conversión de zona horaria
 const formatDateWithoutTimezone = (dateString: string | undefined): string => {
@@ -974,8 +967,8 @@ export default function ProyectosPage() {
                     render: ({ value, onChange }) => (
                       <FloatingDatePicker
                         label="Fecha Inicio *"
-                        value={stringToLocalDate(value as string)}
-                        onChange={(date) => onChange(date instanceof Date ? format(date, 'yyyy-MM-dd') : '')}
+                        value={value ? parseLocalDate(value as string) : undefined}
+                        onChange={(date) => onChange(date instanceof Date ? formatLocalDateISO(date) : '')}
                         placeholder="Seleccionar fecha"
                       />
                     ),
@@ -988,8 +981,8 @@ export default function ProyectosPage() {
                     render: ({ value, onChange }) => (
                       <FloatingDatePicker
                         label="Fecha Fin Estimada"
-                        value={stringToLocalDate(value as string)}
-                        onChange={(date) => onChange(date instanceof Date ? format(date, 'yyyy-MM-dd') : '')}
+                        value={value ? parseLocalDate(value as string) : undefined}
+                        onChange={(date) => onChange(date instanceof Date ? formatLocalDateISO(date) : '')}
                         placeholder="Seleccionar fecha (opcional)"
                       />
                     ),

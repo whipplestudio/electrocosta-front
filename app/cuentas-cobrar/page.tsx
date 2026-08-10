@@ -57,13 +57,7 @@ import {
 } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
-
-// Helper para parsear fecha sin timezone (evita que se muestre un día atrasado)
-const parseDateWithoutTimezone = (dateStr: string | Date): Date => {
-  if (dateStr instanceof Date) return dateStr
-  const [year, month, day] = dateStr.split('T')[0].split('-').map(Number)
-  return new Date(year, month - 1, day)
-}
+import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 
 // Helper para formatear fechas sin conversión de zona horaria
 const formatDateWithoutTimezone = (dateString: string): string => {
@@ -210,20 +204,7 @@ function CuentasCobrarPageContent() {
   // Estados para editar pago
   const [isEditPaymentDialogOpen, setIsEditPaymentDialogOpen] = useState(false)
   const [selectedPaymentForEdit, setSelectedPaymentForEdit] = useState<Payment | null>(null)
-  const [editPaymentFormData, setEditPaymentFormData] = useState<{
-    amount: string
-    paymentMethod: PaymentMethod
-    paymentDate: string
-    reference: string
-    notes: string
-  }>({
-    amount: '',
-    paymentMethod: PaymentMethod.TRANSFER,
-    paymentDate: '',
-    reference: '',
-    notes: '',
-  })
-  
+
   // Estados del formulario
   const [formData, setFormData] = useState({
     clientId: '',
@@ -551,8 +532,8 @@ function CuentasCobrarPageContent() {
       subtotal: cuenta.subtotal?.toString() || '',
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || '',
-      issueDate: parseDateWithoutTimezone(cuenta.issueDate),
-      dueDate: cuenta.dueDate ? parseDateWithoutTimezone(cuenta.dueDate) : undefined,
+      issueDate: parseLocalDate(cuenta.issueDate),
+      dueDate: cuenta.dueDate ? parseLocalDate(cuenta.dueDate) : undefined,
       description: cuenta.description || '',
     })
     setIsDialogOpen(true)
@@ -659,77 +640,7 @@ function CuentasCobrarPageContent() {
   // Abrir dialog de editar pago
   const handleOpenEditPayment = (payment: Payment) => {
     setSelectedPaymentForEdit(payment)
-    // Map string payment method to PaymentMethod enum
-    const methodMap: Record<string, PaymentMethod> = {
-      'transfer': PaymentMethod.TRANSFER,
-      'cash': PaymentMethod.CASH,
-      'check': PaymentMethod.CHECK,
-      'card': PaymentMethod.CARD,
-      'other': PaymentMethod.OTHER,
-    }
-    setEditPaymentFormData({
-      amount: payment.amount.toString(),
-      paymentMethod: methodMap[payment.paymentMethod] || PaymentMethod.TRANSFER,
-      paymentDate: new Date(payment.paymentDate).toISOString().split('T')[0],
-      reference: payment.reference || '',
-      notes: payment.notes || '',
-    })
     setIsEditPaymentDialogOpen(true)
-  }
-
-  // Guardar edición de pago
-  const handleUpdatePayment = async () => {
-    if (!selectedPaymentForEdit || !selectedAccountForHistory) return
-
-    const amountValue = parseFloat(editPaymentFormData.amount)
-    if (!editPaymentFormData.amount || amountValue <= 0) {
-      toast.error('El monto debe ser mayor a cero')
-      return
-    }
-
-    const oldAmount = Number(selectedPaymentForEdit.amount)
-    const accountTotal = Number(selectedAccountForHistory.amount)
-    const currentPaid = Number(selectedAccountForHistory.paidAmount)
-    const difference = amountValue - oldAmount
-    const newBalance = accountTotal - (currentPaid + difference)
-
-    if (newBalance < 0) {
-      toast.error(`El nuevo monto excede el total de la factura. Máximo permitido: ${fmtCurrency(accountTotal - (currentPaid - oldAmount))}`)
-      return
-    }
-
-    try {
-      setLoading(true)
-      const paymentData = {
-        amount: amountValue,
-        paymentMethod: editPaymentFormData.paymentMethod,
-        paymentDate: new Date(editPaymentFormData.paymentDate).toISOString(),
-        reference: editPaymentFormData.reference,
-        notes: editPaymentFormData.notes,
-      }
-      
-      const result = await paymentsService.updatePayment(selectedPaymentForEdit.id, paymentData)
-      
-      toast.success(`Pago actualizado. Nuevo balance: ${fmtCurrency(result.account.balance)}`)
-      setIsEditPaymentDialogOpen(false)
-      setSelectedPaymentForEdit(null)
-      
-      // Recargar historial
-      const response = await apiClient.get(`/accounts-receivable/${selectedAccountForHistory.id}/payments`)
-      setAccountPayments(response.data || [])
-      
-      // Actualizar la cuenta seleccionada con los nuevos datos
-      setSelectedAccountForHistory(result.account)
-      
-      // Refrescar lista de cuentas
-      fetchAccounts()
-      fetchDashboard()
-    } catch (error) {
-      console.error('Error al actualizar pago:', error)
-      toast.error('Error al actualizar el pago')
-    } finally {
-      setLoading(false)
-    }
   }
 
   // Funciones para carga masiva
@@ -906,13 +817,13 @@ function CuentasCobrarPageContent() {
     {
       key: 'issueDate',
       header: 'Fecha Emisión',
-      render: (row) => format(parseDateWithoutTimezone(row.issueDate), "dd/MM/yyyy"),
+      render: (row) => format(parseLocalDate(row.issueDate), "dd/MM/yyyy"),
     },
     {
       key: 'dueDate',
       header: 'Fecha Vencimiento',
       render: (row) => row.dueDate
-        ? format(parseDateWithoutTimezone(row.dueDate), "dd/MM/yyyy")
+        ? format(parseLocalDate(row.dueDate), "dd/MM/yyyy")
         : <span className="text-muted-foreground">Sin vencimiento</span>,
     },
     {
@@ -2027,9 +1938,9 @@ function CuentasCobrarPageContent() {
                   amount: selectedPaymentForEdit?.amount ? String(selectedPaymentForEdit.amount) : '',
                   paymentMethod: selectedPaymentForEdit?.paymentMethod || 'transfer',
                   reference: selectedPaymentForEdit?.reference || '',
-                  paymentDate: selectedPaymentForEdit?.paymentDate 
-                    ? new Date(selectedPaymentForEdit.paymentDate).toISOString().split('T')[0] 
-                    : new Date().toISOString().split('T')[0],
+                  paymentDate: selectedPaymentForEdit?.paymentDate
+                    ? formatLocalDateISO(parseLocalDate(selectedPaymentForEdit.paymentDate))
+                    : formatLocalDateISO(new Date()),
                   notes: selectedPaymentForEdit?.notes || '',
                 },
               }}
@@ -2056,7 +1967,7 @@ function CuentasCobrarPageContent() {
                   const updateData = {
                     amount: amountValue,
                     paymentMethod: data.paymentMethod as PaymentMethod,
-                    paymentDate: new Date(data.paymentDate).toISOString(),
+                    paymentDate: formatLocalDateISO(parseLocalDate(data.paymentDate)),
                     reference: data.reference || '',
                     notes: data.notes || '',
                   }

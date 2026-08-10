@@ -22,6 +22,7 @@ import {
 import { CheckCircle, Clock, DollarSign, History, CreditCard, Building2, FileText, Wallet, Receipt, Pencil, AlertCircle, Calendar } from "lucide-react"
 import { accountsPayableService } from "@/services/accounts-payable.service"
 import type { AccountPayable, RegisterPaymentDto, UpdatePaymentDto, Payment, AccountPayableStatus, PaymentMethod } from "@/types/accounts-payable"
+import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 
 const paymentMethodLabels: Record<string, string> = {
   transfer: 'Transferencia',
@@ -80,7 +81,7 @@ export default function PagosPage() {
 
   const [formData, setFormData] = useState<RegisterPaymentDto>({
     amount: 0,
-    paymentDate: new Date().toISOString().split('T')[0],
+    paymentDate: formatLocalDateISO(new Date()),
     paymentMethod: 'transfer',
     reference: '',
     notes: '',
@@ -104,8 +105,11 @@ export default function PagosPage() {
     try {
       setLoading(true)
       const params: any = { page, limit, sortBy: 'createdAt', order: 'desc' }
-      // Siempre filtrar por cuentas con deuda (pending, partial, overdue)
-      params.status = ['pending', 'partial', 'overdue']
+      // Siempre filtrar por cuentas con saldo pendiente real (balance > 0), sin
+      // depender únicamente del status guardado en la cuenta: un status
+      // desincronizado (ej. 'paid' con balance > 0 tras corregir un monto)
+      // no debe ocultar la cuenta de esta vista.
+      params.minBalance = 0.01
       if (search) {
         params.search = search
       }
@@ -221,7 +225,7 @@ export default function PagosPage() {
     setSelectedAccount(account)
     setFormData({
       amount: Number(account.balance || 0),
-      paymentDate: new Date().toISOString().split('T')[0],
+      paymentDate: formatLocalDateISO(new Date()),
       paymentMethod: 'transfer',
       reference: '',
       notes: '',
@@ -244,7 +248,7 @@ export default function PagosPage() {
   const resetForm = () => {
     setFormData({
       amount: 0,
-      paymentDate: new Date().toISOString().split('T')[0],
+      paymentDate: formatLocalDateISO(new Date()),
       paymentMethod: 'transfer',
       reference: '',
       notes: '',
@@ -261,12 +265,14 @@ export default function PagosPage() {
   const getEstadoBadge = (status: AccountPayableStatus) => {
     const styles: Record<string, string> = {
       pending: "bg-yellow-100 text-yellow-800",
+      partial: "bg-blue-100 text-blue-800",
       paid: "bg-green-100 text-green-800",
       overdue: "bg-red-100 text-red-800",
       cancelled: "bg-gray-100 text-gray-800",
     }
     const labels: Record<string, string> = {
       pending: "Pendiente",
+      partial: "Parcial",
       paid: "Pagado",
       overdue: "Vencido",
       cancelled: "Cancelado",
@@ -509,10 +515,10 @@ export default function PagosPage() {
 
               <FloatingDatePicker
                 label="Fecha de Pago *"
-                value={formData.paymentDate ? new Date(formData.paymentDate) : undefined}
+                value={formData.paymentDate ? parseLocalDate(formData.paymentDate) : undefined}
                 onChange={(date) => {
                   const selectedDate = date instanceof Date ? date : new Date()
-                  setFormData({ ...formData, paymentDate: selectedDate.toISOString().split('T')[0] })
+                  setFormData({ ...formData, paymentDate: formatLocalDateISO(selectedDate) })
                 }}
                 mode="single"
                 placeholder="Selecciona una fecha"
@@ -590,10 +596,10 @@ export default function PagosPage() {
 
             <FloatingDatePicker
               label="Fecha de Pago *"
-              value={editFormData.paymentDate ? new Date(editFormData.paymentDate) : undefined}
+              value={editFormData.paymentDate ? parseLocalDate(editFormData.paymentDate) : undefined}
               onChange={(date) => {
                 const selectedDate = date instanceof Date ? date : new Date()
-                setEditFormData({ ...editFormData, paymentDate: selectedDate.toISOString().split('T')[0] })
+                setEditFormData({ ...editFormData, paymentDate: formatLocalDateISO(selectedDate) })
               }}
               mode="single"
             />

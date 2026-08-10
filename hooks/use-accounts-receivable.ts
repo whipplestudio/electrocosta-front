@@ -113,7 +113,7 @@ export const useAccountsReceivable = () => {
         toast.success('Cuenta actualizada exitosamente');
         return updatedAccount;
       } catch (err: any) {
-        const errorMessage = err instanceof Error ? err.message : 'Error al actualizar cuenta';
+        const errorMessage = err?.response?.data?.message || err?.message || 'Error al actualizar cuenta';
         setError(errorMessage);
         toast.error(errorMessage);
         return null;

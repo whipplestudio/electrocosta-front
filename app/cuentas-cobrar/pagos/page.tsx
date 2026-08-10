@@ -120,9 +120,12 @@ function AplicacionPagosContent() {
       filters.search = searchQuery
     }
     
-    // Siempre traer cuentas con deuda (pending, partial, overdue)
-    filters.status = ['pending', 'partial', 'overdue']
-    
+    // Siempre traer cuentas con saldo pendiente real (balance > 0), sin
+    // depender únicamente del status guardado en la cuenta: un status
+    // desincronizado (ej. 'paid' con balance > 0 tras corregir un monto)
+    // no debe ocultar la cuenta de esta vista.
+    filters.minBalance = 0.01
+
     return filters
   }, [searchQuery])
 

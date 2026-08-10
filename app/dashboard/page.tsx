@@ -5,17 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TrendingUp, TrendingDown, DollarSign, CreditCard, Wallet, AlertCircle, X, FolderOpen, ArrowRight } from "lucide-react"
-import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import apiClient from "@/lib/api-client"
 import { toast } from "sonner"
 import { FloatingDatePicker, DateSelection, KpiCard, FloatingSelect, SelectOption } from "@/components/ui"
-
-// Helper para parsear fecha local sin conversión de zona horaria
-const parseLocalDate = (dateString: string): Date => {
-  const [year, month, day] = dateString.split('-').map(Number)
-  return new Date(year, month - 1, day)
-}
+import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 
 interface Proyecto {
   id: string
@@ -241,13 +235,13 @@ function DashboardContent() {
     const params = new URLSearchParams(searchParams.toString())
 
     if (range?.from) {
-      params.set("from", format(range.from, "yyyy-MM-dd"))
+      params.set("from", formatLocalDateISO(range.from))
     } else {
       params.delete("from")
     }
 
     if (range?.to) {
-      params.set("to", format(range.to, "yyyy-MM-dd"))
+      params.set("to", formatLocalDateISO(range.to))
     } else {
       params.delete("to")
     }

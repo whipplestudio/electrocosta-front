@@ -36,6 +36,7 @@ import { categoriesService, type Category } from "@/services/categories.service"
 import { projectsService, type Project } from "@/services/projects.service"
 import type { AccountPayable, AccountPayableStatus, CreateAccountPayableDto, UpdateAccountPayableDto } from "@/types/accounts-payable"
 import { formatCurrency as fmtCurrency } from "@/lib/format"
+import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 
 // Helper para formatear fechas sin conversión de zona horaria
 const formatDateWithoutTimezone = (dateString: string): string => {
@@ -388,8 +389,8 @@ export default function CuentasPagarPage() {
       amount: cuenta.amount.toString(),
       categoryId: cuenta.categoryId || "",
       macroClasificacion: cuenta.macroClasificacion || "",
-      issueDate: new Date(cuenta.issueDate.split('T')[0] + 'T12:00:00'),
-      dueDate: cuenta.dueDate ? new Date(cuenta.dueDate.split('T')[0] + 'T12:00:00') : undefined,
+      issueDate: parseLocalDate(cuenta.issueDate),
+      dueDate: cuenta.dueDate ? parseLocalDate(cuenta.dueDate) : undefined,
       description: cuenta.description || "",
     })
     setIsDialogOpen(true)
@@ -781,6 +782,7 @@ export default function CuentasPagarPage() {
       options: [
         { value: '', label: 'Todos' },
         { value: 'pending', label: 'Pendiente' },
+        { value: 'partial', label: 'Parcial' },
         { value: 'paid', label: 'Pagado' },
         { value: 'overdue', label: 'Vencido' },
         { value: 'cancelled', label: 'Cancelado' },
@@ -791,12 +793,14 @@ export default function CuentasPagarPage() {
   const getEstadoBadge = (status: AccountPayableStatus) => {
     const styles = {
       pending: "bg-yellow-100 text-yellow-800",
+      partial: "bg-blue-100 text-blue-800",
       paid: "bg-green-100 text-green-800",
       overdue: "bg-red-100 text-red-800",
       cancelled: "bg-gray-100 text-gray-800",
     }
     const labels = {
       pending: "Pendiente",
+      partial: "Parcial",
       paid: "Pagado",
       overdue: "Vencido",
       cancelled: "Cancelado",
@@ -1574,10 +1578,10 @@ export default function CuentasPagarPage() {
 
             <FloatingDatePicker
               label="Fecha de Pago *"
-              value={editPaymentFormData.paymentDate ? new Date(editPaymentFormData.paymentDate) : undefined}
+              value={editPaymentFormData.paymentDate ? parseLocalDate(editPaymentFormData.paymentDate) : undefined}
               onChange={(date) => {
                 const selectedDate = date instanceof Date ? date : new Date()
-                setEditPaymentFormData({ ...editPaymentFormData, paymentDate: selectedDate.toISOString().split('T')[0] })
+                setEditPaymentFormData({ ...editPaymentFormData, paymentDate: formatLocalDateISO(selectedDate) })
               }}
               mode="single"
             />

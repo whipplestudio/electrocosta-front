@@ -34,7 +34,7 @@ import type { IvaType } from "@/components/financial"
 import { suppliersService, type Supplier } from "@/services/suppliers.service"
 import { categoriesService, type Category } from "@/services/categories.service"
 import { projectsService, type Project } from "@/services/projects.service"
-import type { AccountPayable, AccountPayableStatus, CreateAccountPayableDto, UpdateAccountPayableDto } from "@/types/accounts-payable"
+import type { AccountPayable, AccountPayableStatus, AccountsPayableSummary, CreateAccountPayableDto, UpdateAccountPayableDto } from "@/types/accounts-payable"
 import { formatCurrency as fmtCurrency } from "@/lib/format"
 import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 
@@ -115,13 +115,16 @@ export default function CuentasPagarPage() {
   })
   console.log("🚀 ~ CuentasPagarPage ~ formData:", formData)
 
-  // Dashboard data
-  const [dashboardData, setDashboardData] = useState({
-    totalPendiente: 0,
-    totalVencido: 0,
-    totalPagado: 0,
-    cuentasVencidas: 0,
-    proximasVencer: 0,
+  // Totales agregados del conjunto filtrado, tal como los devuelve la API
+  const [summary, setSummary] = useState<AccountsPayableSummary>({
+    totalPending: 0,
+    countPending: 0,
+    totalScheduled: 0,
+    countScheduled: 0,
+    totalOverdue: 0,
+    countOverdue: 0,
+    totalPaid: 0,
+    upcomingThisWeek: 0,
   })
 
   // Estados para carga masiva
@@ -166,56 +169,12 @@ export default function CuentasPagarPage() {
       setAccounts(response.data)
       setTotal(response.total)
       setTotalPages(response.totalPages)
+      if (response.summary) setSummary(response.summary)
     } catch (error) {
       console.error("Error al cargar cuentas por pagar:", error)
       toast.error("Error al cargar las cuentas por pagar")
     } finally {
       setLoading(false)
-    }
-  }, [])
-
-  // Calcular métricas del dashboard basadas en las cuentas (filtradas o totales)
-  const calculateDashboardMetrics = useCallback((accountsData: AccountPayable[]) => {
-    const now = new Date()
-    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-
-    const totalPendiente = accountsData.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
-    const totalPagado = accountsData.reduce((sum, acc) => sum + Number(acc.paidAmount || 0), 0)
-
-    const overdueAccounts = accountsData.filter(acc => {
-      if (!acc.dueDate) return false
-      return new Date(acc.dueDate) < now && acc.status !== 'paid' && acc.status !== 'cancelled'
-    })
-    const totalVencido = overdueAccounts.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
-
-    const proximasVencer = accountsData.filter(acc => {
-      if (!acc.dueDate) return false
-      const dueDate = new Date(acc.dueDate)
-      return dueDate >= now && dueDate <= sevenDaysFromNow && acc.status !== 'paid' && acc.status !== 'cancelled'
-    }).length
-
-    return {
-      totalPendiente,
-      totalVencido,
-      totalPagado,
-      cuentasVencidas: overdueAccounts.length,
-      proximasVencer,
-    }
-  }, [])
-
-  const fetchDashboard = useCallback(async () => {
-    try {
-      const data = await accountsPayableService.getDashboard()
-      setDashboardData({
-        totalPendiente: data.keyMetrics?.totalPayable || 0,
-        totalVencido: data.keyMetrics?.totalOverdue || 0,
-        totalPagado: data.keyMetrics?.totalPaid || 0,
-        cuentasVencidas: data.overdueAccounts?.length || 0,
-        proximasVencer: data.keyMetrics?.upcomingThisWeek || 0,
-      })
-    } catch (error) {
-      console.error("Error al cargar dashboard:", error)
-      toast.error("Error al cargar estadísticas del dashboard")
     }
   }, [])
 
@@ -254,7 +213,6 @@ export default function CuentasPagarPage() {
   useEffect(() => {
     const filterDto = buildFilterDto()
     fetchAccounts(filterDto, page, limit)
-    fetchDashboard()
     loadSuppliersAndCategories()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -264,14 +222,6 @@ export default function CuentasPagarPage() {
     const filterDto = buildFilterDto()
     fetchAccounts(filterDto, page, limit)
   }, [page, limit, searchQuery, filterStatus, buildFilterDto])
-
-  // Recalcular métricas del dashboard cuando cambian las cuentas (por filtros)
-  useEffect(() => {
-    if (accounts.length > 0) {
-      const filteredMetrics = calculateDashboardMetrics(accounts)
-      setDashboardData(filteredMetrics)
-    }
-  }, [accounts, calculateDashboardMetrics])
 
   // Auto-completar macroClasificacion cuando se selecciona una categoría (solo al crear, no al editar)
   useEffect(() => {
@@ -443,7 +393,6 @@ export default function CuentasPagarPage() {
       }
       setIsDialogOpen(false)
       fetchAccounts(buildFilterDto())
-      fetchDashboard()
     } catch (error: any) {
       console.error("Error al guardar cuenta:", error)
       // Mostrar mensaje específico del backend si está disponible
@@ -460,11 +409,10 @@ export default function CuentasPagarPage() {
       await accountsPayableService.delete(id)
       toast.success("Cuenta eliminada")
       fetchAccounts(buildFilterDto())
-      fetchDashboard()
     } catch (error) {
       toast.error("Error al eliminar")
     }
-  }, [fetchAccounts, fetchDashboard, buildFilterDto])
+  }, [fetchAccounts, buildFilterDto])
 
   const handleVerHistorial = useCallback(async (account: AccountPayable) => {
     setSelectedAccount(account)
@@ -524,14 +472,13 @@ export default function CuentasPagarPage() {
       const updatedAccount = await accountsPayableService.getById(selectedAccount.id)
       setSelectedAccount(updatedAccount)
       fetchAccounts(buildFilterDto())
-      fetchDashboard()
     } catch (error: any) {
       console.error("Error al actualizar pago:", error)
       toast.error(error.message || "Error al actualizar el pago")
     } finally {
       setSavingPayment(false)
     }
-  }, [selectedAccount, selectedPayment, editPaymentFormData, fetchAccounts, fetchDashboard, buildFilterDto])
+  }, [selectedAccount, selectedPayment, editPaymentFormData, fetchAccounts, buildFilterDto])
 
   const handleClearFilters = useCallback(async () => {
     setSearchQuery("")
@@ -637,8 +584,7 @@ export default function CuentasPagarPage() {
       const resultado = await accountsPayableUploadService.importarDatos(uploadResponse.uploadId)
       setImportacionResultado(resultado)
       toast.success(`${resultado.registrosImportados} cuentas por pagar importadas`)
-      fetchAccounts(buildFilterDto())
-      fetchDashboard()
+      await fetchAccounts(buildFilterDto())
     } catch (error: any) {
       toast.error(error.message || 'Error al importar datos')
     } finally {
@@ -898,28 +844,28 @@ export default function CuentasPagarPage() {
       <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <TotalKpiCard
           title="Total Pendiente"
-          value={fmtCurrency(dashboardData.totalPendiente || 0)}
-          subtitle="Monto total por pagar"
+          value={fmtCurrency(summary.totalPending)}
+          subtitle={`${summary.countPending} cuentas por vencer`}
           icon={<DollarSign className="h-4 w-4" />}
           loading={loading}
         />
         <ExpenseKpiCard
           title="Total Vencido"
-          value={fmtCurrency(dashboardData.totalVencido || 0)}
-          subtitle={`${dashboardData.cuentasVencidas || 0} cuentas vencidas`}
+          value={fmtCurrency(summary.totalOverdue)}
+          subtitle={`${summary.countOverdue} cuentas vencidas`}
           icon={<AlertCircle className="h-4 w-4" />}
           loading={loading}
         />
         <SuccessKpiCard
           title="Total Pagado"
-          value={fmtCurrency(dashboardData.totalPagado || 0)}
+          value={fmtCurrency(summary.totalPaid)}
           subtitle="Monto total pagado"
           icon={<CheckCircle className="h-4 w-4" />}
           loading={loading}
         />
         <WarningKpiCard
           title="Próximas a Vencer"
-          value={dashboardData.proximasVencer || 0}
+          value={summary.upcomingThisWeek}
           subtitle="Próximos 7 días"
           icon={<Clock className="h-4 w-4" />}
           loading={loading}

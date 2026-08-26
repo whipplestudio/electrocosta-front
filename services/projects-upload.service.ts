@@ -70,6 +70,23 @@ export interface ImportacionResultado {
   proyectosActualizados: string[]
 }
 
+export interface ProyectoListadoSummary {
+  totalPresupuesto: number
+  totalIngresos: number
+  totalGastoReal: number
+  utilidadReal: number
+  margenReal: number
+}
+
+export interface ListadoProyectosResponse {
+  data: any[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  summary: ProyectoListadoSummary
+}
+
 export interface EstadoProyecto {
   value: string
   label: string
@@ -102,8 +119,8 @@ export const projectsUploadService = {
     page?: number
     limit?: number
     search?: string
-  }): Promise<any> {
-    const response = await apiClient.get(
+  }): Promise<ListadoProyectosResponse> {
+    const response = await apiClient.get<ListadoProyectosResponse>(
       '/carga/proyectos/listado',
       { params: filtros }
     )

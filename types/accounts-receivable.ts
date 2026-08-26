@@ -302,6 +302,23 @@ export interface FollowUpStats {
   successRate: number;
 }
 
+/**
+ * Respuesta de `GET /accounts-receivable/totals`.
+ * Todos los campos se calculan sobre el conjunto filtrado completo, no sobre
+ * la página visible.
+ */
+export interface AccountsReceivableTotals {
+  totalAmount: number;
+  totalPaid: number;
+  totalBalance: number;
+  totalCount: number;
+  /** Saldo de las cuentas con `dueDate` anterior a hoy y saldo pendiente. */
+  overdueBalance: number;
+  overdueCount: number;
+  /** Conteo de cuentas que vencen en los próximos 7 días. */
+  upcomingCount: number;
+}
+
 // ============================================
 // RESPUESTA PAGINADA
 // ============================================

@@ -14,6 +14,7 @@ import {
   Payment,
   FollowUp,
   FollowUpStats,
+  AccountsReceivableTotals,
 } from '@/types/accounts-receivable';
 
 // ============================================
@@ -163,14 +164,11 @@ export const accountsReceivableService = {
   /**
    * Obtener totales calculados desde el backend (con filtros)
    */
-  async getTotals(filters: AccountReceivableFilterDto = {}): Promise<{
-    totalAmount: number;
-    totalPaid: number;
-    totalBalance: number;
-    totalCount: number;
-  }> {
+  async getTotals(
+    filters: AccountReceivableFilterDto = {},
+  ): Promise<AccountsReceivableTotals> {
     try {
-      const response = await apiClient.get('/accounts-receivable/totals', {
+      const response = await apiClient.get<AccountsReceivableTotals>('/accounts-receivable/totals', {
         params: filters,
       });
       return response.data;

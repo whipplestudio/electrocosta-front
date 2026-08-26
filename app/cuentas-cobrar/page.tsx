@@ -616,13 +616,11 @@ function CuentasCobrarPageContent() {
     setDeletingId(cuentaId)
     try {
       await deleteAccount(cuentaId)
-      toast.success("Cuenta eliminada correctamente")
       fetchAccounts()
       fetchDashboard()
       fetchTotals()
     } catch (error) {
       console.error('Error al eliminar cuenta:', error)
-      toast.error("Error al eliminar la cuenta")
     } finally {
       setDeletingId(null)
     }

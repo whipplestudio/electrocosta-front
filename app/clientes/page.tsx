@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Search, Edit, Users, Building2, Mail, Phone, User, CheckCircle2, Save, Upload, FileSpreadsheet, Loader2, HelpCircle } from "lucide-react"
+import { Search, Edit, Users, Building2, Mail, Phone, User, CheckCircle2, Save, Upload, FileSpreadsheet, Loader2, HelpCircle, Eye } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
@@ -193,7 +193,7 @@ export default function ClientesPage() {
   const clientActions = useMemo((): Action<Client>[] => [
     {
       label: 'Ver',
-      icon: <span className="text-sm">Ver</span>,
+      icon: <Eye size={16} />,
       onClick: (client: Client) => router.push(`/clientes/${client.id}`),
     },
     {

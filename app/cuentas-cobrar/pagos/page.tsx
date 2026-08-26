@@ -24,7 +24,7 @@ import { DynamicFormDialog } from "@/components/forms/dynamic-form"
 import { CheckCircle, Clock, DollarSign, FileText, Plus, Search, Calendar as CalendarIcon, Loader2, X, History, Receipt, CreditCard, Pencil, Filter, AlertCircle, TrendingUp, TrendingDown, Eye } from "lucide-react"
 import { useAccountsReceivable } from "@/hooks/use-accounts-receivable"
 import { accountsReceivableService, paymentsService } from "@/services/accounts-receivable.service"
-import type { AccountReceivable, Payment, RegisterPaymentDto } from "@/types/accounts-receivable"
+import type { AccountReceivable, AccountsReceivableTotals, Payment, RegisterPaymentDto } from "@/types/accounts-receivable"
 import { RouteProtection } from "@/components/route-protection"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
@@ -80,6 +80,17 @@ function AplicacionPagosContent() {
     fetchAccounts,
   } = useAccountsReceivable()
 
+  // Totales calculados desde el backend (con los mismos filtros que la tabla)
+  const [totals, setTotals] = useState<AccountsReceivableTotals>({
+    totalAmount: 0,
+    totalPaid: 0,
+    totalBalance: 0,
+    totalCount: 0,
+    overdueBalance: 0,
+    overdueCount: 0,
+    upcomingCount: 0,
+  })
+
   // Estados locales
   const [payments, setPayments] = useState<Payment[]>([])
   const [showRegisterDialog, setShowRegisterDialog] = useState(false)
@@ -129,11 +140,26 @@ function AplicacionPagosContent() {
     return filters
   }, [searchQuery])
 
+  // Cargar totales desde el backend (con los mismos filtros que la tabla)
+  const fetchTotals = useCallback(async (filters?: any) => {
+    try {
+      const totalsData = await accountsReceivableService.getTotals(filters)
+      setTotals(totalsData)
+    } catch (error) {
+      console.error('Error al cargar totales:', error)
+    }
+  }, [])
+
   // Cargar datos con paginación
   const loadData = useCallback(async (page = 1, limit = 10) => {
     const filters = buildFilters()
-    await fetchAccounts(filters, page, limit)
-  }, [fetchAccounts, buildFilters])
+    // En paralelo: los totales no dependen de la página, pero deben refrescarse
+    // en los mismos puntos que la tabla para no quedar obsoletos.
+    await Promise.all([
+      fetchAccounts(filters, page, limit),
+      fetchTotals(filters),
+    ])
+  }, [fetchAccounts, fetchTotals, buildFilters])
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -254,11 +280,6 @@ function AplicacionPagosContent() {
       setLoadingHistory(false)
     }
   }
-
-  // Calcular KPIs
-  const totalPending = accounts.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
-  const overdueAccounts = accounts.filter(acc => acc.dueDate && new Date(acc.dueDate) < new Date())
-  const totalOverdue = overdueAccounts.reduce((sum, acc) => sum + Number(acc.balance || 0), 0)
 
   // Abrir dialog de editar pago
   const openEditDialog = (payment: Payment) => {
@@ -435,23 +456,23 @@ function AplicacionPagosContent() {
       <div className="grid gap-4 md:grid-cols-4">
         <KpiCard
           title="Pagos Pendientes"
-          value={fmtCurrency(totalPending)}
-          subtitle={`${accounts.length} facturas pendientes`}
+          value={fmtCurrency(totals.totalBalance)}
+          subtitle={`${totals.totalCount} facturas pendientes`}
           icon={<Clock className="h-4 w-4" />}
           variant="warning"
         />
 
         <KpiCard
           title="Vencidos"
-          value={fmtCurrency(totalOverdue)}
-          subtitle={`${overdueAccounts.length} cuentas vencidas`}
+          value={fmtCurrency(totals.overdueBalance)}
+          subtitle={`${totals.overdueCount} cuentas vencidas`}
           icon={<AlertCircle className="h-4 w-4" />}
           variant="danger"
         />
 
         <KpiCard
           title="Cuentas Activas"
-          value={accounts.length.toString()}
+          value={totals.totalCount.toString()}
           subtitle="Con saldo pendiente"
           icon={<DollarSign className="h-4 w-4" />}
           variant="primary"
@@ -459,7 +480,7 @@ function AplicacionPagosContent() {
 
         <KpiCard
           title="Promedio por Factura"
-          value={accounts.length > 0 ? fmtCurrency(Math.round(totalPending / accounts.length)) : '$0'}
+          value={totals.totalCount > 0 ? fmtCurrency(Math.round(totals.totalAmount / totals.totalCount)) : '$0'}
           subtitle="Monto promedio"
           icon={<TrendingUp className="h-4 w-4" />}
           variant="info"

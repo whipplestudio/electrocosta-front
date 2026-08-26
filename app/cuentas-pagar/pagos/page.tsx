@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog"
 import { CheckCircle, Clock, DollarSign, History, CreditCard, Building2, FileText, Wallet, Receipt, Pencil, AlertCircle, Calendar } from "lucide-react"
 import { accountsPayableService } from "@/services/accounts-payable.service"
-import type { AccountPayable, RegisterPaymentDto, UpdatePaymentDto, Payment, AccountPayableStatus, PaymentMethod } from "@/types/accounts-payable"
+import type { AccountPayable, AccountsPayableSummary, RegisterPaymentDto, UpdatePaymentDto, Payment, AccountPayableStatus, PaymentMethod } from "@/types/accounts-payable"
 import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 
 const paymentMethodLabels: Record<string, string> = {
@@ -95,10 +95,16 @@ export default function PagosPage() {
     notes: '',
   })
 
-  const [dashboardData, setDashboardData] = useState({
-    totalPendiente: 0,
-    totalPagado: 0,
-    cuentasPendientes: 0,
+  // Totales agregados del conjunto filtrado, tal como los devuelve la API
+  const [summary, setSummary] = useState<AccountsPayableSummary>({
+    totalPending: 0,
+    countPending: 0,
+    totalScheduled: 0,
+    countScheduled: 0,
+    totalOverdue: 0,
+    countOverdue: 0,
+    totalPaid: 0,
+    upcomingThisWeek: 0,
   })
 
   const fetchAccounts = useCallback(async () => {
@@ -118,16 +124,7 @@ export default function PagosPage() {
       setAccounts(response.data)
       setTotal(response.total)
       setTotalPages(response.totalPages)
-
-      // Calcular métricas
-      const totalPendiente = response.data.reduce((sum: number, acc: AccountPayable) => 
-        sum + Number(acc.balance || 0), 0)
-      const totalPagado = response.data.reduce((sum: number, acc: AccountPayable) => 
-        sum + Number(acc.paidAmount || 0), 0)
-      const cuentasPendientes = response.data.filter((acc: AccountPayable) => 
-        acc.status !== 'paid' && acc.status !== 'cancelled').length
-
-      setDashboardData({ totalPendiente, totalPagado, cuentasPendientes })
+      if (response.summary) setSummary(response.summary)
     } catch (error) {
       console.error("Error al cargar cuentas:", error)
       toast.error("Error al cargar las cuentas por pagar")
@@ -397,6 +394,15 @@ export default function PagosPage() {
     setPage(1)
   }, [])
 
+  // Esta pantalla lista todo lo que tiene saldo (minBalance > 0), sin separar
+  // por estado, así que sus cards miden el saldo adeudado completo. Los tres
+  // buckets del summary son excluyentes entre sí, de modo que el total es su
+  // suma (invariante del contrato), no un único campo.
+  const saldoAdeudado =
+    summary.totalPending + summary.totalScheduled + summary.totalOverdue
+  const cuentasConSaldo =
+    summary.countPending + summary.countScheduled + summary.countOverdue
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -410,19 +416,19 @@ export default function PagosPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <KpiCard
           title="Total Pendiente"
-          value={`$${formatCurrency(dashboardData.totalPendiente)}`}
+          value={`$${formatCurrency(saldoAdeudado)}`}
           icon={<Wallet className="h-4 w-4" />}
           loading={loading}
         />
         <KpiCard
           title="Total Pagado"
-          value={`$${formatCurrency(dashboardData.totalPagado)}`}
+          value={`$${formatCurrency(summary.totalPaid)}`}
           icon={<CheckCircle className="h-4 w-4 text-green-600" />}
           loading={loading}
         />
         <KpiCard
           title="Cuentas Pendientes"
-          value={dashboardData.cuentasPendientes}
+          value={cuentasConSaldo}
           icon={<AlertCircle className="h-4 w-4 text-yellow-600" />}
           loading={loading}
         />

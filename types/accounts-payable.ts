@@ -192,12 +192,32 @@ export interface AccountPayableFiltersDto {
 // RESPONSES - PAGINATION
 // ============================================
 
+/**
+ * Totales del conjunto filtrado completo (no de la página visible), calculados
+ * por el backend sobre el mismo `where` que la consulta paginada.
+ * Los tres buckets de saldo (pendiente, programado, vencido) son mutuamente
+ * excluyentes: su suma es el saldo total adeudado del conjunto filtrado.
+ */
+export interface AccountsPayableSummary {
+  totalPending: number;
+  countPending: number;
+  totalScheduled: number;
+  countScheduled: number;
+  totalOverdue: number;
+  countOverdue: number;
+  totalPaid: number;
+  /** Conteo (no importe) de cuentas que vencen en los próximos 7 días. */
+  upcomingThisWeek: number;
+}
+
 export interface PaginatedAccountsPayableResponse {
   data: AccountPayable[];
   total: number;
   page: number;
   limit: number;
   totalPages: number;
+  /** Opcional para tolerar un backend aún sin desplegar con el summary. */
+  summary?: AccountsPayableSummary;
 }
 
 // ============================================

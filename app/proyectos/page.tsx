@@ -27,8 +27,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
-import { projectsUploadService, type CrearProyectoData } from "@/services/projects-upload.service"
-import { projectsService } from "@/services/projects.service"
+import { projectsUploadService, type CrearProyectoData, type ProyectoListadoSummary } from "@/services/projects-upload.service"
 import { handleApiError } from "@/lib/api-client"
 import { clientsService, type ClientSimple } from "@/services/clients.service"
 import { areasService, type AreaSimple } from "@/services/areas.service"
@@ -71,7 +70,17 @@ export default function ProyectosPage() {
   // Estados para proyectos
   const [proyectos, setProyectos] = useState<any[]>([])
   const [loadingProyectos, setLoadingProyectos] = useState(false)
-  
+
+  // Totales del conjunto filtrado completo, calculados por el backend
+  // (no dependen de la página visible)
+  const [summary, setSummary] = useState<ProyectoListadoSummary>({
+    totalPresupuesto: 0,
+    totalIngresos: 0,
+    totalGastoReal: 0,
+    utilidadReal: 0,
+    margenReal: 0,
+  })
+
   // Pagination state
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
@@ -96,14 +105,6 @@ export default function ProyectosPage() {
   const [areas, setAreas] = useState<AreaSimple[]>([])
   const [loadingAreas, setLoadingAreas] = useState(false)
   
-  // Estado para datos financieros consolidados
-  const [financialData, setFinancialData] = useState({
-    totalIncome: 0,
-    totalExpenses: 0,
-    totalProfit: 0,
-    profitMargin: 0,
-  })
-  const [loadingFinancial, setLoadingFinancial] = useState(false)
   const [openAreaPopover, setOpenAreaPopover] = useState(false)
   const [openAreaPopoverEdit, setOpenAreaPopoverEdit] = useState(false)
   
@@ -172,6 +173,7 @@ export default function ProyectosPage() {
       setProyectos(response.data || [])
       setTotal(response.total || 0)
       setPages(response.totalPages || 1)
+      setSummary(response.summary)
     } catch (error) {
       console.error('Error al cargar proyectos:', error)
       toast.error('No se pudieron cargar los proyectos')
@@ -228,31 +230,11 @@ export default function ProyectosPage() {
     }
   }, [])
 
-  // Cargar datos financieros consolidados
-  const cargarDatosFinancieros = useCallback(async () => {
-    try {
-      setLoadingFinancial(true)
-      const data = await projectsService.getConsolidatedIncomeStatement()
-      setFinancialData({
-        totalIncome: data.totals.totalIncome,
-        totalExpenses: data.totals.totalExpenses,
-        totalProfit: data.totals.totalProfit,
-        profitMargin: data.profitMargin,
-      })
-    } catch (error) {
-      console.error('Error al cargar datos financieros:', error)
-      // No mostrar toast para no ser intrusivo
-    } finally {
-      setLoadingFinancial(false)
-    }
-  }, [])
-
   useEffect(() => {
     cargarProyectos(searchTerm, page, limit)
     cargarUsuarios()
     cargarClientes()
     cargarAreas()
-    cargarDatosFinancieros()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -689,14 +671,6 @@ export default function ProyectosPage() {
     status: p.status || 'activo',
   }))
 
-  // Calcular KPIs financieros reales
-  // Nota: el endpoint /listado no devuelve totalIncome/totalExpenses, usamos valorVenta y presupuestoTotal
-  const totalPresupuesto = proyectosFormateados.reduce((sum, p) => sum + p.valorContrato, 0)
-  const totalIngresos = proyectosFormateados.reduce((sum, p) => sum + p.valorVenta, 0)
-  const totalGastos = proyectosFormateados.reduce((sum, p) => sum + p.valorContrato, 0)
-  const totalGanancia = totalIngresos - totalGastos
-  const margenPromedio = totalIngresos > 0 ? (totalGanancia / totalIngresos) * 100 : 0
-
   const getStatusBadge = (estado: string) => {
     switch (estado) {
       case "En Progreso":
@@ -1129,35 +1103,35 @@ export default function ProyectosPage() {
       <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title="Ingresos Totales"
-          value={fmtCurrency(searchTerm ? totalIngresos : financialData.totalIncome)}
+          value={fmtCurrency(summary.totalIngresos)}
           subtitle={searchTerm ? `${total} resultados` : `${total} proyectos`}
           icon={<DollarSign className="h-4 w-4" />}
           variant="success"
-          loading={loadingFinancial || (!!searchTerm && loadingProyectos)}
+          loading={loadingProyectos}
         />
         <KpiCard
-          title="Gastos Totales"
-          value={fmtCurrency(searchTerm ? totalGastos : financialData.totalExpenses)}
-          subtitle={searchTerm ? "Presupuesto estimado" : "Cuentas por pagar"}
+          title="Gasto Real"
+          value={fmtCurrency(summary.totalGastoReal)}
+          subtitle="Cuentas por pagar + gastos"
           icon={<TrendingDown className="h-4 w-4" />}
           variant="danger"
-          loading={loadingFinancial || (!!searchTerm && loadingProyectos)}
+          loading={loadingProyectos}
         />
         <KpiCard
-          title="Ganancia Neta"
-          value={fmtCurrency(searchTerm ? totalGanancia : financialData.totalProfit)}
-          subtitle="Ingresos - Gastos"
+          title="Utilidad Real"
+          value={fmtCurrency(summary.utilidadReal)}
+          subtitle="Ingresos - Gasto real"
           icon={<TrendingUp className="h-4 w-4" />}
-          variant={(searchTerm ? totalGanancia : financialData.totalProfit) >= 0 ? "info" : "danger"}
-          loading={loadingFinancial || (!!searchTerm && loadingProyectos)}
+          variant={summary.utilidadReal >= 0 ? "info" : "danger"}
+          loading={loadingProyectos}
         />
         <KpiCard
-          title="Margen Promedio"
-          value={`${(searchTerm ? margenPromedio : financialData.profitMargin).toFixed(1)}%`}
+          title="Margen Real"
+          value={`${summary.margenReal.toFixed(1)}%`}
           subtitle="Rentabilidad"
           icon={<Percent className="h-4 w-4" />}
-          variant={(searchTerm ? margenPromedio : financialData.profitMargin) >= 20 ? "success" : (searchTerm ? margenPromedio : financialData.profitMargin) >= 10 ? "info" : "warning"}
-          loading={loadingFinancial || (!!searchTerm && loadingProyectos)}
+          variant={summary.margenReal >= 20 ? "success" : summary.margenReal >= 10 ? "info" : "warning"}
+          loading={loadingProyectos}
         />
       </div>
 

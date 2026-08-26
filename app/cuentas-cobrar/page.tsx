@@ -82,7 +82,7 @@ import { FinancialAmountSection } from "@/components/financial"
 import { BulkUploadGuideDialogCobrar } from "@/components/bulk-upload-guide-dialog-cobrar"
 import type { IvaType } from "@/components/financial"
 import { DataTable, Column, Action, SelectFilter } from "@/components/ui/data-table"
-import { AccountReceivable, AccountReceivableStatus, Payment, PaymentMethod } from "@/types/accounts-receivable"
+import { AccountReceivable, AccountReceivableStatus, AccountsReceivableTotals, Payment, PaymentMethod } from "@/types/accounts-receivable"
 import { clientsService, type Client } from "@/services/clients.service"
 import { categoriesService, type Category } from "@/services/categories.service"
 import { projectsService, type Project } from "@/services/projects.service"
@@ -168,11 +168,14 @@ function CuentasCobrarPageContent() {
   const [isFilterExpanded, setIsFilterExpanded] = useState(true)
 
   // Totales calculados desde el backend (con filtros aplicados)
-  const [totals, setTotals] = useState({
+  const [totals, setTotals] = useState<AccountsReceivableTotals>({
     totalAmount: 0,
     totalPaid: 0,
     totalBalance: 0,
     totalCount: 0,
+    overdueBalance: 0,
+    overdueCount: 0,
+    upcomingCount: 0,
   })
   const [filterProjects, setFilterProjects] = useState<any[]>([])
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false)
@@ -462,7 +465,11 @@ function CuentasCobrarPageContent() {
     })
     setPage(1)
     setFilterProjects([])
+    // DTO vacío literal, no buildFilterDto(): los setState de arriba no se
+    // reflejan en este mismo tick, así que buildFilterDto() aún devolvería el
+    // filtro anterior. Mismo criterio que la llamada a fetchAccounts.
     await fetchAccounts({}, 1, limit)
+    await fetchTotals({})
     await fetchDashboard()
   }
 
@@ -1022,26 +1029,22 @@ function CuentasCobrarPageContent() {
           variant="success"
         />
 
+        {/*
+          `?? 0` cubre el despliegue desfasado: si el front sale antes que el
+          backend que añade estos campos, `/totals` responde sin ellos y las dos
+          cards siguientes deben pintar 0, no "undefined".
+        */}
         <KpiCard
           title="Vencidas"
-          value={fmtCurrency(accounts.filter(c => c.status === AccountReceivableStatus.OVERDUE).reduce((sum, c) => sum + Number(c.balance || 0), 0))}
-          subtitle={`${accounts.filter(c => c.status === AccountReceivableStatus.OVERDUE).length} cuentas vencidas`}
+          value={fmtCurrency(totals.overdueBalance ?? 0)}
+          subtitle={`${totals.overdueCount ?? 0} cuentas vencidas`}
           icon={<AlertCircle className="h-4 w-4" />}
           variant="danger"
         />
 
         <KpiCard
           title="Próximas a Vencer"
-          value={(() => {
-            const now = new Date()
-            const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-            return accounts.filter(c => {
-              if (!c.dueDate) return false
-              const dueDate = new Date(c.dueDate)
-              return dueDate >= now && dueDate <= sevenDaysFromNow && 
-                (c.status === AccountReceivableStatus.PENDING || c.status === AccountReceivableStatus.PARTIAL)
-            }).length.toString()
-          })()}
+          value={totals.upcomingCount ?? 0}
           subtitle="Próximos 7 días"
           icon={<Clock className="h-4 w-4" />}
           variant="info"

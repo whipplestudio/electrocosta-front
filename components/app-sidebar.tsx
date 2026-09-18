@@ -134,6 +134,7 @@ export function AppSidebar({ className, mobileOpen = false, onMobileClose }: Sid
   const [collapsed, setCollapsed] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [expandedMenus, setExpandedMenus] = useState<string[]>([])
+  const [currentUser, setCurrentUser] = useState<{ nombre: string; rol: string } | null>(null)
   // Los permisos vienen del provider montado en conditional-layout: se piden
   // una sola vez por sesión, no en cada montaje del sidebar.
   const { hasAnyPermission, isLoading: permissionsLoading } = usePermissions()
@@ -148,6 +149,17 @@ export function AppSidebar({ className, mobileOpen = false, onMobileClose }: Sid
     checkMobile()
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  // El usuario vive en localStorage, así que solo se puede leer ya montado.
+  useEffect(() => {
+    const user = authService.getCurrentUser()
+    if (!user) return
+    const nombre = [user.firstName, user.lastName].filter(Boolean).join(' ')
+    setCurrentUser({
+      nombre: nombre || user.email || 'Sin nombre',
+      rol: user.role?.name ?? 'Sin rol',
+    })
   }, [])
 
   const isActiveRoute = (href: string, submenu?: { href: string }[]) => {
@@ -337,8 +349,8 @@ export function AppSidebar({ className, mobileOpen = false, onMobileClose }: Sid
 
         {!collapsed && (
           <div className="text-xs text-[#6b7280] space-y-1 px-3 py-2 bg-[#f9fafb] rounded-xl">
-            <p className="font-semibold text-[#374151]">Usuario: Admin</p>
-            <p className="font-medium">Rol: Administrador</p>
+            <p className="font-semibold text-[#374151]">Usuario: {currentUser?.nombre ?? '—'}</p>
+            <p className="font-medium">Rol: {currentUser?.rol ?? '—'}</p>
             <p className="text-[10px] text-[#9ca3af]">Versión 1.0.0</p>
           </div>
         )}

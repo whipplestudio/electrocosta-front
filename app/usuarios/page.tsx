@@ -109,6 +109,25 @@ function UsuariosPageContent() {
     }
   }, [page, limit, searchQuery, filterStatus])
 
+  // Memoizados a propósito: DataTable relanza su efecto de búsqueda cada vez
+  // que cambia la identidad de onSearchChange, y ese efecto vuelve a poner la
+  // página en 1. Con handlers inline, avanzar a la página 2 se deshacía solo.
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value)
+    setPage(1)
+  }, [])
+
+  const handleFilterChange = useCallback((_key: string, value: string | string[]) => {
+    setFilterStatus(value as string)
+    setPage(1)
+  }, [])
+
+  const handleClearFilters = useCallback(() => {
+    setSearchQuery('')
+    setFilterStatus('')
+    setPage(1)
+  }, [])
+
   const loadRoles = async () => {
     try {
       const data = await rolesService.getAll()
@@ -491,21 +510,11 @@ function UsuariosPageContent() {
           debounceMs: 400,
         }}
         searchValue={searchQuery}
-        onSearchChange={(value) => {
-          setSearchQuery(value)
-          setPage(1) // Reset to first page on search
-        }}
+        onSearchChange={handleSearchChange}
         selectFilters={selectFilters}
         filterValues={{ status: filterStatus }}
-        onFilterChange={(key, value) => {
-          setFilterStatus(value as string)
-          setPage(1) // Reset to first page on filter change
-        }}
-        onClearFilters={() => {
-          setSearchQuery('')
-          setFilterStatus('')
-          setPage(1)
-        }}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
         // Pagination
         pagination={{
           page,

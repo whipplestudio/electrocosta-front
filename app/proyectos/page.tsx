@@ -28,7 +28,7 @@ import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 import { projectsUploadService, type CrearProyectoData, type ProyectoListadoSummary } from "@/services/projects-upload.service"
-import { handleApiError } from "@/lib/api-client"
+import apiClient, { handleApiError } from "@/lib/api-client"
 import { clientsService, type ClientSimple } from "@/services/clients.service"
 import { areasService, type AreaSimple } from "@/services/areas.service"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
@@ -186,15 +186,8 @@ export default function ProyectosPage() {
   const cargarUsuarios = useCallback(async () => {
     try {
       setLoadingUsuarios(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/simple/list`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setUsuarios(data)
-      }
+      const response = await apiClient.get<any[]>('/users/simple/list')
+      setUsuarios(response.data)
     } catch (error) {
       console.error('Error al cargar usuarios:', error)
     } finally {

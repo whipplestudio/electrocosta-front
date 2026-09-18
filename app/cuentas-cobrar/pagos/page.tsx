@@ -249,7 +249,7 @@ function AplicacionPagosContent() {
       await loadData()
     } catch (error) {
       console.error('Error al registrar pago:', error)
-      toast.error('Error al registrar el pago')
+      toast.error(error instanceof Error ? error.message : 'Error al registrar el pago')
     } finally {
       setSubmitting(false)
     }
@@ -345,7 +345,7 @@ function AplicacionPagosContent() {
       }
     } catch (error) {
       console.error('Error al actualizar pago:', error)
-      toast.error('Error al actualizar el pago')
+      toast.error(error instanceof Error ? error.message : 'Error al actualizar el pago')
     } finally {
       setSubmitting(false)
     }
@@ -657,7 +657,7 @@ function AplicacionPagosContent() {
                 await loadData()
               } catch (error) {
                 console.error('Error al registrar pago:', error)
-                toast.error('Error al registrar el pago')
+                toast.error(error instanceof Error ? error.message : 'Error al registrar el pago')
               } finally {
                 setSubmitting(false)
               }
@@ -889,7 +889,7 @@ function AplicacionPagosContent() {
                   }
                 } catch (error) {
                   console.error('Error al actualizar pago:', error)
-                  toast.error('Error al actualizar el pago')
+                  toast.error(error instanceof Error ? error.message : 'Error al actualizar el pago')
                 } finally {
                   setSubmitting(false)
                 }

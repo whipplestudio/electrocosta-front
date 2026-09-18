@@ -410,7 +410,7 @@ export default function CuentasPagarPage() {
       toast.success("Cuenta eliminada")
       fetchAccounts(buildFilterDto())
     } catch (error) {
-      toast.error("Error al eliminar")
+      toast.error(error instanceof Error ? error.message : "Error al eliminar")
     }
   }, [fetchAccounts, buildFilterDto])
 

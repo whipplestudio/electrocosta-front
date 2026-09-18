@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils"
 import { permissionsService } from "@/services/permissions.service"
 import { authService } from "@/services/auth.service"
 import { Skeleton } from "@/components/ui/skeleton"
+import { BranchSwitcher } from "@/components/branch-switcher"
 
 interface SidebarProps {
   className?: string
@@ -369,6 +370,8 @@ export function AppSidebar({ className, mobileOpen = false, onMobileClose }: Sid
 
       {/* Footer - Material Design 3 */}
       <div className="px-3 py-4 border-t border-[#e5e7eb] space-y-2">
+        <BranchSwitcher collapsed={collapsed} />
+
         {!collapsed && (
           <div className="text-xs text-[#6b7280] space-y-1 px-3 py-2 bg-[#f9fafb] rounded-xl">
             <p className="font-semibold text-[#374151]">Usuario: Admin</p>

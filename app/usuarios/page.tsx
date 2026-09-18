@@ -8,14 +8,17 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog"
-import { Plus, Edit, Trash2, Shield, User as UserIcon, Mail, BadgeCheck, Clock } from "lucide-react"
+import { Plus, Edit, Trash2, Shield, User as UserIcon, Mail, BadgeCheck, Clock, Building2 } from "lucide-react"
 import { ActionButton, CreateButton } from "@/components/ui"
 import { usersService } from "@/services/users.service"
 import { rolesService } from "@/services/roles.service"
 import { authService } from "@/services/auth.service"
+import { branchesService } from "@/services/branches.service"
+import { useActiveBranch } from "@/hooks/use-active-branch"
+import { ALL_BRANCHES } from "@/lib/api-client"
 import { toast } from 'sonner'
 import { cn } from "@/lib/utils"
-import type { User, Role, UserStatus, CreateUserDto, UpdateUserDto } from "@/types/users"
+import type { User, Role, Branch, UserStatus, CreateUserDto, UpdateUserDto } from "@/types/users"
 import { RouteProtection } from "@/components/route-protection"
 import { DynamicForm, FormFieldConfig } from "@/components/forms"
 import { DataTable, Column, Action, SelectFilter } from "@/components/ui/data-table"
@@ -33,6 +36,8 @@ export default function UsuariosPage() {
 function UsuariosPageContent() {
   const [users, setUsers] = useState<User[]>([])
   const [roles, setRoles] = useState<Role[]>([])
+  const [branches, setBranches] = useState<Branch[]>([])
+  const { user: actor, isGlobal, activeBranchId } = useActiveBranch()
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -60,6 +65,25 @@ function UsuariosPageContent() {
       setCurrentUserRole(currentUser.role.name)
     }
   }, [])
+
+  // Solo un actor GLOBAL elige sucursal; para BRANCH el back la fija a la suya
+  useEffect(() => {
+    if (!isGlobal) return
+    let isMounted = true
+
+    branchesService
+      .getBranches()
+      .then((data) => {
+        if (isMounted) setBranches(data)
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : 'Error al cargar sucursales')
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [isGlobal])
 
   // Cargar usuarios cuando cambian filtros o paginación
   useEffect(() => {
@@ -173,11 +197,27 @@ function UsuariosPageContent() {
       options: roles.map((role) => ({ label: role.name, value: role.id })),
     },
     {
+      name: 'branchId',
+      label: 'Sucursal',
+      type: 'select',
+      placeholder: 'Selecciona una sucursal',
+      required: isGlobal,
+      disabled: !isGlobal,
+      options: isGlobal
+        ? branches
+            // Una sucursal inactiva solo se ofrece si es la que ya tiene el usuario editado
+            .filter((branch) => branch.isActive || branch.id === selectedUser?.branchId)
+            .map((branch) => ({ label: branch.name, value: branch.id }))
+        : actor?.branch
+          ? [{ label: actor.branch.name, value: actor.branch.id }]
+          : [],
+    },
+    {
       name: 'status',
       label: 'Usuario activo',
       type: 'switch',
     },
-  ], [roles, selectedUser, currentUserRole])
+  ], [roles, selectedUser, currentUserRole, isGlobal, branches, actor])
 
   const getDefaultFormValues = () => {
     if (selectedUser) {
@@ -188,9 +228,15 @@ function UsuariosPageContent() {
         password: '',
         empresa: selectedUser.empresa,
         roleId: selectedUser.roleId,
+        branchId: selectedUser.branchId,
         status: selectedUser.status === 'activo',
       }
     }
+    // En "Todas" no hay sucursal que heredar: el campo queda vacío y es obligatorio
+    const defaultBranchId = isGlobal
+      ? (activeBranchId === ALL_BRANCHES ? '' : activeBranchId ?? '')
+      : actor?.branchId ?? ''
+
     return {
       firstName: '',
       lastName: '',
@@ -198,6 +244,7 @@ function UsuariosPageContent() {
       password: '',
       empresa: '',
       roleId: '',
+      branchId: defaultBranchId,
       status: true,
     }
   }
@@ -219,6 +266,11 @@ function UsuariosPageContent() {
       const payload: any = {
         ...data,
         status: data.status ? 'activo' : 'inactivo',
+      }
+
+      // El back solo respeta la sucursal del body para un actor GLOBAL
+      if (!isGlobal) {
+        delete payload.branchId
       }
       
       if (selectedUser) {
@@ -321,6 +373,19 @@ function UsuariosPageContent() {
         )
       },
     },
+    ...(isGlobal
+      ? [{
+          key: 'branch',
+          header: 'Sucursal',
+          // El listado de usuarios solo trae branchId; el nombre sale de GET /branches
+          render: (user: User) => (
+            <div className="flex items-center gap-2 text-[#6b7280] text-sm">
+              <Building2 className="h-4 w-4" />
+              {branches.find((branch) => branch.id === user.branchId)?.name ?? '—'}
+            </div>
+          ),
+        }]
+      : []),
     {
       key: 'status',
       header: 'Estado',
@@ -352,7 +417,7 @@ function UsuariosPageContent() {
         </div>
       ),
     },
-  ], [])
+  ], [isGlobal, branches])
 
   // DataTable actions configuration
   const actions = useMemo((): Action<User>[] => [

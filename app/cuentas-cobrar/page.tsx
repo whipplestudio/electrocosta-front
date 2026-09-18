@@ -1994,7 +1994,7 @@ function CuentasCobrarPageContent() {
                   fetchDashboard()
                 } catch (error) {
                   console.error('Error al actualizar pago:', error)
-                  toast.error('Error al actualizar el pago')
+                  toast.error(error instanceof Error ? error.message : 'Error al actualizar el pago')
                 } finally {
                   setLoading(false)
                 }

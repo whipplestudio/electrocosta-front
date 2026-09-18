@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
+import type { User } from '@/types/users';
 
 // Configuración base de la API
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://electrocosta-api-328521246433.us-west4.run.app';
@@ -12,6 +13,25 @@ const apiClient: AxiosInstance = axios.create({
   timeout: 30000, // 30 segundos
 });
 
+// Sucursal elegida por un usuario de alcance GLOBAL: 'ALL' o el uuid de la sucursal
+export const ACTIVE_BRANCH_KEY = 'activeBranchId';
+export const ALL_BRANCHES = 'ALL';
+
+// Solo el alcance GLOBAL elige sucursal; sin elección guardada, el back usa la de origen
+const getActiveBranchHeader = (): string | null => {
+  const userStr = localStorage.getItem('currentUser');
+  if (!userStr) return null;
+
+  try {
+    const user = JSON.parse(userStr) as Partial<User>;
+    if (user.role?.scope !== 'GLOBAL') return null;
+  } catch {
+    return null;
+  }
+
+  return localStorage.getItem(ACTIVE_BRANCH_KEY);
+};
+
 // Interceptor para agregar token a las peticiones
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
@@ -20,6 +40,11 @@ apiClient.interceptors.request.use(
     
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    const activeBranch = typeof window !== 'undefined' ? getActiveBranchHeader() : null;
+    if (activeBranch && config.headers) {
+      config.headers['X-Branch-Id'] = activeBranch;
     }
     
     return config;
@@ -87,6 +112,10 @@ apiClient.interceptors.response.use(
 
 export default apiClient;
 
+// Literal del back para escrituras de un usuario GLOBAL con la vista "Todas"
+export const SELECT_BRANCH_MESSAGE = 'Seleccione una sucursal para operar';
+const SELECT_BRANCH_HINT = 'Cambie la sucursal en el selector del menú lateral: en "Todas" no se puede crear ni modificar.';
+
 // Helper para manejar errores de API
 export const handleApiError = (error: unknown): string => {
   if (axios.isAxiosError(error)) {
@@ -98,6 +127,9 @@ export const handleApiError = (error: unknown): string => {
       // Si es un array, unir los mensajes con punto y coma
       if (Array.isArray(backendMessage)) {
         return backendMessage.join('; ');
+      }
+      if (backendMessage === SELECT_BRANCH_MESSAGE) {
+        return `${SELECT_BRANCH_MESSAGE}. ${SELECT_BRANCH_HINT}`;
       }
       return backendMessage;
     }

@@ -149,7 +149,11 @@ function RolesPageContent() {
           <div className="flex items-center gap-4">
             {/* Search removed - can be added back with FloatingInput if needed */}
           </div>
-          <ActionButton onClick={handleCreateRole} className="w-full sm:w-auto">
+          <ActionButton
+            onClick={handleCreateRole}
+            className="w-full sm:w-auto"
+            permissionCode="usuarios.roles.crear"
+          >
             Nuevo Rol
           </ActionButton>
         </div>
@@ -201,6 +205,7 @@ function RolesPageContent() {
                         size="sm"
                         onClick={() => handleEditRole(role)}
                         fullWidth
+                        permissionCode="usuarios.roles.editar"
                       >
                         Editar
                       </ActionButton>
@@ -209,6 +214,7 @@ function RolesPageContent() {
                         size="sm"
                         onClick={() => handleDeleteRole(role.id)}
                         fullWidth
+                        permissionCode="usuarios.roles.eliminar"
                       >
                         Eliminar
                       </ActionButton>

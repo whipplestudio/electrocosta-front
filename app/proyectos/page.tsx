@@ -42,6 +42,7 @@ import { DynamicForm, FormSection, useDynamicForm } from "@/components/ui/dynami
 import { FinancialAmountSection } from "@/components/financial"
 import type { IvaType } from "@/components/financial"
 import { formatCurrency as fmtCurrency } from "@/lib/format"
+import { RouteProtection } from "@/components/route-protection"
 
 // Helper para formatear fechas ISO sin conversión de zona horaria
 const formatDateWithoutTimezone = (dateString: string | undefined): string => {
@@ -60,6 +61,14 @@ const formatDateWithoutTimezone = (dateString: string | undefined): string => {
 }
 
 export default function ProyectosPage() {
+  return (
+    <RouteProtection requiredPermissions={["carga_informacion.proyectos.ver"]}>
+      <ProyectosPageContent />
+    </RouteProtection>
+  )
+}
+
+function ProyectosPageContent() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   // Estados básicos
@@ -761,23 +770,27 @@ export default function ProyectosPage() {
       label: 'Editar',
       icon: <Edit size={16} />,
       onClick: (proyecto) => abrirEditarProyecto(proyecto.id),
+      permissionCode: 'carga_informacion.proyectos.editar',
     },
     {
       label: 'Desactivar',
       icon: <Trash2 size={16} />,
       onClick: (proyecto) => toggleProyectoStatus(proyecto.id, proyecto.nombre, proyecto.status),
       hidden: (proyecto) => proyecto.status !== 'activo',
+      permissionCode: 'carga_informacion.proyectos.editar',
     },
     {
       label: 'Activar',
       icon: <Power size={16} />,
       onClick: (proyecto) => toggleProyectoStatus(proyecto.id, proyecto.nombre, proyecto.status),
       hidden: (proyecto) => proyecto.status !== 'inactivo',
+      permissionCode: 'carga_informacion.proyectos.editar',
     },
     {
       label: 'Eliminar permanentemente',
       icon: <AlertTriangle size={16} />,
       onClick: (proyecto) => abrirEliminarProyecto(proyecto.id, proyecto.nombre),
+      permissionCode: 'carga_informacion.proyectos.eliminar',
     },
   ], [])
 
@@ -847,6 +860,7 @@ export default function ProyectosPage() {
                   size="sm"
                   className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={<Upload className="h-4 w-4" />}
+                  permissionCode="carga_informacion.proyectos.crear"
                 >
                   Carga Masiva
                 </ActionButton>
@@ -862,7 +876,7 @@ export default function ProyectosPage() {
             </Tooltip>
           </TooltipProvider>
           {/* Botón Nuevo Proyecto */}
-          <ActionButton onClick={() => setOpenDialog(true)} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
+          <ActionButton onClick={() => setOpenDialog(true)} size="sm" className="w-full md:w-auto md:h-9 md:px-3" permissionCode="carga_informacion.proyectos.crear">
             Nuevo Proyecto
           </ActionButton>
 

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { rolesService } from "@/services/roles.service"
 import { permissionsService, type Permission } from "@/services/permissions.service"
 import { useToast } from "@/hooks/use-toast"
+import { usePermissions } from "@/hooks/use-permissions"
 import type { Role } from "@/types/users"
 import { RouteProtection } from "@/components/route-protection"
 
@@ -22,6 +23,8 @@ export default function PermisosPage() {
 
 function PermisosPageContent() {
   const { toast } = useToast()
+  const { hasPermission } = usePermissions()
+  const canEditPermissions = hasPermission('usuarios.permisos.editar')
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [updatingPermission, setUpdatingPermission] = useState<string | null>(null)
@@ -299,12 +302,12 @@ function PermisosPageContent() {
                                     ) : (
                                       <Switch
                                         checked={isChecked}
-                                        disabled={updatingPermission !== null || isSuperAdmin}
+                                        disabled={updatingPermission !== null || isSuperAdmin || !canEditPermissions}
                                         onCheckedChange={(checked) => {
                                           handleTogglePermission(role.id, permission.code, checked)
                                         }}
                                         className={cn(
-                                          isSuperAdmin && "opacity-50 cursor-not-allowed",
+                                          (isSuperAdmin || !canEditPermissions) && "opacity-50 cursor-not-allowed",
                                           "data-[state=checked]:bg-[#164e63]"
                                         )}
                                       />

@@ -37,6 +37,7 @@ import { projectsService, type Project } from "@/services/projects.service"
 import type { AccountPayable, AccountPayableStatus, AccountsPayableSummary, CreateAccountPayableDto, UpdateAccountPayableDto } from "@/types/accounts-payable"
 import { formatCurrency as fmtCurrency } from "@/lib/format"
 import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
+import { RouteProtection } from "@/components/route-protection"
 
 // Helper para formatear fechas sin conversión de zona horaria
 const formatDateWithoutTimezone = (dateString: string): string => {
@@ -50,6 +51,14 @@ const formatDateWithoutTimezone = (dateString: string): string => {
 }
 
 export default function CuentasPagarPage() {
+  return (
+    <RouteProtection requiredPermissions={["cuentas_pagar.registro.ver"]}>
+      <CuentasPagarPageContent />
+    </RouteProtection>
+  )
+}
+
+function CuentasPagarPageContent() {
   const [accounts, setAccounts] = useState<AccountPayable[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -706,11 +715,13 @@ export default function CuentasPagarPage() {
       label: 'Editar',
       icon: <Edit className="h-4 w-4" />,
       onClick: (row) => handleEditarCuenta(row),
+      permissionCode: 'cuentas_pagar.registro.editar',
     },
     {
       label: 'Eliminar',
       icon: <Trash2 className="h-4 w-4" />,
       onClick: (row) => handleEliminarCuenta(row.id),
+      permissionCode: 'cuentas_pagar.registro.eliminar',
     },
   ], [handleVerHistorial, handleEditarCuenta, handleEliminarCuenta])
 
@@ -810,6 +821,7 @@ export default function CuentasPagarPage() {
               <TooltipTrigger asChild>
                 <ActionButton 
                   variant="outline"
+                  permissionCode="cuentas_pagar.registro.crear"
                   onClick={() => setBulkUploadOpen(true)}
                   size="sm"
                   className="w-full md:w-auto md:h-9 md:px-3"
@@ -828,7 +840,7 @@ export default function CuentasPagarPage() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <ActionButton variant="create" onClick={handleNuevaCuenta} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
+          <ActionButton variant="create" permissionCode="cuentas_pagar.registro.crear" onClick={handleNuevaCuenta} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
             Nueva Cuenta
           </ActionButton>
         </div>
@@ -1449,7 +1461,8 @@ export default function CuentasPagarPage() {
                         {
                           label: 'Editar',
                           icon: <Pencil className="h-4 w-4" />,
-                          onClick: (payment) => handleEditarPago(payment)
+                          onClick: (payment) => handleEditarPago(payment),
+                          permissionCode: 'cuentas_pagar.pagos.registrar'
                         }
                       ]}
                       showHeader={true}

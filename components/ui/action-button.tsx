@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { Loader2 } from 'lucide-react'
+import { usePermissionGate } from '@/hooks/use-permissions'
 
 export type ButtonVariant = 
   | 'primary' 
@@ -37,6 +38,10 @@ export interface ActionButtonProps extends React.ButtonHTMLAttributes<HTMLButton
   startIcon?: React.ReactNode
   endIcon?: React.ReactNode
   fullWidth?: boolean
+  // Código exacto del catálogo (`modulo.recurso.accion`). Sin el permiso, el
+  // botón NO se renderiza: se oculta, no se deshabilita, igual que hace el
+  // menú lateral con los módulos inaccesibles.
+  permissionCode?: string
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
@@ -90,9 +95,13 @@ export const ActionButton = React.forwardRef<HTMLButtonElement, ActionButtonProp
     disabled,
     children,
     className,
+    permissionCode,
     ...props 
   }, ref) => {
+    const isAllowed = usePermissionGate()
     const isDisabled = disabled || loading
+
+    if (!isAllowed(permissionCode)) return null
 
     return (
       <button

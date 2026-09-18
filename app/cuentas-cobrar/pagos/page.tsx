@@ -432,6 +432,7 @@ function AplicacionPagosContent() {
       icon: <Pencil className="h-4 w-4" />,
       label: 'Editar pago',
       onClick: (payment: Payment) => openEditDialog(payment),
+      permissionCode: 'cuentas_cobrar.pagos.aplicar',
     },
   ]
 
@@ -529,6 +530,7 @@ function AplicacionPagosContent() {
               icon: <DollarSign className="h-4 w-4" />,
               onClick: (row) => openRegisterDialog(row),
               hidden: (row) => Number(row.balance) === 0,
+              permissionCode: 'cuentas_cobrar.pagos.aplicar',
             },
           ]}
           loading={loading}
@@ -737,6 +739,7 @@ function AplicacionPagosContent() {
                 <ActionButton
                   variant="create"
                   size="sm"
+                  permissionCode="cuentas_cobrar.pagos.aplicar"
                   startIcon={<DollarSign className="h-4 w-4" />}
                   onClick={() => {
                     setShowHistoryDialog(false)

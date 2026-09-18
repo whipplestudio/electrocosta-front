@@ -444,6 +444,7 @@ function UsuariosPageContent() {
       label: 'Editar',
       icon: <Edit size={16} />,
       onClick: (user: User) => handleEditUser(user),
+      permissionCode: 'usuarios.usuarios.editar',
     },
     {
       label: 'Eliminar',
@@ -451,6 +452,7 @@ function UsuariosPageContent() {
       onClick: (user: User) => handleDeleteUser(user),
       disabled: (user: User) => updatingUserId === user.id,
       hidden: (user: User) => !!user.deletedAt,
+      permissionCode: 'usuarios.usuarios.eliminar',
     },
     {
       label: 'Habilitar',
@@ -458,6 +460,7 @@ function UsuariosPageContent() {
       onClick: (user: User) => handleRestoreUser(user),
       disabled: (user: User) => updatingUserId === user.id,
       hidden: (user: User) => !user.deletedAt,
+      permissionCode: 'usuarios.usuarios.eliminar',
     },
   ], [updatingUserId])
 
@@ -490,7 +493,11 @@ function UsuariosPageContent() {
           <h1 className="text-3xl font-bold tracking-tight text-[#374151]">Usuarios</h1>
           <p className="text-[#6b7280]">Gestiona los usuarios del sistema y sus accesos</p>
         </div>
-        <ActionButton onClick={handleCreateUser} className="w-full sm:w-auto">
+        <ActionButton
+          onClick={handleCreateUser}
+          className="w-full sm:w-auto"
+          permissionCode="usuarios.usuarios.crear"
+        >
           Nuevo Usuario
         </ActionButton>
       </div>

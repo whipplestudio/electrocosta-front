@@ -1385,7 +1385,6 @@ export default function ProyectosPage() {
           proyectoNombre={proyectoAEliminar.nombre}
           onDeleted={() => {
             cargarProyectos(searchTerm, page, limit)
-            cargarDatosFinancieros()
           }}
         />
       )}

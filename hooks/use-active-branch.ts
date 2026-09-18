@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { useRouter } from 'next/navigation'
 import { ACTIVE_BRANCH_KEY, ALL_BRANCHES } from '@/lib/api-client'
 import type { User } from '@/types/users'
 
@@ -28,7 +27,6 @@ const readState = (): ActiveBranchState => {
 }
 
 export function useActiveBranch() {
-  const router = useRouter()
   const [state, setState] = React.useState<ActiveBranchState>({ user: null, activeBranchId: null })
 
   React.useEffect(() => {
@@ -43,14 +41,15 @@ export function useActiveBranch() {
     }
   }, [])
 
-  const setActiveBranch = React.useCallback(
-    (branchId: string) => {
-      localStorage.setItem(ACTIVE_BRANCH_KEY, branchId)
-      window.dispatchEvent(new Event(ACTIVE_BRANCH_EVENT))
-      router.refresh()
-    },
-    [router],
-  )
+  const setActiveBranch = React.useCallback((branchId: string) => {
+    localStorage.setItem(ACTIVE_BRANCH_KEY, branchId)
+    // Refleja ya la elección en el propio selector mientras el navegador recarga
+    window.dispatchEvent(new Event(ACTIVE_BRANCH_EVENT))
+    // Las pantallas cargan sus datos por useEffect de cliente, sin depender de
+    // activeBranchId: un router.refresh() no les llega. Se recarga entera para
+    // que todas vuelvan a pedir los datos con la sucursal recién guardada.
+    window.location.reload()
+  }, [])
 
   const isGlobal = state.user?.role?.scope === 'GLOBAL'
 

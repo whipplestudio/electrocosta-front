@@ -113,7 +113,6 @@ export default function CuentasPagarPage() {
     dueDate: undefined as Date | undefined,
     description: "",
   })
-  console.log("🚀 ~ CuentasPagarPage ~ formData:", formData)
 
   // Totales agregados del conjunto filtrado, tal como los devuelve la API
   const [summary, setSummary] = useState<AccountsPayableSummary>({
@@ -192,11 +191,8 @@ export default function CuentasPagarPage() {
 
       // Filtrar solo categorías de tipo "expense" (egresos)
       const expenseCategories = categoriesResp.data.filter((cat) => cat.type === 'expense')
-      console.log('📊 Total de categorías:', categoriesResp.data.length)
-      console.log('💸 Categorías de egreso:', expenseCategories.length)
 
       if (expenseCategories.length === 0 && categoriesResp.data.length > 0) {
-        console.warn('⚠️ Hay categorías creadas pero ninguna es de tipo "Egreso"')
         toast.warning('No hay categorías de tipo "Egreso". Crea categorías de egreso en el módulo de Categorías.')
       }
 
@@ -320,7 +316,6 @@ export default function CuentasPagarPage() {
   }
 
   const handleEditarCuenta = useCallback((cuenta: AccountPayable) => {
-    console.log("🚀 ~ handleEditarCuenta ~ cuenta:", cuenta)
     setSelectedAccount(cuenta)
 
     // Detectar tipo de IVA basándose en el valor
@@ -556,7 +551,6 @@ export default function CuentasPagarPage() {
       setUploadResponse(response)
       toast.success(`${response.registrosDetectados} registros detectados`)
     } catch (error: any) {
-      console.log("🚀 ~ handleUpload ~ error:", error)
       toast.error(error?.response?.data?.message || 'Error al subir archivo')
     } finally {
       setLoading(false)

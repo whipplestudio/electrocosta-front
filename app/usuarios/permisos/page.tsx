@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { rolesService } from "@/services/roles.service"
 import { permissionsService, type Permission } from "@/services/permissions.service"
 import { useToast } from "@/hooks/use-toast"
+import { usePermissions } from "@/hooks/use-permissions"
 import type { Role } from "@/types/users"
 import { RouteProtection } from "@/components/route-protection"
 
@@ -22,6 +23,8 @@ export default function PermisosPage() {
 
 function PermisosPageContent() {
   const { toast } = useToast()
+  const { hasPermission } = usePermissions()
+  const canEditPermissions = hasPermission('usuarios.permisos.editar')
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [updatingPermission, setUpdatingPermission] = useState<string | null>(null)
@@ -77,10 +80,10 @@ function PermisosPageContent() {
     usuarios: "Usuarios y Roles",
     cuentas_cobrar: "Cuentas por Cobrar",
     cuentas_pagar: "Cuentas por Pagar",
-    reportes: "Reportes",
     dashboard: "Dashboard",
     carga_informacion: "Proyectos",
     clientes: "Clientes",
+    categorias: "Categorías",
   }
 
   const resourceNames: Record<string, string> = {
@@ -93,7 +96,6 @@ function PermisosPageContent() {
     programacion: "Programación",
     aprobacion: "Aprobación",
     reportes: "Reportes",
-    detallados: "Reportes Detallados",
     general: "Dashboard General",
     financiero: "Dashboard Financiero",
     modulo: "Acceso al Módulo",
@@ -102,6 +104,7 @@ function PermisosPageContent() {
     proyectos: "Proyectos",
     anticipos: "Anticipos",
     clientes: "Clientes",
+    categorias: "Categorías",
   }
 
   const actionNames: Record<string, string> = {
@@ -129,10 +132,10 @@ function PermisosPageContent() {
       usuarios: 'bg-blue-50 text-blue-700 border-blue-200',
       cuentas_cobrar: 'bg-green-50 text-green-700 border-green-200',
       cuentas_pagar: 'bg-red-50 text-red-700 border-red-200',
-      reportes: 'bg-purple-50 text-purple-700 border-purple-200',
       dashboard: 'bg-cyan-50 text-cyan-700 border-cyan-200',
       carga_informacion: 'bg-amber-50 text-amber-700 border-amber-200',
       clientes: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      categorias: 'bg-purple-50 text-purple-700 border-purple-200',
     }
     return colors[module] || 'bg-gray-50 text-gray-700 border-gray-200'
   }
@@ -299,12 +302,12 @@ function PermisosPageContent() {
                                     ) : (
                                       <Switch
                                         checked={isChecked}
-                                        disabled={updatingPermission !== null || isSuperAdmin}
+                                        disabled={updatingPermission !== null || isSuperAdmin || !canEditPermissions}
                                         onCheckedChange={(checked) => {
                                           handleTogglePermission(role.id, permission.code, checked)
                                         }}
                                         className={cn(
-                                          isSuperAdmin && "opacity-50 cursor-not-allowed",
+                                          (isSuperAdmin || !canEditPermissions) && "opacity-50 cursor-not-allowed",
                                           "data-[state=checked]:bg-[#164e63]"
                                         )}
                                       />

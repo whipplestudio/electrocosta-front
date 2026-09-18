@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { permissionsService } from '@/services/permissions.service'
+import { usePermissions } from '@/hooks/use-permissions'
 
 interface RoutePermissionMap {
   path: string
@@ -8,8 +8,17 @@ interface RoutePermissionMap {
   name: string
 }
 
-// Mapa de rutas y sus permisos requeridos
+// Mapa de rutas y sus permisos requeridos.
+// Solo rutas con página real bajo `app/`: esta lista es además el origen del
+// fallback de redirección (ver `availableRoutes` más abajo), así que una
+// entrada sin página mandaría al usuario a un 404. `/dashboard` va primero
+// para que sea el aterrizaje preferente de quien tenga acceso a él.
 const ROUTE_PERMISSIONS: RoutePermissionMap[] = [
+  {
+    path: '/dashboard',
+    requiredPermissions: ['dashboard.general.ver'],
+    name: 'Dashboard',
+  },
   {
     path: '/usuarios',
     requiredPermissions: ['usuarios.usuarios.ver'],
@@ -17,23 +26,18 @@ const ROUTE_PERMISSIONS: RoutePermissionMap[] = [
   },
   {
     path: '/clientes',
-    requiredPermissions: ['clientes.clientes.listar', 'clientes.clientes.leer'],
+    requiredPermissions: ['clientes.clientes.ver'],
     name: 'Clientes',
   },
   {
-    path: '/clientes/nuevo',
-    requiredPermissions: ['clientes.clientes.crear'],
-    name: 'Nuevo Cliente',
+    path: '/categorias',
+    requiredPermissions: ['categorias.categorias.ver'],
+    name: 'Categorías',
   },
   {
-    path: '/clientes/:id',
-    requiredPermissions: ['clientes.clientes.leer', 'clientes.clientes.listar'],
-    name: 'Detalle Cliente',
-  },
-  {
-    path: '/clientes/:id/editar',
-    requiredPermissions: ['clientes.clientes.actualizar'],
-    name: 'Editar Cliente',
+    path: '/proyectos',
+    requiredPermissions: ['carga_informacion.proyectos.ver'],
+    name: 'Proyectos',
   },
   {
     path: '/cuentas-cobrar',
@@ -41,19 +45,9 @@ const ROUTE_PERMISSIONS: RoutePermissionMap[] = [
     name: 'Registro Cuentas por Cobrar',
   },
   {
-    path: '/cuentas-cobrar/seguimiento',
-    requiredPermissions: ['cuentas_cobrar.seguimiento.ver'],
-    name: 'Seguimiento',
-  },
-  {
     path: '/cuentas-cobrar/pagos',
     requiredPermissions: ['cuentas_cobrar.pagos.ver'],
     name: 'Aplicación de Pagos',
-  },
-  {
-    path: '/cuentas-cobrar/reportes',
-    requiredPermissions: ['cuentas_cobrar.reportes.ver'],
-    name: 'Reportes',
   },
   {
     path: '/cuentas-pagar',
@@ -64,31 +58,6 @@ const ROUTE_PERMISSIONS: RoutePermissionMap[] = [
     path: '/cuentas-pagar/pagos',
     requiredPermissions: ['cuentas_pagar.pagos.ver'],
     name: 'Aplicación de Pagos',
-  },
-  {
-    path: '/carga-informacion/ventas',
-    requiredPermissions: ['carga_informacion.ventas.ver'],
-    name: 'Carga de Ventas',
-  },
-  {
-    path: '/carga-informacion/gastos',
-    requiredPermissions: ['carga_informacion.gastos.ver'],
-    name: 'Carga de Gastos',
-  },
-  {
-    path: '/carga-informacion/proyectos',
-    requiredPermissions: ['carga_informacion.proyectos.ver'],
-    name: 'Carga de Proyectos',
-  },
-  {
-    path: '/reportes',
-    requiredPermissions: ['reportes.detallados.ver'],
-    name: 'Reportes Detallados',
-  },
-  {
-    path: '/dashboard',
-    requiredPermissions: ['dashboard.general.ver'],
-    name: 'Dashboard',
   },
 ]
 
@@ -102,91 +71,69 @@ export function useRouteProtection(
 ): UseRouteProtectionResult {
   const router = useRouter()
   const pathname = usePathname()
+  // Permisos del contexto: ya los pidió el provider una sola vez por sesión.
+  // Si la carga falló, llegan vacíos (falla cerrado) y este guard trata el caso
+  // como "sin acceso a ningún módulo".
+  const { permissionCodes, isLoading: permissionsLoading } = usePermissions()
   const [isChecking, setIsChecking] = useState(true)
   const [hasAccess, setHasAccess] = useState(false)
 
   useEffect(() => {
-    let isMounted = true
-
-    async function checkAccess() {
-      try {
-        setIsChecking(true)
-
-        // Obtener permisos del usuario
-        const userPermissions = await permissionsService.getMyPermissionCodes()
-
-        if (!isMounted) return
-
-        // Verificar si tiene al menos uno de los permisos requeridos
-        const hasRequiredPermission = requiredPermissions.some((permission) =>
-          userPermissions.includes(permission)
-        )
-
-        if (hasRequiredPermission) {
-          setHasAccess(true)
-          setIsChecking(false)
-          return
-        }
-
-        // No tiene acceso a esta ruta, buscar una ruta alternativa
-        const availableRoutes = ROUTE_PERMISSIONS.filter((route) =>
-          route.requiredPermissions.some((perm) =>
-            userPermissions.includes(perm)
-          )
-        )
-
-        if (availableRoutes.length > 0) {
-          // Redirigir a la primera ruta disponible
-          console.log(
-            `Redirigiendo a ${availableRoutes[0].name}: ${availableRoutes[0].path}`
-          )
-          router.replace(availableRoutes[0].path)
-        } else {
-          // No tiene acceso a ninguna ruta, cerrar sesión
-          console.log('Usuario sin permisos para ningún módulo')
-          
-          // Limpiar sesión
-          localStorage.removeItem('accessToken')
-          localStorage.removeItem('refreshToken')
-          localStorage.removeItem('currentUser')
-          localStorage.removeItem('authToken')
-          localStorage.removeItem('userData')
-          sessionStorage.clear()
-
-          // Redirigir al login con mensaje de error
-          router.replace(
-            '/login?error=no_permissions&message=' +
-              encodeURIComponent(
-                'No tienes permisos para acceder a ningún módulo. Contacta con un administrador.'
-              )
-          )
-        }
-      } catch (error) {
-        console.error('Error verificando permisos:', error)
-        
-        if (!isMounted) return
-
-        // En caso de error, cerrar sesión por seguridad
-        localStorage.removeItem('accessToken')
-        localStorage.removeItem('refreshToken')
-        localStorage.removeItem('currentUser')
-        localStorage.removeItem('authToken')
-        localStorage.removeItem('userData')
-        sessionStorage.clear()
-        router.replace('/login')
-      } finally {
-        if (isMounted) {
-          setIsChecking(false)
-        }
-      }
+    // Mientras el provider resuelve no se decide nada: concluir aquí con la
+    // lista vacía cerraría la sesión de un usuario legítimo.
+    if (permissionsLoading) {
+      setIsChecking(true)
+      return
     }
 
-    checkAccess()
+    setIsChecking(true)
 
-    return () => {
-      isMounted = false
+    // Verificar si tiene al menos uno de los permisos requeridos
+    const hasRequiredPermission = requiredPermissions.some((permission) =>
+      permissionCodes.includes(permission)
+    )
+
+    if (hasRequiredPermission) {
+      setHasAccess(true)
+      setIsChecking(false)
+      return
     }
-  }, [pathname, router]) // removed requiredPermissions to prevent infinite loop when array reference changes
+
+    setHasAccess(false)
+
+    // No tiene acceso a esta ruta, buscar una ruta alternativa
+    const availableRoutes = ROUTE_PERMISSIONS.filter((route) =>
+      route.requiredPermissions.some((perm) => permissionCodes.includes(perm))
+    )
+
+    if (availableRoutes.length > 0) {
+      // Redirigir a la primera ruta disponible
+      router.replace(availableRoutes[0].path)
+    } else {
+      // No tiene acceso a ninguna ruta, cerrar sesión
+
+      // Limpiar sesión
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('refreshToken')
+      localStorage.removeItem('currentUser')
+      localStorage.removeItem('activeBranchId')
+      localStorage.removeItem('authToken')
+      localStorage.removeItem('userData')
+      sessionStorage.clear()
+
+      // Redirigir al login con mensaje de error
+      router.replace(
+        '/login?error=no_permissions&message=' +
+          encodeURIComponent(
+            'No tienes permisos para acceder a ningún módulo. Contacta con un administrador.'
+          )
+      )
+    }
+
+    setIsChecking(false)
+    // requiredPermissions queda fuera de las dependencias a propósito: llega
+    // como literal de array y su referencia cambia en cada render.
+  }, [permissionCodes, permissionsLoading, pathname, router])
 
   return { isChecking, hasAccess }
 }

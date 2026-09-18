@@ -21,9 +21,10 @@ import {
   X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { permissionsService } from "@/services/permissions.service"
 import { authService } from "@/services/auth.service"
+import { usePermissions } from "@/hooks/use-permissions"
 import { Skeleton } from "@/components/ui/skeleton"
+import { BranchSwitcher } from "@/components/branch-switcher"
 
 interface SidebarProps {
   className?: string
@@ -133,8 +134,10 @@ export function AppSidebar({ className, mobileOpen = false, onMobileClose }: Sid
   const [collapsed, setCollapsed] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [expandedMenus, setExpandedMenus] = useState<string[]>([])
-  const [userPermissionCodes, setUserPermissionCodes] = useState<string[]>([])
-  const [permissionsLoading, setPermissionsLoading] = useState(true)
+  const [currentUser, setCurrentUser] = useState<{ nombre: string; rol: string } | null>(null)
+  // Los permisos vienen del provider montado en conditional-layout: se piden
+  // una sola vez por sesión, no en cada montaje del sidebar.
+  const { hasAnyPermission, isLoading: permissionsLoading } = usePermissions()
   const pathname = usePathname()
   const router = useRouter()
 
@@ -148,31 +151,15 @@ export function AppSidebar({ className, mobileOpen = false, onMobileClose }: Sid
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  // Cargar permisos del usuario autenticado al montar el sidebar
+  // El usuario vive en localStorage, así que solo se puede leer ya montado.
   useEffect(() => {
-    let isMounted = true
-
-    permissionsService
-      .getMyPermissionCodes()
-      .then((codes) => {
-        if (isMounted) {
-          console.log('🔑 Permisos del usuario cargados:', codes)
-          setUserPermissionCodes(codes)
-          setPermissionsLoading(false)
-        }
-      })
-      .catch((error) => {
-        console.error('Error cargando permisos del usuario:', error)
-        if (isMounted) {
-          // Si falla la carga, establecemos permisos vacíos (sin acceso)
-          setUserPermissionCodes([])
-          setPermissionsLoading(false)
-        }
-      })
-
-    return () => {
-      isMounted = false
-    }
+    const user = authService.getCurrentUser()
+    if (!user) return
+    const nombre = [user.firstName, user.lastName].filter(Boolean).join(' ')
+    setCurrentUser({
+      nombre: nombre || user.email || 'Sin nombre',
+      rol: user.role?.name ?? 'Sin rol',
+    })
   }, [])
 
   const isActiveRoute = (href: string, submenu?: { href: string }[]) => {
@@ -187,24 +174,13 @@ export function AppSidebar({ className, mobileOpen = false, onMobileClose }: Sid
     setExpandedMenus((prev) => (prev.includes(href) ? prev.filter((item) => item !== href) : [...prev, href]))
   }
 
-  const hasModuleAccess = (requiredCodes?: string[]) => {
-    // Si no se requieren permisos específicos, permitir acceso
-    if (!requiredCodes || requiredCodes.length === 0) return true
-    
-    // Si los permisos están cargando, no mostrar nada aún
-    if (permissionsLoading) return false
-    
-    // Verificar si el usuario tiene al menos uno de los permisos requeridos
-    return requiredCodes.some((code) => userPermissionCodes.includes(code))
-  }
-
-  // Nueva función: Verifica si el usuario tiene acceso a CUALQUIER submenú del módulo
+  // Verifica si el usuario tiene acceso a CUALQUIER submenú del módulo
   const hasAnySubmenuAccess = (submenu?: Array<{ requiredPermissionCodes?: string[] }>) => {
     if (!submenu || submenu.length === 0) return false
     if (permissionsLoading) return false
     
     return submenu.some((subitem) => 
-      hasModuleAccess((subitem as any).requiredPermissionCodes)
+      hasAnyPermission((subitem as any).requiredPermissionCodes)
     )
   }
 
@@ -280,7 +256,7 @@ export function AppSidebar({ className, mobileOpen = false, onMobileClose }: Sid
         ) : (
           menuItems.map((item) => {
           // Verificar si tiene acceso directo al módulo O a algún submenú
-          const hasDirectAccess = hasModuleAccess(item.requiredPermissionCodes)
+          const hasDirectAccess = hasAnyPermission(item.requiredPermissionCodes)
           const hasSubmenuAccess = hasAnySubmenuAccess(item.submenu as any)
           
           if (!hasDirectAccess && !hasSubmenuAccess) {
@@ -338,7 +314,7 @@ export function AppSidebar({ className, mobileOpen = false, onMobileClose }: Sid
               {hasSubmenu && !collapsed && isExpanded && (
                 <div className="ml-4 mt-1 space-y-0.5">
                   {item.submenu
-                    ?.filter((subitem) => hasModuleAccess((subitem as any).requiredPermissionCodes))
+                    ?.filter((subitem) => hasAnyPermission((subitem as any).requiredPermissionCodes))
                     .map((subitem) => {
                       const isSubActive = pathname === subitem.href
                       return (
@@ -369,10 +345,12 @@ export function AppSidebar({ className, mobileOpen = false, onMobileClose }: Sid
 
       {/* Footer - Material Design 3 */}
       <div className="px-3 py-4 border-t border-[#e5e7eb] space-y-2">
+        <BranchSwitcher collapsed={collapsed} />
+
         {!collapsed && (
           <div className="text-xs text-[#6b7280] space-y-1 px-3 py-2 bg-[#f9fafb] rounded-xl">
-            <p className="font-semibold text-[#374151]">Usuario: Admin</p>
-            <p className="font-medium">Rol: Administrador</p>
+            <p className="font-semibold text-[#374151]">Usuario: {currentUser?.nombre ?? '—'}</p>
+            <p className="font-medium">Rol: {currentUser?.rol ?? '—'}</p>
             <p className="text-[10px] text-[#9ca3af]">Versión 1.0.0</p>
           </div>
         )}

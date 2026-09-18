@@ -29,6 +29,7 @@ import {
 } from '@mui/icons-material'
 import { FloatingInput } from './floating-input'
 import { FloatingSelect, SelectOption } from './floating-select'
+import { usePermissionGate } from '@/hooks/use-permissions'
 
 // System colors from globals.css (Tailwind theme)
 const SYSTEM_COLORS = {
@@ -60,6 +61,10 @@ export interface Action<T> {
   onClick: (row: T) => void
   disabled?: (row: T) => boolean
   hidden?: (row: T) => boolean
+  // Código exacto del catálogo (`modulo.recurso.accion`). Sin él, la acción se
+  // oculta igual que con `hidden`: el gating no añade un canal nuevo, se suma
+  // al filtro que ya decide qué entradas del menú se pintan.
+  permissionCode?: string
 }
 
 export interface PaginationMeta {
@@ -275,6 +280,7 @@ function MD3TablePagination({
 
 // Actions menu component
 function ActionsMenu<T>({ actions, row }: { actions: Action<T>[]; row: T }) {
+  const isAllowed = usePermissionGate()
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null)
   const open = Boolean(anchorEl)
   const menuRef = React.useRef<HTMLDivElement>(null)
@@ -302,7 +308,9 @@ function ActionsMenu<T>({ actions, row }: { actions: Action<T>[]; row: T }) {
     }
   }
 
-  const visibleActions = actions.filter((action) => !action.hidden?.(row))
+  const visibleActions = actions.filter(
+    (action) => isAllowed(action.permissionCode) && !action.hidden?.(row)
+  )
 
   if (visibleActions.length === 0) return null
 

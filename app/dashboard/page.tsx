@@ -10,6 +10,7 @@ import apiClient from "@/lib/api-client"
 import { toast } from "sonner"
 import { FloatingDatePicker, DateSelection, KpiCard, FloatingSelect, SelectOption } from "@/components/ui"
 import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
+import { RouteProtection } from "@/components/route-protection"
 
 interface Proyecto {
   id: string
@@ -658,6 +659,14 @@ function DashboardContent() {
 }
 
 export default function DashboardPage() {
+  return (
+    <RouteProtection requiredPermissions={["dashboard.general.ver"]}>
+      <DashboardPageContent />
+    </RouteProtection>
+  )
+}
+
+function DashboardPageContent() {
   return (
     <Suspense fallback={
       <div className="p-4 md:p-6 space-y-4">

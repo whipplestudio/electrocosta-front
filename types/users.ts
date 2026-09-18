@@ -4,6 +4,15 @@
 
 export type UserStatus = 'pendiente' | 'activo' | 'inactivo' | 'bloqueado';
 
+export type RoleScope = 'BRANCH' | 'GLOBAL';
+
+export interface Branch {
+  id: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -14,6 +23,7 @@ export interface User {
   cargo?: string;
   roleId: string;
   departmentId?: string;
+  branchId: string;
   status: UserStatus;
   emailVerified: boolean;
   emailVerifiedAt?: string;
@@ -25,6 +35,7 @@ export interface User {
   deletedAt?: string;
   role: Role;
   department?: Department;
+  branch: Branch;
 }
 
 export interface Role {
@@ -32,6 +43,7 @@ export interface Role {
   name: string;
   description: string;
   level: number;
+  scope: RoleScope;
   isSystem: boolean;
   createdAt: string;
   updatedAt: string;

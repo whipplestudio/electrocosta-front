@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
+import apiClient from "@/lib/api-client"
 
 interface Documento {
   id: string
@@ -40,22 +41,11 @@ export function DocumentViewer({ entidadTipo, entidadId }: DocumentViewerProps) 
   const cargarDocumentos = async () => {
     try {
       setLoading(true)
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/documentos/entidad/${entidadTipo}/${entidadId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-          },
-        }
+      const response = await apiClient.get<Documento[]>(
+        `/documentos/entidad/${entidadTipo}/${entidadId}`
       )
-
-      if (!response.ok) {
-        throw new Error("Error al cargar documentos")
-      }
-
-      const data = await response.json()
-      setDocumentos(data)
-    } catch (error: any) {
+      setDocumentos(response.data)
+    } catch (error) {
       console.error("Error loading documents:", error)
       toast.error("Error al cargar documentos")
     } finally {
@@ -63,28 +53,37 @@ export function DocumentViewer({ entidadTipo, entidadId }: DocumentViewerProps) 
     }
   }
 
+  // La URL de acceso la emite el back: storageUrl es la ruta interna del almacenamiento
+  const obtenerUrlDocumento = async (doc: Documento): Promise<string> => {
+    const response = await apiClient.get<{ url: string }>(`/documentos/${doc.id}/url`)
+    return response.data.url
+  }
+
   const handleVisualizarDocumento = async (doc: Documento) => {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/documentos/${doc.id}/url`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-          },
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error("Error al obtener URL")
-      }
-
-      const data = await response.json()
-      setViewerUrl(data.url)
+      setViewerUrl(await obtenerUrlDocumento(doc))
       setSelectedDoc(doc)
       setShowViewer(true)
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error getting document URL:", error)
       toast.error("Error al visualizar documento")
+    }
+  }
+
+  const handleDescargarDocumento = async (doc: Documento) => {
+    // La pestaña se abre antes de la petición: tras un await el navegador la bloquearía como popup
+    const pestana = window.open("", "_blank")
+    try {
+      const url = await obtenerUrlDocumento(doc)
+      if (pestana) {
+        pestana.location.href = url
+      } else {
+        window.open(url, "_blank")
+      }
+    } catch (error) {
+      pestana?.close()
+      console.error("Error getting document URL:", error)
+      toast.error("Error al descargar documento")
     }
   }
 
@@ -159,7 +158,7 @@ export function DocumentViewer({ entidadTipo, entidadId }: DocumentViewerProps) 
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => window.open(doc.storageUrl, "_blank")}
+                onClick={() => handleDescargarDocumento(doc)}
               >
                 <Download className="h-4 w-4" />
               </Button>

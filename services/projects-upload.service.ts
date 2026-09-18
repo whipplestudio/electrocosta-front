@@ -18,7 +18,6 @@ export interface CrearProyectoData {
   presupuestoOtros: number
   presupuestoTotal: number
   responsableEmail: string
-  areaId: string
   estado: string
   prioridad: string
   descripcion?: string

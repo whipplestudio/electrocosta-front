@@ -23,6 +23,7 @@ import { CheckCircle, Clock, DollarSign, History, CreditCard, Building2, FileTex
 import { accountsPayableService } from "@/services/accounts-payable.service"
 import type { AccountPayable, AccountsPayableSummary, RegisterPaymentDto, UpdatePaymentDto, Payment, AccountPayableStatus, PaymentMethod } from "@/types/accounts-payable"
 import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
+import { RouteProtection } from "@/components/route-protection"
 
 const paymentMethodLabels: Record<string, string> = {
   transfer: 'Transferencia',
@@ -60,6 +61,14 @@ const formatCurrency = (value: number | string): string => {
 }
 
 export default function PagosPage() {
+  return (
+    <RouteProtection requiredPermissions={["cuentas_pagar.pagos.ver"]}>
+      <PagosPageContent />
+    </RouteProtection>
+  )
+}
+
+function PagosPageContent() {
   const [accounts, setAccounts] = useState<AccountPayable[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(false)
@@ -332,6 +341,7 @@ export default function PagosPage() {
       label: 'Registrar Pago',
       icon: <DollarSign className="h-4 w-4" />,
       onClick: (row) => handleRegistrarPago(row),
+      permissionCode: 'cuentas_pagar.pagos.registrar',
     },
     {
       label: 'Ver Historial',
@@ -755,6 +765,7 @@ export default function PagosPage() {
                     icon: <Pencil className="h-4 w-4" />,
                     label: 'Editar pago',
                     onClick: (payment: Payment) => handleEditarPago(payment),
+                    permissionCode: 'cuentas_pagar.pagos.registrar',
                   },
                 ]}
                 loading={loadingPayments}

@@ -28,9 +28,8 @@ import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 import { projectsUploadService, type CrearProyectoData, type ProyectoListadoSummary } from "@/services/projects-upload.service"
-import { handleApiError } from "@/lib/api-client"
+import apiClient, { handleApiError } from "@/lib/api-client"
 import { clientsService, type ClientSimple } from "@/services/clients.service"
-import { areasService, type AreaSimple } from "@/services/areas.service"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
 import { BulkUploadGuideDialogProyectos } from "@/components/bulk-upload-guide-dialog-proyectos"
 import { DeleteProjectDialog } from "@/components/delete-project-dialog"
@@ -42,6 +41,7 @@ import { DynamicForm, FormSection, useDynamicForm } from "@/components/ui/dynami
 import { FinancialAmountSection } from "@/components/financial"
 import type { IvaType } from "@/components/financial"
 import { formatCurrency as fmtCurrency } from "@/lib/format"
+import { RouteProtection } from "@/components/route-protection"
 
 // Helper para formatear fechas ISO sin conversión de zona horaria
 const formatDateWithoutTimezone = (dateString: string | undefined): string => {
@@ -60,6 +60,14 @@ const formatDateWithoutTimezone = (dateString: string | undefined): string => {
 }
 
 export default function ProyectosPage() {
+  return (
+    <RouteProtection requiredPermissions={["carga_informacion.proyectos.ver"]}>
+      <ProyectosPageContent />
+    </RouteProtection>
+  )
+}
+
+function ProyectosPageContent() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   // Estados básicos
@@ -101,13 +109,6 @@ export default function ProyectosPage() {
   const [openClientePopover, setOpenClientePopover] = useState(false)
   const [openClientePopoverEdit, setOpenClientePopoverEdit] = useState(false)
   
-  // Estados para áreas
-  const [areas, setAreas] = useState<AreaSimple[]>([])
-  const [loadingAreas, setLoadingAreas] = useState(false)
-  
-  const [openAreaPopover, setOpenAreaPopover] = useState(false)
-  const [openAreaPopoverEdit, setOpenAreaPopoverEdit] = useState(false)
-  
   // Estados para carga masiva
   const [archivo, setArchivo] = useState<File | null>(null)
   const [uploadResponse, setUploadResponse] = useState<any>(null)
@@ -132,7 +133,6 @@ export default function ProyectosPage() {
     presupuestoManoObra: '',
     presupuestoOtros: '',
     responsableEmail: '',
-    areaId: '',
     estado: 'planificacion',
     prioridad: 'media',
     descripcion: '',
@@ -186,15 +186,8 @@ export default function ProyectosPage() {
   const cargarUsuarios = useCallback(async () => {
     try {
       setLoadingUsuarios(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/simple/list`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setUsuarios(data)
-      }
+      const response = await apiClient.get<any[]>('/users/simple/list')
+      setUsuarios(response.data)
     } catch (error) {
       console.error('Error al cargar usuarios:', error)
     } finally {
@@ -216,25 +209,10 @@ export default function ProyectosPage() {
     }
   }, [])
 
-  // Cargar áreas
-  const cargarAreas = useCallback(async () => {
-    try {
-      setLoadingAreas(true)
-      const data = await areasService.getSimpleList()
-      setAreas(data)
-    } catch (error) {
-      console.error('Error al cargar áreas:', error)
-      toast.error('No se pudieron cargar las áreas')
-    } finally {
-      setLoadingAreas(false)
-    }
-  }, [])
-
   useEffect(() => {
     cargarProyectos(searchTerm, page, limit)
     cargarUsuarios()
     cargarClientes()
-    cargarAreas()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -297,7 +275,6 @@ export default function ProyectosPage() {
       presupuestoManoObra: '',
       presupuestoOtros: '',
       responsableEmail: '',
-      areaId: '',
       estado: 'planificacion',
       prioridad: 'media',
       descripcion: '',
@@ -411,7 +388,6 @@ export default function ProyectosPage() {
         presupuestoOtros: parseFloat(nuevoProyecto.presupuestoOtros) || 0,
         presupuestoTotal: parseFloat(nuevoProyecto.presupuestoTotal),
         responsableEmail: nuevoProyecto.responsableEmail,
-        areaId: nuevoProyecto.areaId,
         estado: nuevoProyecto.estado,
         prioridad: nuevoProyecto.prioridad,
         descripcion: nuevoProyecto.descripcion,
@@ -607,7 +583,6 @@ export default function ProyectosPage() {
         presupuestoOtros: proyecto.presupuestoOtros?.toString() || '',
         presupuestoTotal: proyecto.presupuestoTotal?.toString() || '',
         responsableEmail: proyecto.responsable?.email || '',
-        areaId: proyecto.areaId || '',
         estado: proyecto.estado || 'planificacion',
         prioridad: proyecto.prioridad || 'media',
         descripcion: proyecto.descripcion || '',
@@ -666,7 +641,6 @@ export default function ProyectosPage() {
     fechaFin: formatDateWithoutTimezone(p.fechaFinEstimada),
     estado: p.status === 'activo' ? 'Activo' : 'Inactivo',
     responsable: p.responsable ? `${p.responsable.firstName} ${p.responsable.lastName}` : 'N/A',
-    categoria: p.area?.name || 'General',
     empresa: p.empresa || '',
     status: p.status || 'activo',
   }))
@@ -704,7 +678,6 @@ export default function ProyectosPage() {
       render: (proyecto) => (
         <div>
           <div className="font-medium text-[#374151]">{proyecto.cliente}</div>
-          <div className="text-sm text-[#6b7280]">{proyecto.categoria}</div>
         </div>
       ),
     },
@@ -715,15 +688,6 @@ export default function ProyectosPage() {
         <div className="text-sm text-[#374151]">
           {proyecto.empresa || <span className="text-[#d1d5db]">—</span>}
         </div>
-      ),
-    },
-    {
-      key: 'categoria',
-      header: 'Área',
-      render: (proyecto) => (
-        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs border border-[#e5e7eb] bg-white text-[#374151]">
-          {proyecto.categoria}
-        </span>
       ),
     },
     {
@@ -768,23 +732,27 @@ export default function ProyectosPage() {
       label: 'Editar',
       icon: <Edit size={16} />,
       onClick: (proyecto) => abrirEditarProyecto(proyecto.id),
+      permissionCode: 'carga_informacion.proyectos.editar',
     },
     {
       label: 'Desactivar',
       icon: <Trash2 size={16} />,
       onClick: (proyecto) => toggleProyectoStatus(proyecto.id, proyecto.nombre, proyecto.status),
       hidden: (proyecto) => proyecto.status !== 'activo',
+      permissionCode: 'carga_informacion.proyectos.editar',
     },
     {
       label: 'Activar',
       icon: <Power size={16} />,
       onClick: (proyecto) => toggleProyectoStatus(proyecto.id, proyecto.nombre, proyecto.status),
       hidden: (proyecto) => proyecto.status !== 'inactivo',
+      permissionCode: 'carga_informacion.proyectos.editar',
     },
     {
       label: 'Eliminar permanentemente',
       icon: <AlertTriangle size={16} />,
       onClick: (proyecto) => abrirEliminarProyecto(proyecto.id, proyecto.nombre),
+      permissionCode: 'carga_informacion.proyectos.eliminar',
     },
   ], [])
 
@@ -854,6 +822,7 @@ export default function ProyectosPage() {
                   size="sm"
                   className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={<Upload className="h-4 w-4" />}
+                  permissionCode="carga_informacion.proyectos.crear"
                 >
                   Carga Masiva
                 </ActionButton>
@@ -869,7 +838,7 @@ export default function ProyectosPage() {
             </Tooltip>
           </TooltipProvider>
           {/* Botón Nuevo Proyecto */}
-          <ActionButton onClick={() => setOpenDialog(true)} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
+          <ActionButton onClick={() => setOpenDialog(true)} size="sm" className="w-full md:w-auto md:h-9 md:px-3" permissionCode="carga_informacion.proyectos.crear">
             Nuevo Proyecto
           </ActionButton>
 
@@ -1289,7 +1258,7 @@ export default function ProyectosPage() {
                 </div>
               </div>
 
-              {/* Responsable y Área */}
+              {/* Responsable */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex items-start gap-3">
                   <div className="h-9 w-9 rounded-full bg-[#164e63]/10 flex items-center justify-center flex-shrink-0">
@@ -1306,16 +1275,6 @@ export default function ProyectosPage() {
                     {proyectoSeleccionado.responsable?.email && (
                       <div className="text-xs text-muted-foreground">{proyectoSeleccionado.responsable.email}</div>
                     )}
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <div className="h-9 w-9 rounded-full bg-[#84cc16]/10 flex items-center justify-center flex-shrink-0">
-                    <Briefcase className="h-4 w-4 text-[#65a30d]" />
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Área</div>
-                    <div className="text-sm font-medium">{proyectoSeleccionado.area?.name || 'Sin área'}</div>
                   </div>
                 </div>
               </div>
@@ -1392,7 +1351,6 @@ export default function ProyectosPage() {
           proyectoNombre={proyectoAEliminar.nombre}
           onDeleted={() => {
             cargarProyectos(searchTerm, page, limit)
-            cargarDatosFinancieros()
           }}
         />
       )}

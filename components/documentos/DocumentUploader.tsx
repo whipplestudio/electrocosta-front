@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
+import apiClient, { handleApiError } from "@/lib/api-client"
 
 interface DocumentUploaderProps {
   tipoDocumento: string
@@ -80,20 +81,13 @@ export function DocumentUploader({
       if (entidadId) formData.append("entidadId", entidadId)
       formData.append("esPublico", "false")
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/documentos/upload`, {
-        method: "POST",
+      const response = await apiClient.post("/documentos/upload", formData, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          "Content-Type": "multipart/form-data",
         },
-        body: formData,
       })
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Error al subir documento")
-      }
-
-      const documento = await response.json()
+      const documento = response.data
       toast.success("Documento subido exitosamente")
       
       if (onSuccess) {
@@ -104,9 +98,9 @@ export function DocumentUploader({
       setFile(null)
       setDescripcion("")
       setTags("")
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error uploading document:", error)
-      toast.error(error.message || "Error al subir documento")
+      toast.error(handleApiError(error))
     } finally {
       setUploading(false)
     }

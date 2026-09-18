@@ -20,8 +20,17 @@ import { DynamicForm, FormSection } from "@/components/forms"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
 import { BulkUploadGuideDialogClientes } from "@/components/bulk-upload-guide-dialog-clientes"
 import { cn } from "@/lib/utils"
+import { RouteProtection } from "@/components/route-protection"
 
 export default function ClientesPage() {
+  return (
+    <RouteProtection requiredPermissions={["clientes.clientes.ver"]}>
+      <ClientesPageContent />
+    </RouteProtection>
+  )
+}
+
+function ClientesPageContent() {
   const router = useRouter()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
@@ -200,6 +209,7 @@ export default function ClientesPage() {
       label: 'Editar',
       icon: <Edit size={16} />,
       onClick: (client: Client) => handleOpenEdit(client),
+      permissionCode: 'clientes.clientes.editar',
     },
   ], [router])
 
@@ -471,6 +481,7 @@ export default function ClientesPage() {
                   className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={<Upload className="h-4 w-4" />}
                   onClick={() => setShowBulkUploadDialog(true)}
+                  permissionCode="clientes.clientes.crear"
                 >
                   Carga Masiva
                 </ActionButton>
@@ -485,7 +496,7 @@ export default function ClientesPage() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <CreateButton onClick={handleOpenCreate} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
+          <CreateButton onClick={handleOpenCreate} size="sm" className="w-full md:w-auto md:h-9 md:px-3" permissionCode="clientes.clientes.crear">
             Nuevo Cliente
           </CreateButton>
         </div>

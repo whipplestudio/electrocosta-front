@@ -9,8 +9,17 @@ import { categoriesService, Category, CategoryType, CreateCategoryDto, UpdateCat
 import { DynamicForm, FormFieldConfig } from '@/components/forms';
 import { KpiCard, TotalKpiCard, IncomeKpiCard, ExpenseKpiCard, ActionButton, CreateButton, DataTable, Column, Action } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { RouteProtection } from '@/components/route-protection';
 
 export default function CategoriasPage() {
+  return (
+    <RouteProtection requiredPermissions={['categorias.categorias.ver']}>
+      <CategoriasPageContent />
+    </RouteProtection>
+  );
+}
+
+function CategoriasPageContent() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -348,11 +357,13 @@ export default function CategoriasPage() {
       label: 'Editar',
       icon: <Pencil size={16} />,
       onClick: (category: Category) => openEditModal(category),
+      permissionCode: 'categorias.categorias.editar',
     },
     {
       label: 'Eliminar',
       icon: <Trash2 size={16} />,
       onClick: (category: Category) => openDeleteModal(category),
+      permissionCode: 'categorias.categorias.eliminar',
     },
   ], []);
 
@@ -364,7 +375,7 @@ export default function CategoriasPage() {
           <h1 className="text-3xl font-bold tracking-tight text-[#374151]">Categorías</h1>
           <p className="text-[#6b7280]">Gestiona las categorías de ingresos y egresos</p>
         </div>
-        <ActionButton onClick={openCreateModal} className="w-full sm:w-auto">
+        <ActionButton onClick={openCreateModal} className="w-full sm:w-auto" permissionCode="categorias.categorias.crear">
           Nueva Categoría
         </ActionButton>
       </div>

@@ -1,4 +1,5 @@
 import apiClient, { handleApiError } from '@/lib/api-client';
+import type { Branch, RoleScope } from '@/types/users';
 
 export interface LoginDto {
   email: string;
@@ -13,10 +14,13 @@ export interface LoginResponse {
     email: string;
     firstName: string;
     lastName: string;
+    branchId: string;
+    branch: Branch;
     role: {
       id: string;
       name: string;
       description: string;
+      scope: RoleScope;
     };
   };
 }
@@ -37,6 +41,8 @@ export const authService = {
       if (response.data.user) {
         localStorage.setItem('currentUser', JSON.stringify(response.data.user));
       }
+      // La sucursal elegida pertenece a la sesión anterior: el nuevo usuario arranca en su origen
+      localStorage.removeItem('activeBranchId');
       
       return response.data;
     } catch (error) {
@@ -54,6 +60,7 @@ export const authService = {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('currentUser');
+      localStorage.removeItem('activeBranchId');
     }
   },
 

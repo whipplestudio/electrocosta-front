@@ -874,12 +874,14 @@ function CuentasCobrarPageContent() {
       label: 'Editar',
       icon: <Edit size={16} />,
       onClick: (row) => handleEditarCuenta(row),
+      permissionCode: 'cuentas_cobrar.registro.editar',
     },
     {
       label: 'Eliminar',
       icon: <Trash2 size={16} />,
       onClick: (row) => handleEliminarCuenta(row.id),
       disabled: (row) => deletingId === row.id,
+      permissionCode: 'cuentas_cobrar.registro.eliminar',
     },
   ]
 
@@ -977,6 +979,7 @@ function CuentasCobrarPageContent() {
               <TooltipTrigger asChild>
                 <ActionButton 
                   variant="outline"
+                  permissionCode="cuentas_cobrar.registro.crear"
                   onClick={() => setShowBulkUploadDialog(true)}
                   size="sm"
                   className="w-full md:w-auto md:h-9 md:px-3"
@@ -995,7 +998,7 @@ function CuentasCobrarPageContent() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <ActionButton variant="create" onClick={handleNuevaCuenta} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
+          <ActionButton variant="create" permissionCode="cuentas_cobrar.registro.crear" onClick={handleNuevaCuenta} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
             Nueva Cuenta
           </ActionButton>
         </div>
@@ -1702,6 +1705,7 @@ function CuentasCobrarPageContent() {
             {cuentaDetalle && (
               <ActionButton
                 variant="edit"
+                permissionCode="cuentas_cobrar.registro.editar"
                 onClick={() => {
                   setIsDetalleDialogOpen(false)
                   handleEditarCuenta(cuentaDetalle)
@@ -1853,6 +1857,7 @@ function CuentasCobrarPageContent() {
                   icon: <Pencil className="h-4 w-4" />,
                   label: 'Editar pago',
                   onClick: (payment: Payment) => handleOpenEditPayment(payment),
+                  permissionCode: 'cuentas_cobrar.pagos.aplicar',
                 },
               ]}
               loading={loadingHistory}
@@ -1994,7 +1999,7 @@ function CuentasCobrarPageContent() {
                   fetchDashboard()
                 } catch (error) {
                   console.error('Error al actualizar pago:', error)
-                  toast.error('Error al actualizar el pago')
+                  toast.error(error instanceof Error ? error.message : 'Error al actualizar el pago')
                 } finally {
                   setLoading(false)
                 }

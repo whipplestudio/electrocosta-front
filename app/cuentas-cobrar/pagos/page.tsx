@@ -249,7 +249,7 @@ function AplicacionPagosContent() {
       await loadData()
     } catch (error) {
       console.error('Error al registrar pago:', error)
-      toast.error('Error al registrar el pago')
+      toast.error(error instanceof Error ? error.message : 'Error al registrar el pago')
     } finally {
       setSubmitting(false)
     }
@@ -345,7 +345,7 @@ function AplicacionPagosContent() {
       }
     } catch (error) {
       console.error('Error al actualizar pago:', error)
-      toast.error('Error al actualizar el pago')
+      toast.error(error instanceof Error ? error.message : 'Error al actualizar el pago')
     } finally {
       setSubmitting(false)
     }
@@ -432,6 +432,7 @@ function AplicacionPagosContent() {
       icon: <Pencil className="h-4 w-4" />,
       label: 'Editar pago',
       onClick: (payment: Payment) => openEditDialog(payment),
+      permissionCode: 'cuentas_cobrar.pagos.aplicar',
     },
   ]
 
@@ -529,6 +530,7 @@ function AplicacionPagosContent() {
               icon: <DollarSign className="h-4 w-4" />,
               onClick: (row) => openRegisterDialog(row),
               hidden: (row) => Number(row.balance) === 0,
+              permissionCode: 'cuentas_cobrar.pagos.aplicar',
             },
           ]}
           loading={loading}
@@ -657,7 +659,7 @@ function AplicacionPagosContent() {
                 await loadData()
               } catch (error) {
                 console.error('Error al registrar pago:', error)
-                toast.error('Error al registrar el pago')
+                toast.error(error instanceof Error ? error.message : 'Error al registrar el pago')
               } finally {
                 setSubmitting(false)
               }
@@ -737,6 +739,7 @@ function AplicacionPagosContent() {
                 <ActionButton
                   variant="create"
                   size="sm"
+                  permissionCode="cuentas_cobrar.pagos.aplicar"
                   startIcon={<DollarSign className="h-4 w-4" />}
                   onClick={() => {
                     setShowHistoryDialog(false)
@@ -889,7 +892,7 @@ function AplicacionPagosContent() {
                   }
                 } catch (error) {
                   console.error('Error al actualizar pago:', error)
-                  toast.error('Error al actualizar el pago')
+                  toast.error(error instanceof Error ? error.message : 'Error al actualizar el pago')
                 } finally {
                   setSubmitting(false)
                 }

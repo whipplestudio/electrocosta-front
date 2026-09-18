@@ -30,7 +30,6 @@ import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 import { projectsUploadService, type CrearProyectoData, type ProyectoListadoSummary } from "@/services/projects-upload.service"
 import apiClient, { handleApiError } from "@/lib/api-client"
 import { clientsService, type ClientSimple } from "@/services/clients.service"
-import { areasService, type AreaSimple } from "@/services/areas.service"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
 import { BulkUploadGuideDialogProyectos } from "@/components/bulk-upload-guide-dialog-proyectos"
 import { DeleteProjectDialog } from "@/components/delete-project-dialog"
@@ -110,13 +109,6 @@ function ProyectosPageContent() {
   const [openClientePopover, setOpenClientePopover] = useState(false)
   const [openClientePopoverEdit, setOpenClientePopoverEdit] = useState(false)
   
-  // Estados para áreas
-  const [areas, setAreas] = useState<AreaSimple[]>([])
-  const [loadingAreas, setLoadingAreas] = useState(false)
-  
-  const [openAreaPopover, setOpenAreaPopover] = useState(false)
-  const [openAreaPopoverEdit, setOpenAreaPopoverEdit] = useState(false)
-  
   // Estados para carga masiva
   const [archivo, setArchivo] = useState<File | null>(null)
   const [uploadResponse, setUploadResponse] = useState<any>(null)
@@ -141,7 +133,6 @@ function ProyectosPageContent() {
     presupuestoManoObra: '',
     presupuestoOtros: '',
     responsableEmail: '',
-    areaId: '',
     estado: 'planificacion',
     prioridad: 'media',
     descripcion: '',
@@ -218,25 +209,10 @@ function ProyectosPageContent() {
     }
   }, [])
 
-  // Cargar áreas
-  const cargarAreas = useCallback(async () => {
-    try {
-      setLoadingAreas(true)
-      const data = await areasService.getSimpleList()
-      setAreas(data)
-    } catch (error) {
-      console.error('Error al cargar áreas:', error)
-      toast.error('No se pudieron cargar las áreas')
-    } finally {
-      setLoadingAreas(false)
-    }
-  }, [])
-
   useEffect(() => {
     cargarProyectos(searchTerm, page, limit)
     cargarUsuarios()
     cargarClientes()
-    cargarAreas()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -299,7 +275,6 @@ function ProyectosPageContent() {
       presupuestoManoObra: '',
       presupuestoOtros: '',
       responsableEmail: '',
-      areaId: '',
       estado: 'planificacion',
       prioridad: 'media',
       descripcion: '',
@@ -413,7 +388,6 @@ function ProyectosPageContent() {
         presupuestoOtros: parseFloat(nuevoProyecto.presupuestoOtros) || 0,
         presupuestoTotal: parseFloat(nuevoProyecto.presupuestoTotal),
         responsableEmail: nuevoProyecto.responsableEmail,
-        areaId: nuevoProyecto.areaId,
         estado: nuevoProyecto.estado,
         prioridad: nuevoProyecto.prioridad,
         descripcion: nuevoProyecto.descripcion,
@@ -609,7 +583,6 @@ function ProyectosPageContent() {
         presupuestoOtros: proyecto.presupuestoOtros?.toString() || '',
         presupuestoTotal: proyecto.presupuestoTotal?.toString() || '',
         responsableEmail: proyecto.responsable?.email || '',
-        areaId: proyecto.areaId || '',
         estado: proyecto.estado || 'planificacion',
         prioridad: proyecto.prioridad || 'media',
         descripcion: proyecto.descripcion || '',
@@ -668,7 +641,6 @@ function ProyectosPageContent() {
     fechaFin: formatDateWithoutTimezone(p.fechaFinEstimada),
     estado: p.status === 'activo' ? 'Activo' : 'Inactivo',
     responsable: p.responsable ? `${p.responsable.firstName} ${p.responsable.lastName}` : 'N/A',
-    categoria: p.area?.name || 'General',
     empresa: p.empresa || '',
     status: p.status || 'activo',
   }))
@@ -706,7 +678,6 @@ function ProyectosPageContent() {
       render: (proyecto) => (
         <div>
           <div className="font-medium text-[#374151]">{proyecto.cliente}</div>
-          <div className="text-sm text-[#6b7280]">{proyecto.categoria}</div>
         </div>
       ),
     },
@@ -717,15 +688,6 @@ function ProyectosPageContent() {
         <div className="text-sm text-[#374151]">
           {proyecto.empresa || <span className="text-[#d1d5db]">—</span>}
         </div>
-      ),
-    },
-    {
-      key: 'categoria',
-      header: 'Área',
-      render: (proyecto) => (
-        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs border border-[#e5e7eb] bg-white text-[#374151]">
-          {proyecto.categoria}
-        </span>
       ),
     },
     {
@@ -1296,7 +1258,7 @@ function ProyectosPageContent() {
                 </div>
               </div>
 
-              {/* Responsable y Área */}
+              {/* Responsable */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex items-start gap-3">
                   <div className="h-9 w-9 rounded-full bg-[#164e63]/10 flex items-center justify-center flex-shrink-0">
@@ -1313,16 +1275,6 @@ function ProyectosPageContent() {
                     {proyectoSeleccionado.responsable?.email && (
                       <div className="text-xs text-muted-foreground">{proyectoSeleccionado.responsable.email}</div>
                     )}
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <div className="h-9 w-9 rounded-full bg-[#84cc16]/10 flex items-center justify-center flex-shrink-0">
-                    <Briefcase className="h-4 w-4 text-[#65a30d]" />
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Área</div>
-                    <div className="text-sm font-medium">{proyectoSeleccionado.area?.name || 'Sin área'}</div>
                   </div>
                 </div>
               </div>

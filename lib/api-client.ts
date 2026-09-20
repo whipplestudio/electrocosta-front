@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import type { User } from '@/types/users';
+import type { ForbiddenPermissionError, ForbiddenReason } from '@/types/permissions';
 
 // Configuración base de la API
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://electrocosta-api-328521246433.us-west4.run.app';
@@ -54,6 +55,36 @@ apiClient.interceptors.request.use(
   }
 );
 
+// --- 403 de permisos -------------------------------------------------------
+// El back responde a una denegación de PermissionsGuard con un cuerpo propio
+// (reason / message / permissionName / module / howToFix). El interceptor lo
+// valida y lo deja adjunto al error bajo esta clave, para que las pantallas
+// distingan "te falta un permiso" de un 403 cualquiera sin volver a parsear.
+const FORBIDDEN_PERMISSION_KEY = '__forbiddenPermission';
+
+type ForbiddenAwareError = { [FORBIDDEN_PERMISSION_KEY]?: ForbiddenPermissionError };
+
+const FORBIDDEN_REASONS: readonly ForbiddenReason[] = ['MISSING_PERMISSION', 'UNKNOWN_PERMISSION'];
+
+// Devuelve null si el cuerpo no es el del guard: un 403 de otra procedencia, o
+// un filtro global de excepciones reescribiendo la respuesta. En ese caso la
+// pantalla cae a su manejo de error genérico en vez de romperse.
+const normalizeForbiddenPermission = (data: unknown): ForbiddenPermissionError | null => {
+  if (!data || typeof data !== 'object') return null;
+
+  const body = data as Record<string, unknown>;
+  if (!FORBIDDEN_REASONS.includes(body.reason as ForbiddenReason)) return null;
+  if (typeof body.message !== 'string' || !body.message) return null;
+
+  return {
+    reason: body.reason as ForbiddenReason,
+    message: body.message,
+    permissionName: typeof body.permissionName === 'string' ? body.permissionName : null,
+    module: typeof body.module === 'string' ? body.module : null,
+    howToFix: typeof body.howToFix === 'string' ? body.howToFix : null,
+  };
+};
+
 // Interceptor para manejar errores de respuesta
 apiClient.interceptors.response.use(
   (response) => response,
@@ -106,11 +137,39 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // El 403 de permisos se adjunta al propio error: el 401 de arriba ya
+    // retornó por todos sus caminos, así que el refresco de token no se toca.
+    if (error.response?.status === 403) {
+      const forbidden = normalizeForbiddenPermission(error.response.data);
+      if (forbidden) {
+        (error as AxiosError & ForbiddenAwareError)[FORBIDDEN_PERMISSION_KEY] = forbidden;
+      }
+    }
+
     return Promise.reject(error);
   }
 );
 
 export default apiClient;
+
+// Para las pantallas: el 403 de permisos ya normalizado, o null si el error es
+// de cualquier otro tipo.
+export const getForbiddenPermissionError = (error: unknown): ForbiddenPermissionError | null => {
+  if (!error || typeof error !== 'object') return null;
+  return (error as ForbiddenAwareError)[FORBIDDEN_PERMISSION_KEY] ?? null;
+};
+
+// Los servicios re-lanzan los errores de axios como un Error plano con el texto
+// de handleApiError, y eso descartaba la marca del 403: la pantalla recibía un
+// error sin rastro de que lo que faltaba era un permiso. Quien necesite
+// conservarla envuelve así el Error nuevo antes de lanzarlo.
+export const withForbiddenPermission = <E extends Error>(target: E, source: unknown): E => {
+  const forbidden = getForbiddenPermissionError(source);
+  if (forbidden) {
+    (target as E & ForbiddenAwareError)[FORBIDDEN_PERMISSION_KEY] = forbidden;
+  }
+  return target;
+};
 
 // Literal del back para escrituras de un usuario GLOBAL con la vista "Todas"
 export const SELECT_BRANCH_MESSAGE = 'Seleccione una sucursal para operar';

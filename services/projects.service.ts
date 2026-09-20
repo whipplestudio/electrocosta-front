@@ -1,4 +1,4 @@
-import apiClient, { handleApiError } from '@/lib/api-client';
+import apiClient, { handleApiError, withForbiddenPermission } from '@/lib/api-client';
 
 export interface Project {
   id: string;
@@ -133,7 +133,7 @@ export const projectsService = {
         code: p.codigoProyecto || p.id.slice(0, 8).toUpperCase()
       }));
     } catch (error) {
-      throw new Error(handleApiError(error));
+      throw withForbiddenPermission(new Error(handleApiError(error)), error);
     }
   },
 

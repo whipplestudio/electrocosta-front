@@ -99,6 +99,9 @@ export interface DataTableProps<T> {
   rowsPerPageOptions?: number[]
   loading?: boolean
   emptyMessage?: string
+  // Sustituye por completo al emptyMessage cuando el vacío tiene una causa que
+  // merece explicarse (p. ej. el bloque de "sin acceso" de un 403 de permisos).
+  emptyState?: React.ReactNode
   containerSx?: SxProps<Theme>
   tableSx?: SxProps<Theme>
   headerSx?: SxProps<Theme>
@@ -568,6 +571,7 @@ export function DataTable<T>({
   rowsPerPageOptions = [5, 10, 25, 50],
   loading = false,
   emptyMessage = 'No hay datos disponibles',
+  emptyState,
   containerSx,
   tableSx,
   headerSx,
@@ -747,7 +751,7 @@ export function DataTable<T>({
                     fontSize: '14px',
                   }}
                 >
-                  {emptyMessage}
+                  {emptyState ?? emptyMessage}
                 </TableCell>
               </TableRow>
             ) : (

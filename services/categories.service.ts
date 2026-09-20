@@ -1,4 +1,4 @@
-import apiClient, { handleApiError } from '@/lib/api-client';
+import apiClient, { handleApiError, withForbiddenPermission } from '@/lib/api-client';
 
 export type CategoryType = 'income' | 'expense';
 
@@ -52,7 +52,7 @@ export const categoriesService = {
       const response = await apiClient.get<PaginatedCategoriesResponse>('/categories', { params });
       return response.data;
     } catch (error) {
-      throw new Error(handleApiError(error));
+      throw withForbiddenPermission(new Error(handleApiError(error)), error);
     }
   },
 

@@ -18,6 +18,9 @@ import { ActionButton } from "@/components/ui/action-button"
 import { DataTable, Column, Action, SelectFilter } from "@/components/ui/data-table"
 import { DynamicForm } from "@/components/ui/dynamic-form"
 import { FloatingSelect } from "@/components/ui/floating-select"
+import { getForbiddenPermissionError } from "@/lib/api-client"
+import { PermissionDenied } from "@/components/permission-denied"
+import type { ForbiddenPermissionError } from "@/types/permissions"
 import { FloatingDatePicker } from "@/components/ui/floating-date-picker"
 import {
   Sheet,
@@ -186,27 +189,71 @@ function CuentasPagarPageContent() {
     }
   }, [])
 
+  // 403 de permisos en los selectores del formulario: hoy el usuario veía una
+  // lista vacía sin explicación. Se guardan por separado para poder poner el
+  // bloque de "sin acceso" debajo del campo que lo sufre.
+  const [projectsForbidden, setProjectsForbidden] = useState<ForbiddenPermissionError | null>(null)
+  const [categoriesForbidden, setCategoriesForbidden] = useState<ForbiddenPermissionError | null>(null)
+
   const loadSuppliersAndCategories = async () => {
     try {
       setLoadingSelects(true)
 
-      const [suppliersResp, categoriesResp, projectsData] = await Promise.all([
+      // allSettled y no all: cada opción se resuelve por separado para poder
+      // señalar cuál es la que no tiene permiso. Con Promise.all, un 403 en
+      // proyectos vaciaba también proveedores y categorías, que sí cargaban,
+      // y los tres quedaban bajo el mismo toast genérico.
+      const [suppliersResult, categoriesResult, projectsResult] = await Promise.allSettled([
         suppliersService.getAll({ page: 1, limit: 100 }),
         categoriesService.getAll({ page: 1, limit: 100 }),
         projectsService.listAll(undefined, 'activo'),
       ]);
 
-      setSuppliers(suppliersResp.data)
+      // Un fallo "explicado" es el que el formulario ya muestra en su sitio
+      // con el bloque de sin acceso; el resto sigue cayendo al toast genérico.
+      const failures: { reason: unknown; explained: boolean }[] = []
 
-      // Filtrar solo categorías de tipo "expense" (egresos)
-      const expenseCategories = categoriesResp.data.filter((cat) => cat.type === 'expense')
-
-      if (expenseCategories.length === 0 && categoriesResp.data.length > 0) {
-        toast.warning('No hay categorías de tipo "Egreso". Crea categorías de egreso en el módulo de Categorías.')
+      if (suppliersResult.status === 'fulfilled') {
+        setSuppliers(suppliersResult.value.data)
+      } else {
+        setSuppliers([])
+        // El selector de proveedores no tiene bloque propio, así que su 403
+        // tampoco puede darse por explicado.
+        failures.push({ reason: suppliersResult.reason, explained: false })
       }
 
-      setCategories(expenseCategories)
-      setProjects(projectsData)
+      if (categoriesResult.status === 'fulfilled') {
+        // Filtrar solo categorías de tipo "expense" (egresos)
+        const expenseCategories = categoriesResult.value.data.filter((cat) => cat.type === 'expense')
+
+        if (expenseCategories.length === 0 && categoriesResult.value.data.length > 0) {
+          toast.warning('No hay categorías de tipo "Egreso". Crea categorías de egreso en el módulo de Categorías.')
+        }
+
+        setCategories(expenseCategories)
+        setCategoriesForbidden(null)
+      } else {
+        const forbidden = getForbiddenPermissionError(categoriesResult.reason)
+        setCategories([])
+        setCategoriesForbidden(forbidden)
+        failures.push({ reason: categoriesResult.reason, explained: !!forbidden })
+      }
+
+      if (projectsResult.status === 'fulfilled') {
+        setProjects(projectsResult.value)
+        setProjectsForbidden(null)
+      } else {
+        const forbidden = getForbiddenPermissionError(projectsResult.reason)
+        setProjects([])
+        setProjectsForbidden(forbidden)
+        failures.push({ reason: projectsResult.reason, explained: !!forbidden })
+      }
+
+      const unexplained = failures.filter((failure) => !failure.explained)
+      if (unexplained.length > 0) {
+        unexplained.forEach((failure) => console.error("Error al cargar opciones:", failure.reason))
+        toast.error("Error al cargar opciones del formulario")
+      }
     } catch (error) {
       console.error("Error al cargar opciones:", error)
       toast.error("Error al cargar opciones del formulario")
@@ -1118,25 +1165,32 @@ function CuentasPagarPageContent() {
                 type: 'custom',
                 label: 'Proyecto (Opcional)',
                 render: ({ value, onChange }) => (
-                  <FloatingSelect
-                    label="Proyecto (Opcional)"
-                    value={value || ''}
-                    onChange={(newValue) => onChange(newValue as string)}
-                    options={loadingSelects
-                      ? [{ label: 'Cargando...', value: 'loading', disabled: true }]
-                      : projects.length === 0
-                        ? [{ label: 'No hay proyectos disponibles', value: 'empty', disabled: true }]
-                        : [
-                            { label: 'Sin proyecto', value: 'none' },
-                            ...projects.map((p) => ({
-                              label: `${p.code} - ${p.name}`,
-                              value: p.id,
-                            }))
-                          ]
-                    }
-                    placeholder={loadingSelects ? "Cargando..." : "Seleccionar proyecto"}
-                    disabled={loadingSelects}
-                  />
+                  <div className="space-y-2">
+                    <FloatingSelect
+                      label="Proyecto (Opcional)"
+                      value={value || ''}
+                      onChange={(newValue) => onChange(newValue as string)}
+                      options={loadingSelects
+                        ? [{ label: 'Cargando...', value: 'loading', disabled: true }]
+                        : projectsForbidden
+                          ? [{ label: 'Sin acceso', value: 'empty', disabled: true }]
+                          : projects.length === 0
+                            ? [{ label: 'No hay proyectos disponibles', value: 'empty', disabled: true }]
+                            : [
+                                { label: 'Sin proyecto', value: 'none' },
+                                ...projects.map((p) => ({
+                                  label: `${p.code} - ${p.name}`,
+                                  value: p.id,
+                                }))
+                              ]
+                      }
+                      placeholder={loadingSelects ? "Cargando..." : "Seleccionar proyecto"}
+                      disabled={loadingSelects || !!projectsForbidden}
+                    />
+                    {projectsForbidden && (
+                      <PermissionDenied error={projectsForbidden} variant="inline" />
+                    )}
+                  </div>
                 ),
                 colSpan: 'full',
               },
@@ -1185,18 +1239,34 @@ function CuentasPagarPageContent() {
             fields: [
               {
                 name: 'categoryId',
-                type: 'select',
+                type: 'custom',
                 label: 'Categoría',
-                placeholder: loadingSelects ? "Cargando..." : "Selecciona una categoría (opcional)",
-                options: loadingSelects
-                  ? [{ label: 'Cargando...', value: 'loading', disabled: true }]
-                  : categories.length === 0
-                    ? [{ label: 'No hay categorías de tipo "Egreso". Ve a /categorias para crear una.', value: 'empty', disabled: true }]
-                    : categories.map((c) => ({
-                        label: c.name,
-                        value: c.id,
-                      })),
-                disabled: loadingSelects,
+                render: ({ value, onChange }) => (
+                  <div className="space-y-2">
+                    <FloatingSelect
+                      label="Categoría"
+                      containerClassName="w-full min-w-0"
+                      value={value || ''}
+                      onChange={(newValue) => onChange(newValue as string)}
+                      options={loadingSelects
+                        ? [{ label: 'Cargando...', value: 'loading', disabled: true }]
+                        : categoriesForbidden
+                          ? [{ label: 'Sin acceso', value: 'empty', disabled: true }]
+                          : categories.length === 0
+                            ? [{ label: 'No hay categorías de tipo "Egreso". Ve a /categorias para crear una.', value: 'empty', disabled: true }]
+                            : categories.map((c) => ({
+                                label: c.name,
+                                value: c.id,
+                              }))
+                      }
+                      placeholder={loadingSelects ? "Cargando..." : "Selecciona una categoría (opcional)"}
+                      disabled={loadingSelects || !!categoriesForbidden}
+                    />
+                    {categoriesForbidden && (
+                      <PermissionDenied error={categoriesForbidden} variant="inline" />
+                    )}
+                  </div>
+                ),
                 colSpan: 'full',
               },
             ],

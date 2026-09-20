@@ -28,7 +28,9 @@ import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 import { projectsUploadService, type CrearProyectoData, type ProyectoListadoSummary } from "@/services/projects-upload.service"
-import apiClient, { handleApiError } from "@/lib/api-client"
+import apiClient, { handleApiError, getForbiddenPermissionError } from "@/lib/api-client"
+import { PermissionDenied } from "@/components/permission-denied"
+import type { ForbiddenPermissionError } from "@/types/permissions"
 import { clientsService, type ClientSimple } from "@/services/clients.service"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
 import { BulkUploadGuideDialogProyectos } from "@/components/bulk-upload-guide-dialog-proyectos"
@@ -157,6 +159,10 @@ function ProyectosPageContent() {
     responsableEmail: ''
   })
 
+  // 403 de permisos en el listado: en vez de una tabla vacía sin explicación,
+  // la pantalla muestra el bloque de "sin acceso" con la ruta a la casilla.
+  const [proyectosForbidden, setProyectosForbidden] = useState<ForbiddenPermissionError | null>(null)
+
   // Cargar proyectos desde la BD con paginación y búsqueda
   const cargarProyectos = useCallback(async (
     search?: string,
@@ -174,9 +180,20 @@ function ProyectosPageContent() {
       setTotal(response.total || 0)
       setPages(response.totalPages || 1)
       setSummary(response.summary)
+      setProyectosForbidden(null)
     } catch (error) {
       console.error('Error al cargar proyectos:', error)
-      toast.error('No se pudieron cargar los proyectos')
+      const forbidden = getForbiddenPermissionError(error)
+      if (forbidden) {
+        // La tabla se vacía a propósito: dejar filas viejas debajo de un
+        // "sin acceso" haría creer que el listado sigue actualizándose.
+        setProyectos([])
+        setTotal(0)
+        setPages(1)
+        setProyectosForbidden(forbidden)
+      } else {
+        toast.error('No se pudieron cargar los proyectos')
+      }
     } finally {
       setLoadingProyectos(false)
     }
@@ -1131,6 +1148,7 @@ function ProyectosPageContent() {
         actions={proyectoActions}
         loading={loadingProyectos}
         emptyMessage="No se encontraron proyectos. Intenta con otra búsqueda o crea un nuevo proyecto."
+        emptyState={proyectosForbidden ? <PermissionDenied error={proyectosForbidden} /> : undefined}
         
         // Search filter
         searchFilter={{ placeholder: 'Buscar por nombre, cliente o empresa...', debounceMs: 1000 }}

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Edit, Trash2, AlertCircle, Clock, CheckCircle, CheckCircle2, XCircle, Loader2, Upload, FileDown, History, Receipt, CreditCard, DollarSign, Filter, Pencil, HelpCircle } from "lucide-react"
+import { Edit, Trash2, AlertCircle, Clock, CheckCircle, CheckCircle2, XCircle, Loader2, Upload, FileDown, History, Receipt, CreditCard, DollarSign, Filter, Pencil, HelpCircle, RotateCcw, ShieldAlert } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { toast } from "sonner"
@@ -13,6 +13,8 @@ import { accountsPayableUploadService } from "@/services/accounts-payable-upload
 import type { UploadResponse, ValidacionResultado, ImportacionResultado } from "@/services/accounts-payable-upload.service"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
 import { BulkUploadGuideDialog } from "@/components/bulk-upload-guide-dialog"
+import { ConfirmActionDialog } from "@/components/confirm-action-dialog"
+import { DeleteAccountDialog } from "@/components/delete-account-dialog"
 import { ExpenseKpiCard, WarningKpiCard, SuccessKpiCard, TotalKpiCard } from "@/components/ui/kpi-card"
 import { ActionButton } from "@/components/ui/action-button"
 import { DataTable, Column, Action, SelectFilter } from "@/components/ui/data-table"
@@ -31,6 +33,7 @@ import {
 } from "@/components/ui/sheet"
 import { FloatingInput } from "@/components/ui/floating-input"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import { FinancialAmountSection } from "@/components/financial"
 import type { IvaType } from "@/components/financial"
@@ -72,6 +75,9 @@ function CuentasPagarPageContent() {
   // Estados para filtros básicos (DataTable)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterStatus, setFilterStatus] = useState<string>("")
+  // Sólo cambia qué filas trae el listado: el `summary` de los cards lo calcula
+  // el back siempre sobre las activas.
+  const [showDeleted, setShowDeleted] = useState(false)
 
   // Estados para filtros avanzados (aplicados)
   const [filters, setFilters] = useState({
@@ -95,6 +101,8 @@ function CuentasPagarPageContent() {
   const [totalPages, setTotalPages] = useState(1)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<AccountPayable | null>(null)
+  const [accionPendiente, setAccionPendiente] = useState<{ tipo: 'desactivar' | 'reactivar'; cuenta: AccountPayable } | null>(null)
+  const [cuentaAEliminar, setCuentaAEliminar] = useState<AccountPayable | null>(null)
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false)
   const [accountHistory, setAccountHistory] = useState<{ payments: any[]; schedules: any[] } | null>(null)
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -161,9 +169,10 @@ function CuentasPagarPageContent() {
     if (advFilters.dateTo) filterDto.dateTo = advFilters.dateTo.toISOString()
     if (advFilters.dueDateFrom) filterDto.dueDateFrom = advFilters.dueDateFrom.toISOString()
     if (advFilters.dueDateTo) filterDto.dueDateTo = advFilters.dueDateTo.toISOString()
+    if (showDeleted) filterDto.includeDeleted = true
 
     return filterDto
-  }, [searchQuery, filterStatus, filters])
+  }, [searchQuery, filterStatus, filters, showDeleted])
 
   const fetchAccounts = useCallback(async (filterDto?: any, currentPage = page, currentLimit = limit) => {
     try {
@@ -454,16 +463,29 @@ function CuentasPagarPageContent() {
     }
   }
 
-  const handleEliminarCuenta = useCallback(async (id: string) => {
-    if (!confirm("¿Estás seguro de eliminar esta cuenta?")) return
+  const handleConfirmarAccionCuenta = useCallback(async () => {
+    if (!accionPendiente) return
+    const { tipo, cuenta } = accionPendiente
     try {
-      await accountsPayableService.delete(id)
-      toast.success("Cuenta eliminada")
-      fetchAccounts(buildFilterDto())
+      if (tipo === 'desactivar') {
+        await accountsPayableService.delete(cuenta.id)
+        toast.success("Cuenta desactivada")
+      } else {
+        await accountsPayableService.reactivar(cuenta.id)
+        toast.success("Cuenta reactivada")
+      }
+      setAccionPendiente(null)
+      fetchAccounts(buildFilterDto(), page, limit)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Error al eliminar")
+      const fallback = tipo === 'desactivar' ? "Error al desactivar la cuenta" : "Error al reactivar la cuenta"
+      toast.error(error instanceof Error ? error.message : fallback)
     }
-  }, [fetchAccounts, buildFilterDto])
+  }, [accionPendiente, fetchAccounts, buildFilterDto, page, limit])
+
+  const handleShowDeletedChange = useCallback((checked: boolean) => {
+    setShowDeleted(checked)
+    setPage(1)
+  }, [])
 
   const handleVerHistorial = useCallback(async (account: AccountPayable) => {
     setSelectedAccount(account)
@@ -534,6 +556,7 @@ function CuentasPagarPageContent() {
   const handleClearFilters = useCallback(async () => {
     setSearchQuery("")
     setFilterStatus("")
+    setShowDeleted(false)
     setFilters({
       projectId: "all",
       categoryId: "all",
@@ -747,30 +770,62 @@ function CuentasPagarPageContent() {
       key: 'status',
       header: 'Estado',
       align: 'center',
-      render: (row) => getEstadoBadge(row.status),
+      render: (row) => (
+        <div className="flex flex-col items-center gap-1">
+          {getEstadoBadge(row.status)}
+          {row.deletedAt && (
+            <Badge variant="outline" className="border-slate-400 text-slate-600">Desactivada</Badge>
+          )}
+        </div>
+      ),
     },
   ], [])
 
+  // Las desactivadas (sólo visibles con "Ver desactivadas") se atenúan salvo la
+  // celda del menú de acciones, que sigue siendo el sitio para reactivarlas.
+  const getRowSx = useCallback((row: AccountPayable) => (
+    row.deletedAt ? { '& .MuiTableCell-root:not(:last-of-type)': { opacity: 0.5 } } : undefined
+  ), [])
+
   // Configuración de acciones para el DataTable - memoizada
   const actions = useMemo<Action<AccountPayable>[]>(() => [
+    // Historial y edición resuelven la cuenta con lectura filtrada en el back:
+    // sobre una desactivada darían 404, así que no se ofrecen.
     {
       label: 'Ver historial',
       icon: <Clock className="h-4 w-4" />,
       onClick: (row) => handleVerHistorial(row),
+      hidden: (row) => row.deletedAt !== null,
     },
     {
       label: 'Editar',
       icon: <Edit className="h-4 w-4" />,
       onClick: (row) => handleEditarCuenta(row),
+      hidden: (row) => row.deletedAt !== null,
+      permissionCode: 'cuentas_pagar.registro.editar',
+    },
+    {
+      label: 'Reactivar',
+      icon: <RotateCcw className="h-4 w-4" />,
+      onClick: (row) => setAccionPendiente({ tipo: 'reactivar', cuenta: row }),
+      hidden: (row) => row.deletedAt === null,
       permissionCode: 'cuentas_pagar.registro.editar',
     },
     {
       label: 'Eliminar',
       icon: <Trash2 className="h-4 w-4" />,
-      onClick: (row) => handleEliminarCuenta(row.id),
+      onClick: (row) => setAccionPendiente({ tipo: 'desactivar', cuenta: row }),
+      hidden: (row) => row.deletedAt !== null,
       permissionCode: 'cuentas_pagar.registro.eliminar',
     },
-  ], [handleVerHistorial, handleEditarCuenta, handleEliminarCuenta])
+    // Se ofrece también sobre desactivadas: es la única forma de sacarlas del sistema.
+    {
+      label: 'Eliminar permanentemente',
+      icon: <ShieldAlert className="h-4 w-4" />,
+      onClick: (row) => setCuentaAEliminar(row),
+      permissionCode: 'cuentas_pagar.registro.eliminar_permanente',
+    },
+  ], [handleVerHistorial, handleEditarCuenta])
 
   // Configuración de filtros de selección para el DataTable - memoizada (estática)
   const selectFilters = useMemo<SelectFilter[]>(() => [
@@ -932,6 +987,7 @@ function CuentasPagarPageContent() {
         data={accounts}
         keyExtractor={keyExtractor}
         actions={actions}
+        getRowSx={getRowSx}
         loading={loading}
         emptyMessage="No se encontraron cuentas por pagar"
         // Filtros de búsqueda
@@ -945,18 +1001,30 @@ function CuentasPagarPageContent() {
         onClearFilters={handleClearFilters}
         // Botones del toolbar
         toolbarButtons={
-          <ActionButton
-            variant="filter"
-            size="sm"
-            className="md:h-9 md:px-3"
-            startIcon={<Filter className="h-4 w-4" />}
-            onClick={() => setIsAdvancedFiltersOpen(true)}
-          >
-            Más Filtros
-            {activeFiltersCount > 0 && (
-              <Badge variant="secondary" className="ml-2">{activeFiltersCount}</Badge>
-            )}
-          </ActionButton>
+          <>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="cxp-ver-desactivadas"
+                checked={showDeleted}
+                onCheckedChange={(checked) => handleShowDeletedChange(checked === true)}
+              />
+              <Label htmlFor="cxp-ver-desactivadas" className="text-sm font-normal whitespace-nowrap cursor-pointer">
+                Ver desactivadas
+              </Label>
+            </div>
+            <ActionButton
+              variant="filter"
+              size="sm"
+              className="md:h-9 md:px-3"
+              startIcon={<Filter className="h-4 w-4" />}
+              onClick={() => setIsAdvancedFiltersOpen(true)}
+            >
+              Más Filtros
+              {activeFiltersCount > 0 && (
+                <Badge variant="secondary" className="ml-2">{activeFiltersCount}</Badge>
+              )}
+            </ActionButton>
+          </>
         }
         // Paginación server-side
         pagination={pagination}
@@ -1661,6 +1729,41 @@ function CuentasPagarPageContent() {
       <BulkUploadGuideDialog
         open={guideOpen}
         onOpenChange={setGuideOpen}
+      />
+
+      {/* Confirmación de desactivar / reactivar */}
+      <ConfirmActionDialog
+        open={accionPendiente !== null}
+        onOpenChange={(open) => { if (!open) setAccionPendiente(null) }}
+        title={accionPendiente?.tipo === 'reactivar' ? "Reactivar cuenta" : "Eliminar cuenta"}
+        icon={accionPendiente?.tipo === 'reactivar' ? <RotateCcw className="h-5 w-5" /> : <Trash2 className="h-5 w-5" />}
+        description={
+          accionPendiente?.tipo === 'reactivar' ? (
+            <>
+              La factura <strong>{accionPendiente.cuenta.invoiceNumber}</strong> vuelve al listado y a los totales
+              con sus pagos y su gasto ligado, tal como estaba.
+            </>
+          ) : (
+            <>
+              La factura <strong>{accionPendiente?.cuenta.invoiceNumber}</strong> deja de contar en los totales,
+              junto con sus pagos y su gasto ligado. Podrás reactivarla desde &quot;Ver desactivadas&quot;.
+            </>
+          )
+        }
+        confirmLabel={accionPendiente?.tipo === 'reactivar' ? "Reactivar" : "Eliminar"}
+        loadingText={accionPendiente?.tipo === 'reactivar' ? "Reactivando…" : "Eliminando…"}
+        confirmVariant={accionPendiente?.tipo === 'reactivar' ? "primary" : "danger"}
+        onConfirm={handleConfirmarAccionCuenta}
+      />
+
+      {/* Borrado permanente: enseña el impacto y exige teclear el folio */}
+      <DeleteAccountDialog
+        open={cuentaAEliminar !== null}
+        onOpenChange={(open) => { if (!open) setCuentaAEliminar(null) }}
+        tipo="pagar"
+        cuentaId={cuentaAEliminar?.id ?? ""}
+        folio={cuentaAEliminar?.invoiceNumber ?? ""}
+        onDeleted={() => fetchAccounts(buildFilterDto(), page, limit)}
       />
     </div>
   )

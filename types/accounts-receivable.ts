@@ -92,7 +92,7 @@ export interface AccountReceivable {
   createdById: string;
   createdAt: string;
   updatedAt: string;
-  deletedAt?: string;
+  deletedAt: string | null;
   // Relations
   client?: Client;
   project?: Project;
@@ -209,6 +209,8 @@ export interface AccountReceivableFilterDto {
   maxBalance?: number;
   page?: number;
   limit?: number;
+  /** Incluye las cuentas desactivadas en el listado; los totales no cambian. */
+  includeDeleted?: boolean;
 }
 
 export interface FollowUpFilterDto {
@@ -217,6 +219,47 @@ export interface FollowUpFilterDto {
   result?: FollowUpResult;
   dateFrom?: string;
   dateTo?: string;
+}
+
+// ============================================
+// RESPONSES - DESACTIVAR / REACTIVAR
+// ============================================
+
+export interface ReactivateAccountReceivableResponse {
+  id: string;
+  deletedAt: null;
+  pagosReactivados: number;
+  mensaje: string;
+}
+
+// ============================================
+// RESPONSES - BORRADO PERMANENTE
+// ============================================
+
+/** Lo que se perderá al eliminar la cuenta; alimenta el diálogo de confirmación. */
+export interface AccountReceivableDeletionImpact {
+  id: string;
+  invoiceNumber: string;
+  /** Nombre del cliente. */
+  entidad: string;
+  amount: number;
+  paidAmount: number;
+  balance: number;
+  pagos: { cantidad: number; monto: number };
+  /** Filas de seguimiento de cobranza que se borran con la cuenta. */
+  seguimientos: number;
+  proyecto: { id: string; nombre: string } | null;
+}
+
+export interface PermanentDeleteAccountReceivableResponse {
+  id: string;
+  mensaje: string;
+  borrado: {
+    pagos: number;
+    anticiposAplicaciones: number;
+    gasto: boolean;
+    seguimientos: number;
+  };
 }
 
 // ============================================

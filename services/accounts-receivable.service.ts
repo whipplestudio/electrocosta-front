@@ -15,6 +15,9 @@ import {
   FollowUp,
   FollowUpStats,
   AccountsReceivableTotals,
+  ReactivateAccountReceivableResponse,
+  AccountReceivableDeletionImpact,
+  PermanentDeleteAccountReceivableResponse,
 } from '@/types/accounts-receivable';
 
 // ============================================
@@ -84,6 +87,48 @@ export const accountsReceivableService = {
   async delete(id: string): Promise<void> {
     try {
       await apiClient.delete(`/accounts-receivable/${id}`);
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
+
+  /**
+   * Reactivar cuenta por cobrar desactivada (409 si su folio ya lo ocupa otra activa)
+   */
+  async reactivar(id: string): Promise<ReactivateAccountReceivableResponse> {
+    try {
+      const response = await apiClient.post<ReactivateAccountReceivableResponse>(
+        `/accounts-receivable/${id}/reactivar`
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
+
+  /**
+   * Obtener lo que se perderá al eliminar la cuenta permanentemente (pagos, seguimientos)
+   */
+  async obtenerImpactoEliminacion(id: string): Promise<AccountReceivableDeletionImpact> {
+    try {
+      const response = await apiClient.get<AccountReceivableDeletionImpact>(
+        `/accounts-receivable/${id}/impacto-eliminacion`
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
+
+  /**
+   * Eliminar permanentemente una cuenta por cobrar, activa o desactivada, con sus pagos
+   */
+  async eliminarPermanente(id: string): Promise<PermanentDeleteAccountReceivableResponse> {
+    try {
+      const response = await apiClient.delete<PermanentDeleteAccountReceivableResponse>(
+        `/accounts-receivable/${id}/permanente`
+      );
+      return response.data;
     } catch (error) {
       throw new Error(handleApiError(error));
     }

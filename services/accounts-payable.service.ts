@@ -13,6 +13,9 @@ import type {
   DashboardData,
   PaymentSummary,
   Payment,
+  ReactivateAccountPayableResponse,
+  AccountPayableDeletionImpact,
+  PermanentDeleteAccountPayableResponse,
 } from '@/types/accounts-payable';
 
 export const accountsPayableService = {
@@ -58,6 +61,39 @@ export const accountsPayableService = {
   async delete(id: string): Promise<void> {
     try {
       await apiClient.delete(`/accounts-payable/${id}`);
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
+
+  async reactivar(id: string): Promise<ReactivateAccountPayableResponse> {
+    try {
+      const response = await apiClient.post<ReactivateAccountPayableResponse>(
+        `/accounts-payable/${id}/reactivar`
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
+
+  async obtenerImpactoEliminacion(id: string): Promise<AccountPayableDeletionImpact> {
+    try {
+      const response = await apiClient.get<AccountPayableDeletionImpact>(
+        `/accounts-payable/${id}/impacto-eliminacion`
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(handleApiError(error));
+    }
+  },
+
+  async eliminarPermanente(id: string): Promise<PermanentDeleteAccountPayableResponse> {
+    try {
+      const response = await apiClient.delete<PermanentDeleteAccountPayableResponse>(
+        `/accounts-payable/${id}/permanente`
+      );
+      return response.data;
     } catch (error) {
       throw new Error(handleApiError(error));
     }

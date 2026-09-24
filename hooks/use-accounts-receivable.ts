@@ -124,27 +124,6 @@ export const useAccountsReceivable = () => {
     [currentAccount, accounts]
   );
 
-  const deleteAccount = useCallback(async (id: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      await accountsReceivableService.delete(id);
-      setAccounts((prev) => prev.filter((account) => account.id !== id));
-      if (currentAccount?.id === id) {
-        setCurrentAccount(null);
-      }
-      toast.success('Cuenta eliminada exitosamente');
-      return true;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error al eliminar cuenta';
-      setError(errorMessage);
-      toast.error(errorMessage);
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentAccount]);
-
   // ============================================
   // REPORTS
   // ============================================
@@ -250,7 +229,6 @@ export const useAccountsReceivable = () => {
     fetchAccountById,
     createAccount,
     updateAccount,
-    deleteAccount,
 
     // Reports
     fetchOverdue,

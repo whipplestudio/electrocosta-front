@@ -88,6 +88,7 @@ export interface AccountPayable {
   };
   createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
 }
 
 // ============================================
@@ -186,6 +187,56 @@ export interface AccountPayableFiltersDto {
   sortBy?: string;
   order?: 'asc' | 'desc';
   hasBalance?: boolean;
+  /** Incluye las cuentas desactivadas en el listado; el `summary` no cambia. */
+  includeDeleted?: boolean;
+}
+
+// ============================================
+// RESPONSES - DESACTIVAR / REACTIVAR
+// ============================================
+
+export interface ReactivateAccountPayableResponse {
+  id: string;
+  deletedAt: null;
+  pagosReactivados: number;
+  gastoReactivado: boolean;
+  mensaje: string;
+}
+
+// ============================================
+// RESPONSES - BORRADO PERMANENTE
+// ============================================
+
+/** Lo que se perderá al eliminar la cuenta; alimenta el diálogo de confirmación. */
+export interface AccountPayableDeletionImpact {
+  id: string;
+  invoiceNumber: string;
+  /** Nombre del proveedor. */
+  entidad: string;
+  amount: number;
+  paidAmount: number;
+  balance: number;
+  pagos: { cantidad: number; monto: number };
+  anticiposAplicados: {
+    id: string;
+    folio: string;
+    monto: number;
+    /** Saldo del anticipo una vez que el borrado le devuelva lo aplicado. */
+    saldoResultante: number;
+  }[];
+  gasto: { id: string; descripcion: string; monto: number } | null;
+  proyecto: { id: string; nombre: string } | null;
+}
+
+export interface PermanentDeleteAccountPayableResponse {
+  id: string;
+  mensaje: string;
+  borrado: {
+    pagos: number;
+    anticiposAplicaciones: number;
+    gasto: boolean;
+    seguimientos: number;
+  };
 }
 
 // ============================================

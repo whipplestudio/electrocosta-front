@@ -121,6 +121,9 @@ export interface DataTableProps<T> {
   title?: string
   // Toolbar buttons
   toolbarButtons?: React.ReactNode
+  // Estilo extra para una fila concreta (p. ej. atenuar las desactivadas). Se
+  // aplica encima del estilo base de la fila, que se conserva.
+  getRowSx?: (row: T, index: number) => SxProps<Theme> | undefined
 }
 
 // MD3 Styled TablePagination component
@@ -591,6 +594,7 @@ export function DataTable<T>({
   title,
   // Toolbar buttons
   toolbarButtons,
+  getRowSx,
 }: DataTableProps<T>) {
   // Internal state for uncontrolled usage
   const [internalSearch, setInternalSearch] = React.useState('')
@@ -772,6 +776,7 @@ export function DataTable<T>({
                     '&:last-child .MuiTableCell-root': {
                       borderBottom: 'none',
                     },
+                    ...getRowSx?.(row, index),
                   }}
                 >
                   {columns.map((column) => (

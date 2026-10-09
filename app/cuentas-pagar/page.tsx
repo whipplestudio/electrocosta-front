@@ -37,7 +37,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import { FinancialAmountSection } from "@/components/financial"
 import type { IvaType } from "@/components/financial"
-import { suppliersService, type Supplier } from "@/services/suppliers.service"
+import { suppliersService } from "@/services/suppliers.service"
+import type { SupplierOption } from "@/types/suppliers"
 import { categoriesService, type Category } from "@/services/categories.service"
 import { projectsService, type Project } from "@/services/projects.service"
 import type { AccountPayable, AccountPayableStatus, AccountsPayableSummary, CreateAccountPayableDto, UpdateAccountPayableDto } from "@/types/accounts-payable"
@@ -66,7 +67,10 @@ export default function CuentasPagarPage() {
 
 function CuentasPagarPageContent() {
   const [accounts, setAccounts] = useState<AccountPayable[]>([])
-  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
+  // Opciones del filtro: incluyen los inactivos para encontrar las cuentas
+  // históricas de un proveedor desactivado (el formulario sólo ofrece activos).
+  const [filterSuppliers, setFilterSuppliers] = useState<SupplierOption[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [projects, setProjects] = useState<Pick<Project, 'id' | 'name' | 'code'>[]>([])
   const [loading, setLoading] = useState(true)
@@ -83,6 +87,7 @@ function CuentasPagarPageContent() {
   const [filters, setFilters] = useState({
     projectId: "all",
     categoryId: "all",
+    supplierId: "all",
     invoiceNumber: "",
     dateFrom: undefined as Date | undefined,
     dateTo: undefined as Date | undefined,
@@ -120,7 +125,6 @@ function CuentasPagarPageContent() {
   const [savingPayment, setSavingPayment] = useState(false)
   const [formData, setFormData] = useState({
     supplierId: "",
-    supplierName: "",
     projectId: "",
     invoiceNumber: "",
     iva: "16",
@@ -163,6 +167,7 @@ function CuentasPagarPageContent() {
     if (searchQuery) filterDto.search = searchQuery
     if (advFilters.projectId && advFilters.projectId !== "all") filterDto.projectId = advFilters.projectId
     if (advFilters.categoryId && advFilters.categoryId !== "all") filterDto.categoryId = advFilters.categoryId
+    if (advFilters.supplierId && advFilters.supplierId !== "all") filterDto.supplierId = advFilters.supplierId
     if (filterStatus && filterStatus !== "all") filterDto.status = filterStatus
     if (advFilters.invoiceNumber) filterDto.invoiceNumber = advFilters.invoiceNumber
     if (advFilters.dateFrom) filterDto.dateFrom = advFilters.dateFrom.toISOString()
@@ -203,6 +208,7 @@ function CuentasPagarPageContent() {
   // bloque de "sin acceso" debajo del campo que lo sufre.
   const [projectsForbidden, setProjectsForbidden] = useState<ForbiddenPermissionError | null>(null)
   const [categoriesForbidden, setCategoriesForbidden] = useState<ForbiddenPermissionError | null>(null)
+  const [suppliersForbidden, setSuppliersForbidden] = useState<ForbiddenPermissionError | null>(null)
 
   const loadSuppliersAndCategories = async () => {
     try {
@@ -212,10 +218,11 @@ function CuentasPagarPageContent() {
       // señalar cuál es la que no tiene permiso. Con Promise.all, un 403 en
       // proyectos vaciaba también proveedores y categorías, que sí cargaban,
       // y los tres quedaban bajo el mismo toast genérico.
-      const [suppliersResult, categoriesResult, projectsResult] = await Promise.allSettled([
-        suppliersService.getAll({ page: 1, limit: 100 }),
+      const [suppliersResult, categoriesResult, projectsResult, filterSuppliersResult] = await Promise.allSettled([
+        suppliersService.listAll(),
         categoriesService.getAll({ page: 1, limit: 100 }),
         projectsService.listAll(undefined, 'activo'),
+        suppliersService.listAll({ includeInactive: true }),
       ]);
 
       // Un fallo "explicado" es el que el formulario ya muestra en su sitio
@@ -223,12 +230,25 @@ function CuentasPagarPageContent() {
       const failures: { reason: unknown; explained: boolean }[] = []
 
       if (suppliersResult.status === 'fulfilled') {
-        setSuppliers(suppliersResult.value.data)
+        setSuppliers(suppliersResult.value)
+        setSuppliersForbidden(null)
       } else {
+        const forbidden = getForbiddenPermissionError(suppliersResult.reason)
         setSuppliers([])
-        // El selector de proveedores no tiene bloque propio, así que su 403
-        // tampoco puede darse por explicado.
-        failures.push({ reason: suppliersResult.reason, explained: false })
+        setSuppliersForbidden(forbidden)
+        failures.push({ reason: suppliersResult.reason, explained: !!forbidden })
+      }
+
+      if (filterSuppliersResult.status === 'fulfilled') {
+        setFilterSuppliers(filterSuppliersResult.value)
+      } else {
+        // Mismo endpoint y permisos que las opciones del formulario: su 403 lo
+        // explica el bloque de sin acceso del filtro.
+        setFilterSuppliers([])
+        failures.push({
+          reason: filterSuppliersResult.reason,
+          explained: !!getForbiddenPermissionError(filterSuppliersResult.reason),
+        })
       }
 
       if (categoriesResult.status === 'fulfilled') {
@@ -364,7 +384,6 @@ function CuentasPagarPageContent() {
     setSelectedAccount(null)
     setFormData({
       supplierId: "",
-      supplierName: "",
       projectId: "",
       invoiceNumber: "",
       iva: "16",
@@ -380,8 +399,29 @@ function CuentasPagarPageContent() {
     setIsDialogOpen(true)
   }
 
+  // La carga al montar sólo trae proveedores activos. Al editar se vuelve a
+  // pedir la lista incluyendo el de la cuenta, para que un proveedor dado de
+  // baja no desaparezca del select y la cuenta pueda guardarse sin cambiarlo.
+  const loadSuppliersIncluding = useCallback(async (supplierId: string) => {
+    try {
+      setSuppliers(await suppliersService.listAll({ includeId: supplierId }))
+      setSuppliersForbidden(null)
+    } catch (error) {
+      const forbidden = getForbiddenPermissionError(error)
+      setSuppliers([])
+      setSuppliersForbidden(forbidden)
+      if (!forbidden) {
+        console.error("Error al cargar proveedores:", error)
+        toast.error("Error al cargar opciones del formulario")
+      }
+    }
+  }, [])
+
   const handleEditarCuenta = useCallback((cuenta: AccountPayable) => {
     setSelectedAccount(cuenta)
+    if (cuenta.supplierId) {
+      loadSuppliersIncluding(cuenta.supplierId)
+    }
 
     // Detectar tipo de IVA basándose en el valor
     // Heurística: si IVA <= 100 → porcentaje, si IVA > 100 → monto fijo
@@ -390,7 +430,6 @@ function CuentasPagarPageContent() {
 
     setFormData({
       supplierId: cuenta.supplierId || "",
-      supplierName: cuenta.supplier?.name || cuenta.supplierName || "",
       projectId: cuenta.projectId || "",
       invoiceNumber: cuenta.invoiceNumber,
       iva: cuenta.iva?.toString() || "16",
@@ -404,11 +443,11 @@ function CuentasPagarPageContent() {
       description: cuenta.description || "",
     })
     setIsDialogOpen(true)
-  }, [])
+  }, [loadSuppliersIncluding])
 
   const handleSubmitForm = async () => {
     // Validar campos obligatorios
-    if (!formData.supplierName || !formData.subtotal || !formData.issueDate) {
+    if (!formData.supplierId || !formData.subtotal || !formData.issueDate) {
       toast.error("Por favor completa todos los campos requeridos")
       return
     }
@@ -419,7 +458,7 @@ function CuentasPagarPageContent() {
       setSavingAccount(true)
       if (selectedAccount) {
         await accountsPayableService.update(selectedAccount.id, {
-          supplierName: formData.supplierName,
+          supplierId: formData.supplierId,
           invoiceNumber: formData.invoiceNumber,
           iva: formData.iva !== "" ? parseFloat(formData.iva) : 0,
           ivaType: formData.ivaType,
@@ -435,7 +474,7 @@ function CuentasPagarPageContent() {
         toast.success("Cuenta actualizada exitosamente")
       } else {
         await accountsPayableService.create({
-          supplierName: formData.supplierName,
+          supplierId: formData.supplierId,
           projectId: formData.projectId || undefined,
           invoiceNumber: formData.invoiceNumber,
           iva: formData.iva !== "" ? parseFloat(formData.iva) : 0,
@@ -560,6 +599,7 @@ function CuentasPagarPageContent() {
     setFilters({
       projectId: "all",
       categoryId: "all",
+      supplierId: "all",
       invoiceNumber: "",
       dateFrom: undefined,
       dateTo: undefined,
@@ -697,6 +737,7 @@ function CuentasPagarPageContent() {
     searchQuery !== "",
     filters.projectId !== "all",
     filters.categoryId !== "all",
+    filters.supplierId !== "all",
     filters.invoiceNumber,
     filters.dateFrom,
     filters.dueDateFrom,
@@ -708,7 +749,7 @@ function CuentasPagarPageContent() {
       key: 'supplier',
       header: 'Proveedor',
       render: (row) => (
-        <span className="font-medium">{row.supplier?.name || row.supplierName || 'N/A'}</span>
+        <span className="font-medium">{row.supplier?.name || 'N/A'}</span>
       ),
     },
     {
@@ -1089,6 +1130,29 @@ function CuentasPagarPageContent() {
               placeholder="Todas las categorías"
             />
 
+            {/* Proveedor */}
+            <div className="space-y-2">
+              <FloatingSelect
+                label="Proveedor"
+                value={tempFilters.supplierId}
+                onChange={(value) => setTempFilters({ ...tempFilters, supplierId: value as string })}
+                options={[
+                  { value: 'all', label: 'Todos los proveedores' },
+                  ...filterSuppliers.map((supplier) => ({
+                    value: supplier.id,
+                    label: supplier.status === 'active' ? supplier.name : `${supplier.name} (inactivo)`,
+                  })),
+                ]}
+                placeholder="Todos los proveedores"
+                searchable
+                searchPlaceholder="Buscar proveedor..."
+                disabled={!!suppliersForbidden}
+              />
+              {suppliersForbidden && (
+                <PermissionDenied error={suppliersForbidden} variant="inline" />
+              )}
+            </div>
+
             {/* Folio de Factura */}
             <FloatingInput
               label="Folio de Factura"
@@ -1148,6 +1212,7 @@ function CuentasPagarPageContent() {
                   setTempFilters({
                     projectId: "all",
                     categoryId: "all",
+                    supplierId: "all",
                     invoiceNumber: "",
                     dateFrom: undefined,
                     dateTo: undefined,
@@ -1188,7 +1253,6 @@ function CuentasPagarPageContent() {
             setSelectedAccount(null)
             setFormData({
               supplierId: "",
-              supplierName: "",
               projectId: "",
               invoiceNumber: "",
               iva: "16",
@@ -1216,11 +1280,37 @@ function CuentasPagarPageContent() {
             columns: 1,
             fields: [
               {
-                name: 'supplierName',
-                type: 'text',
+                name: 'supplierId',
+                type: 'custom',
                 label: 'Proveedor',
                 required: true,
-                placeholder: 'Nombre del proveedor',
+                render: ({ value, onChange }) => (
+                  <div className="space-y-2">
+                    <FloatingSelect
+                      label="Proveedor *"
+                      value={value || ''}
+                      onChange={(newValue) => onChange(newValue as string)}
+                      options={loadingSelects
+                        ? [{ label: 'Cargando...', value: 'loading', disabled: true }]
+                        : suppliersForbidden
+                          ? [{ label: 'Sin acceso', value: 'empty', disabled: true }]
+                          : suppliers.length === 0
+                            ? [{ label: 'No hay proveedores disponibles', value: 'empty', disabled: true }]
+                            : suppliers.map((s) => ({
+                                label: s.taxId ? `${s.name} — ${s.taxId}` : s.name,
+                                value: s.id,
+                              }))
+                      }
+                      placeholder={loadingSelects ? "Cargando..." : "Seleccionar"}
+                      searchable
+                      searchPlaceholder="Buscar por razón social o RFC..."
+                      disabled={loadingSelects || !!suppliersForbidden}
+                    />
+                    {suppliersForbidden && (
+                      <PermissionDenied error={suppliersForbidden} variant="inline" />
+                    )}
+                  </div>
+                ),
                 colSpan: 'full',
               },
             ],
@@ -1425,7 +1515,7 @@ function CuentasPagarPageContent() {
                   Historial de Pagos
                 </DialogTitle>
                 <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 truncate">
-                  {selectedAccount?.supplierName || selectedAccount?.supplier?.name}
+                  {selectedAccount?.supplier?.name}
                 </p>
               </div>
             </div>

@@ -494,6 +494,13 @@ function AplicacionPagosContent() {
           columns={[
             { key: 'invoiceNumber', header: 'Factura', align: 'left' },
             { key: 'client', header: 'Cliente', render: (row) => row.client?.name || 'N/A' },
+            {
+              key: 'empresa',
+              header: 'Empresa',
+              render: (row) => (
+                <span className="text-sm">{row.project?.empresa || <span className="text-muted-foreground">—</span>}</span>
+              ),
+            },
             { key: 'amount', header: 'Monto Total', align: 'right', render: (row) => fmtCurrency(row.amount) },
             { key: 'balance', header: 'Saldo Pendiente', align: 'right', render: (row) => fmtCurrency(row.balance) },
             { 

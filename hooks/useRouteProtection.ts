@@ -30,6 +30,11 @@ const ROUTE_PERMISSIONS: RoutePermissionMap[] = [
     name: 'Clientes',
   },
   {
+    path: '/proveedores',
+    requiredPermissions: ['proveedores.proveedores.ver'],
+    name: 'Proveedores',
+  },
+  {
     path: '/categorias',
     requiredPermissions: ['categorias.categorias.ver'],
     name: 'Categorías',

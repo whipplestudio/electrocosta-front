@@ -83,6 +83,7 @@ function PermisosPageContent() {
     dashboard: "Dashboard",
     carga_informacion: "Proyectos",
     clientes: "Clientes",
+    proveedores: "Proveedores",
     categorias: "Categorías",
   }
 
@@ -104,6 +105,7 @@ function PermisosPageContent() {
     proyectos: "Proyectos",
     anticipos: "Anticipos",
     clientes: "Clientes",
+    proveedores: "Proveedores",
     categorias: "Categorías",
   }
 
@@ -135,6 +137,7 @@ function PermisosPageContent() {
       dashboard: 'bg-cyan-50 text-cyan-700 border-cyan-200',
       carga_informacion: 'bg-amber-50 text-amber-700 border-amber-200',
       clientes: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      proveedores: 'bg-orange-50 text-orange-700 border-orange-200',
       categorias: 'bg-purple-50 text-purple-700 border-purple-200',
     }
     return colors[module] || 'bg-gray-50 text-gray-700 border-gray-200'

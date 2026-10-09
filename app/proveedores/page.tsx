@@ -1,9 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
-import { useRouter } from "next/navigation"
-import { Search, Edit, Users, Building2, Mail, Phone, User, CheckCircle2, Save, Upload, FileSpreadsheet, Loader2, HelpCircle, Eye } from "lucide-react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Edit, Trash2, RotateCcw, Truck, FileCheck, FileX, Receipt, Save, Upload, FileSpreadsheet, HelpCircle } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -12,48 +10,64 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { clientsService, Client, CreateClientDto } from "@/services/clients.service"
+import { suppliersService, CreateSupplierDto } from "@/services/suppliers.service"
+import type { Supplier, SupplierStats } from "@/types/suppliers"
+import type { ForbiddenPermissionError } from "@/types/permissions"
+import { getForbiddenPermissionError } from "@/lib/api-client"
 import { toast } from "sonner"
 import { ActionButton, CreateButton, KpiCard, DataTable, Column, Action } from "@/components/ui"
-import { FloatingInput } from "@/components/ui"
 import { DynamicForm, FormSection } from "@/components/forms"
 import { BulkUploadDialog, erroresDeCargaDirecta, type ErrorValidacionCarga } from "@/components/bulk-upload-dialog"
-import { BulkUploadGuideDialogClientes } from "@/components/bulk-upload-guide-dialog-clientes"
+import { BulkUploadGuideDialogProveedores } from "@/components/bulk-upload-guide-dialog-proveedores"
+import { ConfirmActionDialog } from "@/components/confirm-action-dialog"
+import { PermissionDenied } from "@/components/permission-denied"
 import { cn } from "@/lib/utils"
 import { RouteProtection } from "@/components/route-protection"
 
-export default function ClientesPage() {
+// Sin `status` el back devuelve sólo activos; el filtro siempre manda uno explícito
+type SupplierStatusFilter = 'active' | 'inactive'
+
+const DEFAULT_STATUS_FILTER: SupplierStatusFilter = 'active'
+
+export default function ProveedoresPage() {
   return (
-    <RouteProtection requiredPermissions={["clientes.clientes.ver"]}>
-      <ClientesPageContent />
+    <RouteProtection requiredPermissions={["proveedores.proveedores.ver"]}>
+      <ProveedoresPageContent />
     </RouteProtection>
   )
 }
 
-function ClientesPageContent() {
-  const router = useRouter()
-  const [clients, setClients] = useState<Client[]>([])
+function ProveedoresPageContent() {
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
-  
+  const [suppliersForbidden, setSuppliersForbidden] = useState<ForbiddenPermissionError | null>(null)
+
+  // KPIs (GET /suppliers/stats)
+  const [stats, setStats] = useState<SupplierStats | null>(null)
+
   // Pagination state
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
   const [total, setTotal] = useState(0)
   const [pages, setPages] = useState(1)
-  
-  // Search state for DataTable
+
+  // Search and status filter state for DataTable
   const [searchTerm, setSearchTerm] = useState("")
-  
+  const [statusFilter, setStatusFilter] = useState<SupplierStatusFilter>(DEFAULT_STATUS_FILTER)
+
   // Debounce timer ref
   const searchTimerRef = useRef<NodeJS.Timeout | null>(null)
-  
+
   // Modal states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   const [formLoading, setFormLoading] = useState(false)
-  
-  // Bulk upload dialog states (similar to proyectos)
+
+  // Confirmación de eliminar / reactivar
+  const [accionPendiente, setAccionPendiente] = useState<{ tipo: 'eliminar' | 'reactivar'; proveedor: Supplier } | null>(null)
+
+  // Bulk upload dialog states (adaptado a BulkUploadDialog como en clientes)
   const [showBulkUploadDialog, setShowBulkUploadDialog] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const [archivo, setArchivo] = useState<File | null>(null)
@@ -62,29 +76,67 @@ function ClientesPageContent() {
   const [importacionResultado, setImportacionResultado] = useState<any>(null)
   const [uploadLoading, setUploadLoading] = useState(false)
 
-  // Función para cargar clientes con paginación
-  const loadClients = async (search?: string, currentPage?: number, currentLimit?: number) => {
+  // Función para cargar proveedores con paginación
+  const loadSuppliers = async (
+    search?: string,
+    currentPage?: number,
+    currentLimit?: number,
+    currentStatus?: SupplierStatusFilter,
+  ) => {
     try {
       setLoading(true)
-      const response = await clientsService.list({ 
-        search, 
-        page: currentPage || page, 
-        limit: currentLimit || limit 
+      const response = await suppliersService.list({
+        search,
+        status: currentStatus || statusFilter,
+        page: currentPage || page,
+        limit: currentLimit || limit,
       })
-      setClients(response.data)
+      setSuppliers(response.data)
       setTotal(response.total)
       setPages(response.pages)
+      setSuppliersForbidden(null)
     } catch (error) {
-      toast.error('No se pudieron cargar los clientes')
-      console.error("Error loading clients:", error)
+      console.error("Error loading suppliers:", error)
+      const forbidden = getForbiddenPermissionError(error)
+      if (forbidden) {
+        // La tabla se vacía a propósito: dejar filas viejas debajo de un
+        // "sin acceso" haría creer que el listado sigue actualizándose.
+        setSuppliers([])
+        setTotal(0)
+        setPages(1)
+        setSuppliersForbidden(forbidden)
+      } else {
+        toast.error('No se pudieron cargar los proveedores')
+      }
     } finally {
       setLoading(false)
     }
   }
 
-  // Cargar clientes al montar el componente
+  const loadStats = async () => {
+    try {
+      setStats(await suppliersService.getStats())
+    } catch (error) {
+      console.error("Error loading supplier stats:", error)
+      // El 403 ya lo explica el bloque de la tabla (mismo permiso): aquí sólo
+      // se avisa de los demás errores.
+      setStats(null)
+      if (!getForbiddenPermissionError(error)) {
+        toast.error('No se pudieron cargar los indicadores de proveedores')
+      }
+    }
+  }
+
+  // Tras cada alta, edición, carga, borrado o reactivación
+  const refreshSuppliers = () => {
+    loadSuppliers(searchTerm)
+    loadStats()
+  }
+
+  // Cargar proveedores e indicadores al montar el componente
   useEffect(() => {
-    loadClients()
+    loadSuppliers()
+    loadStats()
   }, [])
 
   // Cleanup timer on unmount
@@ -96,125 +148,124 @@ function ClientesPageContent() {
     }
   }, [])
 
-  // Handlers para paginación y búsqueda
+  // Handlers para paginación, búsqueda y filtro de estado
   const handlePageChange = useCallback((newPage: number) => {
     setPage(newPage)
-    loadClients(searchTerm, newPage, limit)
-  }, [searchTerm, limit])
+    loadSuppliers(searchTerm, newPage, limit, statusFilter)
+  }, [searchTerm, limit, statusFilter])
 
   const handleLimitChange = useCallback((newLimit: number) => {
     setLimit(newLimit)
     setPage(1)
-    loadClients(searchTerm, 1, newLimit)
-  }, [searchTerm])
+    loadSuppliers(searchTerm, 1, newLimit, statusFilter)
+  }, [searchTerm, statusFilter])
 
   const handleSearchChange = useCallback((value: string) => {
     // Clear previous timer
     if (searchTimerRef.current) {
       clearTimeout(searchTimerRef.current)
     }
-    
+
     setSearchTerm(value)
     setPage(1)
-    
+
     // Set new timer
     searchTimerRef.current = setTimeout(() => {
-      loadClients(value, 1, limit)
+      loadSuppliers(value, 1, limit, statusFilter)
     }, 400)
+  }, [limit, statusFilter])
+
+  const handleFilterChange = useCallback((key: string, value: string | string[]) => {
+    if (key !== 'status') return
+    const nextStatus: SupplierStatusFilter = value === 'inactive' ? 'inactive' : DEFAULT_STATUS_FILTER
+    setStatusFilter(nextStatus)
+    setPage(1)
+    loadSuppliers(searchTerm, 1, limit, nextStatus)
+  }, [searchTerm, limit])
+
+  const handleClearFilters = useCallback(() => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current)
+    }
+    setSearchTerm("")
+    setStatusFilter(DEFAULT_STATUS_FILTER)
+    setPage(1)
+    loadSuppliers("", 1, limit, DEFAULT_STATUS_FILTER)
   }, [limit])
 
-  // Calcular KPIs
-  const clientesActivos = clients.filter((c) => c.status === "active").length
-  const clientesInactivos = clients.filter((c) => c.status !== "active").length
-
   // DataTable columns configuration
-  const clientColumns: Column<Client>[] = useMemo(() => [
+  const supplierColumns: Column<Supplier>[] = useMemo(() => [
     {
       key: 'name',
-      header: 'Cliente',
-      render: (client) => (
+      header: 'Razón Social',
+      render: (supplier) => (
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-[#f0fdf4] flex items-center justify-center">
-            <Building2 className="h-5 w-5 text-[#164e63]" />
+            <Truck className="h-5 w-5 text-[#164e63]" />
           </div>
-          <div>
-            <div className="font-medium text-[#374151]">{client.name}</div>
-            {client.contactPerson && (
-              <div className="text-sm text-[#6b7280] flex items-center gap-1">
-                <User className="h-3 w-3" />
-                {client.contactPerson}
-              </div>
-            )}
-          </div>
+          <div className="font-medium text-[#374151]">{supplier.name}</div>
         </div>
       ),
     },
     {
       key: 'taxId',
       header: 'RFC',
-      render: (client) => (
+      render: (supplier) => supplier.taxId ? (
         <span className="font-mono text-sm text-[#6b7280] bg-[#f9fafb] px-2 py-1 rounded-md">
-          {client.taxId}
+          {supplier.taxId}
         </span>
-      ),
-    },
-    {
-      key: 'contact',
-      header: 'Contacto',
-      render: (client) => (
-        <div className="text-sm space-y-1">
-          {client.email && (
-            <div className="flex items-center gap-1.5 text-[#374151]">
-              <Mail className="h-3.5 w-3.5 text-[#6b7280]" />
-              {client.email}
-            </div>
-          )}
-          {client.phone && (
-            <div className="flex items-center gap-1.5 text-[#6b7280]">
-              <Phone className="h-3.5 w-3.5" />
-              {client.phone}
-            </div>
-          )}
-        </div>
+      ) : (
+        <span className="text-sm text-[#6b7280]">—</span>
       ),
     },
     {
       key: 'status',
       header: 'Estado',
-      render: (client) => (
+      render: (supplier) => (
         <span className={cn(
           "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border",
-          client.status === "active"
+          supplier.status === "active"
             ? "bg-green-50 text-green-700 border-green-200"
             : "bg-red-50 text-red-700 border-red-200"
         )}>
           <span className={cn(
             "w-1.5 h-1.5 rounded-full mr-1.5",
-            client.status === "active" ? "bg-green-500" : "bg-red-500"
+            supplier.status === "active" ? "bg-green-500" : "bg-red-500"
           )} />
-          {client.status === "active" ? "Activo" : "Inactivo"}
+          {supplier.status === "active" ? "Activo" : "Inactivo"}
         </span>
       ),
     },
   ], [])
 
-  // DataTable actions configuration
-  const clientActions = useMemo((): Action<Client>[] => [
-    {
-      label: 'Ver',
-      icon: <Eye size={16} />,
-      onClick: (client: Client) => router.push(`/clientes/${client.id}`),
-    },
+  // DataTable actions configuration: en la vista de inactivos sólo se reactiva
+  const showingInactive = statusFilter === 'inactive'
+  const supplierActions = useMemo((): Action<Supplier>[] => [
     {
       label: 'Editar',
       icon: <Edit size={16} />,
-      onClick: (client: Client) => handleOpenEdit(client),
-      permissionCode: 'clientes.clientes.editar',
+      onClick: (supplier: Supplier) => handleOpenEdit(supplier),
+      hidden: () => showingInactive,
+      permissionCode: 'proveedores.proveedores.editar',
     },
-  ], [router])
+    {
+      label: 'Eliminar',
+      icon: <Trash2 size={16} />,
+      onClick: (supplier: Supplier) => setAccionPendiente({ tipo: 'eliminar', proveedor: supplier }),
+      hidden: () => showingInactive,
+      permissionCode: 'proveedores.proveedores.eliminar',
+    },
+    {
+      label: 'Reactivar',
+      icon: <RotateCcw size={16} />,
+      onClick: (supplier: Supplier) => setAccionPendiente({ tipo: 'reactivar', proveedor: supplier }),
+      hidden: () => !showingInactive,
+      permissionCode: 'proveedores.proveedores.editar',
+    },
+  ], [showingInactive])
 
   // Form sections configuration - title/description removed (shown in DialogHeader)
-  const clientFormSections: FormSection[] = [
+  const supplierFormSections: FormSection[] = [
     {
       fields: [
         {
@@ -228,32 +279,7 @@ function ClientesPageContent() {
           name: 'taxId',
           label: 'RFC',
           type: 'text',
-          placeholder: 'RFC del cliente',
-          required: true,
-        },
-        {
-          name: 'email',
-          label: 'Email',
-          type: 'email',
-          placeholder: 'correo@ejemplo.com',
-        },
-        {
-          name: 'phone',
-          label: 'Teléfono',
-          type: 'tel',
-          placeholder: '(55) 1234-5678',
-        },
-        {
-          name: 'contactPerson',
-          label: 'Persona de Contacto',
-          type: 'text',
-          placeholder: 'Nombre del contacto principal',
-        },
-        {
-          name: 'notes',
-          label: 'Notas',
-          type: 'textarea',
-          placeholder: 'Información adicional sobre el cliente...',
+          placeholder: 'Ej. ABC010203XY1 (opcional)',
         },
       ],
     },
@@ -264,71 +290,77 @@ function ClientesPageContent() {
     setIsCreateModalOpen(true)
   }
 
-  const handleOpenEdit = (client: Client) => {
-    setSelectedClient(client)
+  const handleOpenEdit = (supplier: Supplier) => {
+    setSelectedSupplier(supplier)
     setIsEditModalOpen(true)
   }
 
   const handleCloseModals = () => {
     setIsCreateModalOpen(false)
     setIsEditModalOpen(false)
-    setSelectedClient(null)
+    setSelectedSupplier(null)
   }
+
+  // El RFC es opcional: vacío se manda como null para que el back lo limpie
+  const toSupplierDto = (data: Record<string, any>): CreateSupplierDto => ({
+    name: data.name,
+    taxId: data.taxId?.trim() ? data.taxId : null,
+  })
 
   // Form submit handlers
   const handleCreateSubmit = async (data: Record<string, any>) => {
     try {
       setFormLoading(true)
 
-      const clientData: CreateClientDto = {
-        name: data.name,
-        taxId: data.taxId,
-        email: data.email || undefined,
-        phone: data.phone || undefined,
-        contactPerson: data.contactPerson || undefined,
-        notes: data.notes || undefined,
-        status: 'active',
-      }
+      await suppliersService.create(toSupplierDto(data))
 
-      await clientsService.create(clientData)
-      
-      toast.success('El cliente se ha creado exitosamente')
-      
+      toast.success('El proveedor se ha creado exitosamente')
+
       handleCloseModals()
-      loadClients(searchTerm)
+      refreshSuppliers()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo crear el cliente')
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear el proveedor')
     } finally {
       setFormLoading(false)
     }
   }
 
   const handleEditSubmit = async (data: Record<string, any>) => {
-    if (!selectedClient) return
-    
+    if (!selectedSupplier) return
+
     try {
       setFormLoading(true)
 
-      const updateData: CreateClientDto = {
-        name: data.name,
-        taxId: data.taxId,
-        email: data.email || undefined,
-        phone: data.phone || undefined,
-        contactPerson: data.contactPerson || undefined,
-        notes: data.notes || undefined,
-        status: 'active',
-      }
+      await suppliersService.update(selectedSupplier.id, toSupplierDto(data))
 
-      await clientsService.update(selectedClient.id, updateData)
-      
       toast.success('Los cambios se han guardado exitosamente')
 
       handleCloseModals()
-      loadClients(searchTerm)
+      refreshSuppliers()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el cliente')
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el proveedor')
     } finally {
       setFormLoading(false)
+    }
+  }
+
+  const handleConfirmarAccionProveedor = async () => {
+    if (!accionPendiente) return
+    const { tipo, proveedor } = accionPendiente
+    try {
+      if (tipo === 'eliminar') {
+        await suppliersService.remove(proveedor.id)
+        toast.success('Proveedor eliminado')
+      } else {
+        await suppliersService.reactivate(proveedor.id)
+        toast.success('Proveedor reactivado')
+      }
+      setAccionPendiente(null)
+      refreshSuppliers()
+    } catch (error) {
+      // El 409 del back (CxP abiertas) llega con su mensaje tal cual
+      const fallback = tipo === 'eliminar' ? 'No se pudo eliminar el proveedor' : 'No se pudo reactivar el proveedor'
+      toast.error(error instanceof Error ? error.message : fallback)
     }
   }
 
@@ -347,14 +379,14 @@ function ClientesPageContent() {
 
     try {
       setUploadLoading(true)
-      const result = await clientsService.bulkUpload(archivo)
-      
+      const result = await suppliersService.bulkUpload(archivo)
+
       // Simular uploadResponse con los datos del archivo
       setUploadResponse({
-        uploadId: 'client-bulk-' + Date.now(),
+        uploadId: 'supplier-bulk-' + Date.now(),
         registrosDetectados: result.success + result.failed,
       })
-      
+
       // Simular validacionResultado con los datos de la respuesta
       setValidacionResultado({
         registrosValidos: result.success,
@@ -362,7 +394,7 @@ function ClientesPageContent() {
         puedeImportar: result.success > 0,
         errores: erroresDeCargaDirecta(result.errors),
       })
-      
+
       if (result.failed > 0) {
         toast.error(`${result.success} válidos, ${result.failed} con errores`)
       }
@@ -373,7 +405,7 @@ function ClientesPageContent() {
     }
   }
 
-  // Para clientes, la importación ya se hizo en subirArchivo
+  // Para proveedores, la importación ya se hizo en subirArchivo
   // Esta función solo confirma y recarga la lista
   const importarDatos = async () => {
     setImportacionResultado({
@@ -382,10 +414,10 @@ function ClientesPageContent() {
         (e: ErrorValidacionCarga) => `Fila ${e.fila}: ${e.error}`,
       ),
     })
-    
-    // Recargar lista si hay registros importados
+
+    // Recargar lista e indicadores si hay registros importados
     if (validacionResultado?.registrosValidos > 0) {
-      loadClients(searchTerm)
+      refreshSuppliers()
     }
   }
 
@@ -398,16 +430,16 @@ function ClientesPageContent() {
 
   const descargarPlantilla = async () => {
     try {
-      const blob = await clientsService.descargarPlantilla()
+      const blob = await suppliersService.descargarPlantilla()
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = 'plantilla_clientes.xlsx'
+      link.download = 'plantilla_proveedores.xlsx'
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
-      
+
       toast.success('La plantilla se ha descargado exitosamente')
     } catch (error) {
       toast.error('No se pudo descargar la plantilla')
@@ -419,8 +451,8 @@ function ClientesPageContent() {
       {/* Header - Material Design 3 - Mobile First */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-[#e5e7eb]">
         <div className="space-y-1">
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[#374151]">Gestión de Clientes</h1>
-          <p className="text-sm md:text-base text-[#6b7280]">Administra la información de tus clientes y contactos</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[#374151]">Gestión de Proveedores</h1>
+          <p className="text-sm md:text-base text-[#6b7280]">Administra el catálogo de proveedores de las cuentas por pagar</p>
         </div>
         {/* Toolbar buttons - 2 cols on mobile, horizontal on desktop */}
         <div className="grid grid-cols-2 gap-2 md:flex md:flex-nowrap md:justify-end">
@@ -456,6 +488,7 @@ function ClientesPageContent() {
                   className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={<FileSpreadsheet className="h-4 w-4" />}
                   onClick={descargarPlantilla}
+                  permissionCode="proveedores.proveedores.crear"
                 >
                   Plantilla
                 </ActionButton>
@@ -464,7 +497,7 @@ function ClientesPageContent() {
                 <div className="space-y-1">
                   <p className="font-semibold text-white dark:text-slate-900">Plantilla para carga masiva</p>
                   <p className="text-xs text-slate-200 dark:text-slate-700">
-                    Descarga el archivo Excel con el formato correcto para importar múltiples clientes a la vez
+                    Descarga el archivo Excel con el formato correcto para importar múltiples proveedores a la vez
                   </p>
                 </div>
               </TooltipContent>
@@ -479,67 +512,93 @@ function ClientesPageContent() {
                   className="w-full md:w-auto md:h-9 md:px-3"
                   startIcon={<Upload className="h-4 w-4" />}
                   onClick={() => setShowBulkUploadDialog(true)}
-                  permissionCode="clientes.clientes.crear"
+                  permissionCode="proveedores.proveedores.crear"
                 >
                   Carga Masiva
                 </ActionButton>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-xs bg-slate-700 dark:bg-slate-200 border-slate-600 dark:border-slate-300">
                 <div className="space-y-1">
-                  <p className="font-semibold text-white dark:text-slate-900">Importación masiva de clientes</p>
+                  <p className="font-semibold text-white dark:text-slate-900">Importación masiva de proveedores</p>
                   <p className="text-xs text-slate-200 dark:text-slate-700">
-                    Sube un archivo Excel con múltiples clientes a la vez
+                    Sube un archivo Excel con múltiples proveedores a la vez
                   </p>
                 </div>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <CreateButton onClick={handleOpenCreate} size="sm" className="w-full md:w-auto md:h-9 md:px-3" permissionCode="clientes.clientes.crear">
-            Nuevo Cliente
+          <CreateButton onClick={handleOpenCreate} size="sm" className="w-full md:w-auto md:h-9 md:px-3" permissionCode="proveedores.proveedores.crear">
+            Nuevo Proveedor
           </CreateButton>
         </div>
       </div>
 
-      {/* KPIs - Reusable Components - Mobile First */}
-      <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+      {/* KPIs desde GET /suppliers/stats (sólo activos) - Mobile First */}
+      <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          title="Total Clientes"
-          value={total}
-          subtitle={`${clientesActivos} activos • ${clientesInactivos} inactivos`}
-          icon={<Users className="h-4 w-4" />}
+          title="Total Proveedores"
+          value={stats?.total ?? "—"}
+          subtitle="Proveedores activos"
+          icon={<Truck className="h-4 w-4" />}
           variant="primary"
         />
         <KpiCard
-          title="Clientes Activos"
-          value={clientesActivos}
-          subtitle="En operación actualmente"
-          icon={<CheckCircle2 className="h-4 w-4" />}
+          title="Con RFC"
+          value={stats?.conRfc ?? "—"}
+          subtitle="Identificados fiscalmente"
+          icon={<FileCheck className="h-4 w-4" />}
           variant="success"
         />
         <KpiCard
-          title="Estado del Sistema"
-          value={loading ? "Cargando" : "Operativo"}
-          subtitle={loading ? "Sincronizando datos..." : "Todos los sistemas activos"}
-          icon={loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />}
-          variant={loading ? "warning" : "default"}
+          title="Sin RFC"
+          value={stats?.sinRfc ?? "—"}
+          subtitle="Pendientes de capturar RFC"
+          icon={<FileX className="h-4 w-4" />}
+          variant="warning"
+        />
+        <KpiCard
+          title="Con Cuentas por Pagar"
+          value={stats?.conCuentasPorPagar ?? "—"}
+          subtitle="En la sucursal activa"
+          icon={<Receipt className="h-4 w-4" />}
+          variant="default"
         />
       </div>
 
-      {/* Tabla de Clientes - DataTable con paginación y búsqueda */}
+      {/* Tabla de Proveedores - DataTable con paginación, búsqueda y estado */}
       <DataTable
-        title="Listado de Clientes"
-        columns={clientColumns}
-        data={clients}
-        keyExtractor={(client) => client.id}
-        actions={clientActions}
+        title="Listado de Proveedores"
+        columns={supplierColumns}
+        data={suppliers}
+        keyExtractor={(supplier) => supplier.id}
+        actions={supplierActions}
         loading={loading}
-        emptyMessage="No se encontraron clientes. Intenta con otra búsqueda o crea un nuevo cliente."
-        
+        emptyMessage={showingInactive
+          ? "No hay proveedores inactivos con los filtros aplicados."
+          : "No se encontraron proveedores. Intenta con otra búsqueda o crea un nuevo proveedor."}
+        emptyState={suppliersForbidden ? <PermissionDenied error={suppliersForbidden} /> : undefined}
+
         // Search filter integrated in DataTable
-        searchFilter={{ placeholder: 'Buscar por nombre, RFC, email...', debounceMs: 400 }}
+        searchFilter={{ placeholder: 'Buscar por razón social o RFC...', debounceMs: 400 }}
         searchValue={searchTerm}
         onSearchChange={handleSearchChange}
-        
+
+        // Status filter
+        selectFilters={[
+          {
+            key: 'status',
+            label: 'Estado',
+            options: [
+              { label: 'Activos', value: 'active' },
+              { label: 'Inactivos', value: 'inactive' },
+            ],
+            placeholder: 'Filtrar por estado',
+          }
+        ]}
+        filterValues={{ status: statusFilter }}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
+
         // Backend pagination
         pagination={{
           page,
@@ -552,21 +611,21 @@ function ClientesPageContent() {
         rowsPerPageOptions={[10, 25, 50, 100]}
       />
 
-      {/* Create Client Modal - Mobile First */}
+      {/* Create Supplier Modal - Mobile First */}
       <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
         <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl p-4 sm:p-6">
           <DialogHeader className="space-y-2 pb-3 sm:pb-4">
             <DialogTitle className="text-xl sm:text-2xl font-semibold text-[#374151]">
-              Nuevo Cliente
+              Nuevo Proveedor
             </DialogTitle>
             <DialogDescription className="text-sm sm:text-base text-[#6b7280]">
-              Registrar un nuevo cliente en el sistema
+              Registrar un nuevo proveedor en el catálogo
             </DialogDescription>
           </DialogHeader>
           <DynamicForm
-            id="create-client-form"
+            id="create-supplier-form"
             config={{
-              sections: clientFormSections,
+              sections: supplierFormSections,
               columns: 2,
               gap: 'medium',
               variant: 'outlined',
@@ -579,10 +638,10 @@ function ClientesPageContent() {
             footerClassName="flex justify-end gap-3 pt-4 border-t border-[#e5e7eb]"
             extraButtons={
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-                <ActionButton 
-                  type="button" 
-                  variant="ghost" 
-                  onClick={handleCloseModals} 
+                <ActionButton
+                  type="button"
+                  variant="ghost"
+                  onClick={handleCloseModals}
                   disabled={formLoading}
                   className="flex-1 sm:flex-none"
                   size="md"
@@ -591,7 +650,7 @@ function ClientesPageContent() {
                 </ActionButton>
                 <ActionButton
                   type="submit"
-                  form="create-client-form"
+                  form="create-supplier-form"
                   variant="save"
                   disabled={formLoading}
                   size="md"
@@ -600,7 +659,7 @@ function ClientesPageContent() {
                   className="flex-1 sm:flex-none"
                   startIcon={<Save className="h-4 w-4" />}
                 >
-                  Guardar Cliente
+                  Guardar Proveedor
                 </ActionButton>
               </div>
             }
@@ -608,32 +667,28 @@ function ClientesPageContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Client Modal - Mobile First */}
+      {/* Edit Supplier Modal - Mobile First */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl p-4 sm:p-6">
           <DialogHeader className="space-y-2 pb-3 sm:pb-4">
             <DialogTitle className="text-xl sm:text-2xl font-semibold text-[#374151]">
-              Editar Cliente
+              Editar Proveedor
             </DialogTitle>
             <DialogDescription className="text-sm sm:text-base text-[#6b7280]">
-              Actualizar información del cliente
+              Actualizar información del proveedor
             </DialogDescription>
           </DialogHeader>
           <DynamicForm
-            id="edit-client-form"
+            id="edit-supplier-form"
             config={{
-              sections: clientFormSections,
+              sections: supplierFormSections,
               columns: 2,
               gap: 'medium',
               variant: 'outlined',
               density: 'comfortable',
-              defaultValues: selectedClient ? {
-                name: selectedClient.name,
-                taxId: selectedClient.taxId,
-                email: selectedClient.email || '',
-                phone: selectedClient.phone || '',
-                contactPerson: selectedClient.contactPerson || '',
-                notes: selectedClient.notes || '',
+              defaultValues: selectedSupplier ? {
+                name: selectedSupplier.name,
+                taxId: selectedSupplier.taxId || '',
               } : {},
             }}
             onSubmit={handleEditSubmit}
@@ -643,10 +698,10 @@ function ClientesPageContent() {
             footerClassName="flex justify-end gap-3 pt-4 border-t border-[#e5e7eb]"
             extraButtons={
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-                <ActionButton 
-                  type="button" 
-                  variant="ghost" 
-                  onClick={handleCloseModals} 
+                <ActionButton
+                  type="button"
+                  variant="ghost"
+                  onClick={handleCloseModals}
                   disabled={formLoading}
                   className="flex-1 sm:flex-none"
                   size="md"
@@ -655,7 +710,7 @@ function ClientesPageContent() {
                 </ActionButton>
                 <ActionButton
                   type="submit"
-                  form="edit-client-form"
+                  form="edit-supplier-form"
                   variant="save"
                   disabled={formLoading}
                   size="md"
@@ -672,12 +727,37 @@ function ClientesPageContent() {
         </DialogContent>
       </Dialog>
 
+      {/* Confirmación de eliminar / reactivar */}
+      <ConfirmActionDialog
+        open={accionPendiente !== null}
+        onOpenChange={(open) => { if (!open) setAccionPendiente(null) }}
+        title={accionPendiente?.tipo === 'reactivar' ? "Reactivar proveedor" : "Eliminar proveedor"}
+        icon={accionPendiente?.tipo === 'reactivar' ? <RotateCcw className="h-5 w-5" /> : <Trash2 className="h-5 w-5" />}
+        description={
+          accionPendiente?.tipo === 'reactivar' ? (
+            <>
+              <strong>{accionPendiente.proveedor.name}</strong> vuelve al catálogo de activos y podrá elegirse
+              de nuevo en las cuentas por pagar.
+            </>
+          ) : (
+            <>
+              <strong>{accionPendiente?.proveedor.name}</strong> deja de aparecer en el catálogo y en el alta de
+              cuentas por pagar. Podrás reactivarlo desde el filtro de inactivos.
+            </>
+          )
+        }
+        confirmLabel={accionPendiente?.tipo === 'reactivar' ? "Reactivar" : "Eliminar"}
+        loadingText={accionPendiente?.tipo === 'reactivar' ? "Reactivando…" : "Eliminando…"}
+        confirmVariant={accionPendiente?.tipo === 'reactivar' ? "primary" : "danger"}
+        onConfirm={handleConfirmarAccionProveedor}
+      />
+
       {/* Bulk Upload Dialog */}
       <BulkUploadDialog
         open={showBulkUploadDialog}
         onOpenChange={setShowBulkUploadDialog}
-        title="Carga Masiva de Clientes"
-        description="Importa múltiples clientes desde un archivo Excel. Verifica que el RFC no esté duplicado."
+        title="Carga Masiva de Proveedores"
+        description="Importa múltiples proveedores desde un archivo Excel. La razón social y el RFC no pueden estar duplicados."
         archivo={archivo}
         uploadResponse={uploadResponse}
         validacionResultado={validacionResultado}
@@ -685,13 +765,13 @@ function ClientesPageContent() {
         loading={uploadLoading}
         onFileChange={handleFileChange}
         onUpload={subirArchivo}
-        onValidate={() => {}} // No needed for clients - validation happens on upload
+        onValidate={() => {}} // No needed for suppliers - validation happens on upload
         onImport={importarDatos}
         onReset={handleResetBulkUpload}
       />
 
       {/* Dialog de Guía de Carga Masiva */}
-      <BulkUploadGuideDialogClientes
+      <BulkUploadGuideDialogProveedores
         open={guideOpen}
         onOpenChange={setGuideOpen}
       />

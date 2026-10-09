@@ -1,3 +1,5 @@
+import type { Supplier } from '@/types/suppliers';
+
 // ============================================
 // ENUMS
 // ============================================
@@ -8,16 +10,6 @@ export type PaymentMethod = 'cash' | 'check' | 'transfer' | 'card' | 'other';
 // ============================================
 // MAIN ENTITIES
 // ============================================
-
-export interface Supplier {
-  id: string;
-  name: string;
-  rfc: string;
-  email: string;
-  phone?: string;
-  contactName?: string;
-  status: string;
-}
 
 export interface Category {
   id: string;
@@ -60,8 +52,7 @@ export interface PaymentSchedule {
 export interface AccountPayable {
   id: string;
   supplierId?: string | null;
-  supplierName?: string | null;
-  supplier?: Supplier | null;
+  supplier: Pick<Supplier, 'id' | 'name' | 'taxId'>;
   projectId?: string;
   project?: Project;
   categoryId?: string;
@@ -96,8 +87,7 @@ export interface AccountPayable {
 // ============================================
 
 export interface CreateAccountPayableDto {
-  supplierId?: string;
-  supplierName?: string;
+  supplierId: string;
   projectId?: string;
   categoryId?: string;
   invoiceNumber: string;
@@ -114,7 +104,7 @@ export interface CreateAccountPayableDto {
 }
 
 export interface UpdateAccountPayableDto {
-  supplierName?: string;
+  supplierId?: string;
   invoiceNumber?: string;
   iva?: number;
   ivaType?: 'percentage' | 'amount';

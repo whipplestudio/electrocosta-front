@@ -5,6 +5,25 @@ import { ActionButton, CancelButton } from "@/components/ui"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react"
 
+export interface ErrorValidacionCarga {
+  fila: number
+  campo: string
+  error: string
+}
+
+/**
+ * Adapta los errores de las cargas directas (`/clients/bulk-upload`, `/suppliers/bulk-upload`),
+ * que llegan como `"Fila N: mensaje"`, al formato de `validacionResultado.errores`.
+ */
+export function erroresDeCargaDirecta(errores: string[]): ErrorValidacionCarga[] {
+  return errores.map((texto) => {
+    const coincidencia = /^Fila (\d+):\s*(.*)$/.exec(texto)
+    return coincidencia
+      ? { fila: Number(coincidencia[1]), campo: 'General', error: coincidencia[2] }
+      : { fila: 0, campo: 'General', error: texto }
+  })
+}
+
 export interface BulkUploadDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void

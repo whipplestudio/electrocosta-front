@@ -14,6 +14,7 @@ import {
   Download,
   LogOut,
   Users,
+  Truck,
   Tag,
   Building2,
   LayoutDashboard,
@@ -76,6 +77,13 @@ const menuItems: MenuItem[] = [
     icon: Users,
     href: "/clientes",
     requiredPermissionCodes: ["clientes.clientes.ver"],
+    submenu: [],
+  },
+  {
+    title: "Proveedores",
+    icon: Truck,
+    href: "/proveedores",
+    requiredPermissionCodes: ["proveedores.proveedores.ver"],
     submenu: [],
   },
   {

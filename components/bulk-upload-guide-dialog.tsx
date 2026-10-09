@@ -1,8 +1,9 @@
 "use client"
 
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Table, Calculator, FileSpreadsheet, HelpCircle, X } from "lucide-react"
+import { Table, Calculator, FileSpreadsheet, HelpCircle, Truck, X } from "lucide-react"
 
 export interface BulkUploadGuideDialogProps {
   open: boolean
@@ -43,7 +44,11 @@ export function BulkUploadGuideDialog({
             <div className="space-y-2 text-sm">
               <div className="flex gap-3 p-2 bg-slate-50 dark:bg-slate-900 rounded">
                 <span className="font-medium min-w-[160px] text-slate-700 dark:text-slate-300">proveedorNombre</span>
-                <span className="text-slate-600 dark:text-slate-400">Nombre del proveedor. Si no existe, se creará automáticamente.</span>
+                <span className="text-slate-600 dark:text-slate-400">Razón social del proveedor. Debe existir y estar activo en el catálogo de Proveedores.</span>
+              </div>
+              <div className="flex gap-3 p-2 bg-slate-50 dark:bg-slate-900 rounded">
+                <span className="font-medium min-w-[160px] text-slate-700 dark:text-slate-300">proveedorRfc</span>
+                <span className="text-slate-600 dark:text-slate-400">RFC del proveedor (opcional). Si lo pones, el proveedor se busca por RFC y tiene prioridad sobre el nombre.</span>
               </div>
               <div className="flex gap-3 p-2 bg-slate-50 dark:bg-slate-900 rounded">
                 <span className="font-medium min-w-[160px] text-slate-700 dark:text-slate-300">proyectoNombre</span>
@@ -90,6 +95,25 @@ export function BulkUploadGuideDialog({
                 <span className="text-slate-600 dark:text-slate-400">Descripción o concepto de la cuenta (opcional).</span>
               </div>
             </div>
+          </div>
+
+          {/* Proveedores */}
+          <div className="pt-4 border-t">
+            <h4 className="font-semibold flex items-center gap-2 mb-3 text-base">
+              <Truck className="h-5 w-5 text-blue-500" />
+              Proveedores
+            </h4>
+            <ul className="space-y-1 text-sm text-muted-foreground list-disc list-inside">
+              <li>La plantilla trae una hoja <strong>&quot;Proveedores&quot;</strong> con el catálogo vigente: copia de ahí el nombre y el RFC exactos</li>
+              <li>Si viene <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded">proveedorRfc</code>, se busca por RFC; si no, por <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded">proveedorNombre</code>. Un RFC genérico (<code className="bg-slate-200 dark:bg-slate-800 px-1 rounded">XAXX010101000</code> o <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded">XEXX010101000</code>) cuenta como si no viniera</li>
+              <li>Si el proveedor no existe o está inactivo, la fila se marca como inválida: no se crea en automático</li>
+              <li>
+                Si el proveedor no existe, dalo de alta primero en el módulo{" "}
+                <Link href="/proveedores" className="text-blue-600 dark:text-blue-400 underline">
+                  Proveedores
+                </Link>
+              </li>
+            </ul>
           </div>
 
           {/* Pago opcional */}
@@ -223,8 +247,7 @@ export function BulkUploadGuideDialog({
             <h4 className="font-semibold mb-2 text-base">💡 Consejos útiles</h4>
             <ul className="space-y-1 text-sm text-muted-foreground list-disc list-inside">
               <li>Descarga la plantilla con el botón "Plantilla Excel" para tener el formato correcto</li>
-              <li>El proveedor se creará automáticamente si no existe</li>
-              <li>El proyecto y la categoría deben existir previamente en el sistema</li>
+              <li>El proveedor, el proyecto y la categoría deben existir previamente en el sistema</li>
               <li>El status se determina automáticamente según el monto pagado y la fecha de vencimiento</li>
               <li>Si la fecha de vencimiento ya pasó y hay saldo pendiente, el status será "overdue"</li>
             </ul>

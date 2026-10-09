@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { ActionButton } from "@/components/ui/action-button"
 import { KpiCard } from "@/components/ui/kpi-card"
-import { DataTable, Column, Action } from "@/components/ui/data-table"
+import { DataTable, Column, Action, SelectFilter } from "@/components/ui/data-table"
 import { FloatingInput } from "@/components/ui/floating-input"
 import { FloatingSelect } from "@/components/ui/floating-select"
 import { FloatingDatePicker } from "@/components/ui/floating-date-picker"
@@ -21,6 +21,9 @@ import {
 } from "@/components/ui/dialog"
 import { CheckCircle, Clock, DollarSign, History, CreditCard, Building2, FileText, Wallet, Receipt, Pencil, AlertCircle, Calendar } from "lucide-react"
 import { accountsPayableService } from "@/services/accounts-payable.service"
+import { suppliersService } from "@/services/suppliers.service"
+import { getForbiddenPermissionError } from "@/lib/api-client"
+import type { SupplierOption } from "@/types/suppliers"
 import type { AccountPayable, AccountsPayableSummary, RegisterPaymentDto, UpdatePaymentDto, Payment, AccountPayableStatus, PaymentMethod } from "@/types/accounts-payable"
 import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 import { RouteProtection } from "@/components/route-protection"
@@ -76,6 +79,10 @@ function PagosPageContent() {
   const [submitting, setSubmitting] = useState(false)
 
   const [search, setSearch] = useState("")
+  const [filterSupplierId, setFilterSupplierId] = useState("")
+  // Incluye los inactivos: el filtro debe encontrar las cuentas con saldo de
+  // un proveedor ya desactivado.
+  const [filterSuppliers, setFilterSuppliers] = useState<SupplierOption[]>([])
 
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
@@ -128,6 +135,9 @@ function PagosPageContent() {
       if (search) {
         params.search = search
       }
+      if (filterSupplierId) {
+        params.supplierId = filterSupplierId
+      }
       
       const response = await accountsPayableService.getAll(params)
       setAccounts(response.data)
@@ -140,11 +150,26 @@ function PagosPageContent() {
     } finally {
       setLoading(false)
     }
-  }, [page, limit, search])
+  }, [page, limit, search, filterSupplierId])
 
   useEffect(() => {
     fetchAccounts()
   }, [fetchAccounts])
+
+  useEffect(() => {
+    const loadFilterSuppliers = async () => {
+      try {
+        setFilterSuppliers(await suppliersService.listAll({ includeInactive: true }))
+      } catch (error) {
+        // Sin permiso sobre proveedores la toolbar simplemente no ofrece el
+        // filtro; cualquier otro fallo sí se avisa.
+        if (getForbiddenPermissionError(error)) return
+        console.error("Error al cargar proveedores:", error)
+        toast.error("Error al cargar los proveedores del filtro")
+      }
+    }
+    loadFilterSuppliers()
+  }, [])
 
   const handleRegisterPayment = async () => {
     if (!selectedAccount) return
@@ -291,7 +316,7 @@ function PagosPageContent() {
       key: 'supplier',
       header: 'Proveedor',
       render: (row) => (
-        <span className="font-medium">{row.supplier?.name || row.supplierName || 'N/A'}</span>
+        <span className="font-medium">{row.supplier?.name || 'N/A'}</span>
       ),
     },
     {
@@ -392,8 +417,30 @@ function PagosPageContent() {
 
   const handleClearFilters = useCallback(() => {
     setSearch("")
+    setFilterSupplierId("")
     setPage(1)
   }, [])
+
+  const handleFilterChange = useCallback((key: string, value: string | string[]) => {
+    if (key === 'supplierId') setFilterSupplierId(value as string)
+    setPage(1)
+  }, [])
+
+  const selectFilters = useMemo<SelectFilter[]>(() => filterSuppliers.length === 0 ? [] : [
+    {
+      key: 'supplierId',
+      label: 'Proveedor',
+      searchable: true,
+      width: 320,
+      options: [
+        { value: '', label: 'Todos' },
+        ...filterSuppliers.map((supplier) => ({
+          value: supplier.id,
+          label: supplier.status === 'active' ? supplier.name : `${supplier.name} (inactivo)`,
+        })),
+      ],
+    },
+  ], [filterSuppliers])
 
   const handlePageChange = useCallback((newPage: number) => {
     setPage(newPage)
@@ -459,6 +506,9 @@ function PagosPageContent() {
         }}
         searchValue={search}
         onSearchChange={handleSearchChange}
+        selectFilters={selectFilters}
+        filterValues={{ supplierId: filterSupplierId }}
+        onFilterChange={handleFilterChange}
         onClearFilters={handleClearFilters}
         pagination={{
           page,
@@ -489,7 +539,7 @@ function PagosPageContent() {
               <div className="rounded-xl border bg-gray-50 p-4 space-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Proveedor:</span>
-                  <span className="font-medium">{selectedAccount.supplier?.name || selectedAccount.supplierName}</span>
+                  <span className="font-medium">{selectedAccount.supplier?.name}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Monto Total:</span>
@@ -659,7 +709,7 @@ function PagosPageContent() {
               Historial de Pagos
             </DialogTitle>
             <DialogDescription>
-              {selectedAccount && `Factura: ${selectedAccount.invoiceNumber} - Proveedor: ${selectedAccount.supplier?.name || selectedAccount.supplierName}`}
+              {selectedAccount && `Factura: ${selectedAccount.invoiceNumber} - Proveedor: ${selectedAccount.supplier?.name}`}
             </DialogDescription>
           </DialogHeader>
 

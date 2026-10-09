@@ -1,4 +1,5 @@
 import apiClient from '@/lib/api-client'
+import type { Supplier } from '@/types/suppliers'
 
 export interface DueDateReportFilters {
   type?: 'proximas' | 'vencidas' | 'todas'
@@ -38,12 +39,8 @@ export interface TopSuppliersReportFilters {
 export interface AccountPayableItem {
   id: string
   supplierId?: string | null
-  supplierName?: string
-  supplier?: {
-    id: string
-    name: string
-    email?: string
-  } | null
+  // Vencimientos trae `taxId`; antigüedad de saldos y por categoría sólo `id` y `name`.
+  supplier: Pick<Supplier, 'id' | 'name'> & Partial<Pick<Supplier, 'taxId'>>
   invoiceNumber: string
   amount: number | string
   balance: number | string

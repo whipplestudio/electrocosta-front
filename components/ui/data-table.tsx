@@ -81,6 +81,9 @@ export interface SelectFilter {
   options: SelectOption[]
   multiple?: boolean
   placeholder?: string
+  searchable?: boolean
+  // Ancho en px en pantallas >= sm; por defecto 200.
+  width?: number
 }
 
 export interface SearchFilter {
@@ -508,13 +511,14 @@ function FiltersToolbar({
 
         {/* Select filters */}
         {selectFilters?.map((filter) => (
-          <Box key={filter.key} sx={{ width: { xs: '100%', sm: 200 }, flexShrink: 0 }}>
+          <Box key={filter.key} sx={{ width: { xs: '100%', sm: filter.width ?? 200 }, flexShrink: 0 }}>
             <FloatingSelect
               label={filter.label}
               value={filterValues[filter.key] || (filter.multiple ? [] : '')}
               onChange={(value) => onFilterChange(filter.key, value)}
               options={filter.options}
               multiple={filter.multiple}
+              searchable={filter.searchable}
               placeholder={filter.placeholder || `Seleccionar ${filter.label.toLowerCase()}`}
             />
           </Box>

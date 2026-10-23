@@ -1,4 +1,5 @@
 import apiClient, { handleApiError } from '@/lib/api-client';
+import { downloadXlsx, todayForFilename } from '@/lib/download-xlsx';
 import {
   AccountReceivable,
   CreateAccountReceivableDto,
@@ -18,6 +19,8 @@ import {
   ReactivateAccountReceivableResponse,
   AccountReceivableDeletionImpact,
   PermanentDeleteAccountReceivableResponse,
+  ExportAccountsReceivableFilters,
+  ExportReceivablePaymentsFilters,
 } from '@/types/accounts-receivable';
 
 // ============================================
@@ -220,6 +223,27 @@ export const accountsReceivableService = {
     } catch (error) {
       throw new Error(handleApiError(error));
     }
+  },
+
+  /**
+   * Descargar las cuentas por cobrar en Excel con los filtros de la pantalla.
+   * `filename` permite distinguir el contexto (p. ej. "con saldo").
+   */
+  async exportAccounts(
+    filters: ExportAccountsReceivableFilters = {},
+    filename = `cuentas-por-cobrar_${todayForFilename()}.xlsx`,
+  ): Promise<void> {
+    await downloadXlsx('/accounts-receivable/export', { ...filters }, filename);
+  },
+
+  /**
+   * Descargar el historial de pagos de cuentas por cobrar en Excel
+   */
+  async exportPayments(
+    filters: ExportReceivablePaymentsFilters = {},
+    filename = `pagos-cuentas-por-cobrar_${todayForFilename()}.xlsx`,
+  ): Promise<void> {
+    await downloadXlsx('/accounts-receivable/payments/export', { ...filters }, filename);
   },
 };
 

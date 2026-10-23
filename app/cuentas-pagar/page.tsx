@@ -9,6 +9,7 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { toast } from "sonner"
 import { accountsPayableService } from "@/services/accounts-payable.service"
+import { ExportExcelButton } from "@/components/export-excel-button"
 import { accountsPayableUploadService } from "@/services/accounts-payable-upload.service"
 import type { UploadResponse, ValidacionResultado, ImportacionResultado } from "@/services/accounts-payable-upload.service"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
@@ -995,6 +996,11 @@ function CuentasPagarPageContent() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          <ExportExcelButton
+            size="sm"
+            className="w-full md:w-auto md:h-9 md:px-3"
+            onExport={() => accountsPayableService.exportAccounts(buildFilterDto())}
+          />
           <ActionButton variant="create" permissionCode="cuentas_pagar.registro.crear" onClick={handleNuevaCuenta} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
             Nueva Cuenta
           </ActionButton>

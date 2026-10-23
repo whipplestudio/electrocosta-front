@@ -181,6 +181,18 @@ export interface AccountPayableFiltersDto {
   includeDeleted?: boolean;
 }
 
+/** Filtros del export de cuentas: sin paginación ni orden (el back da 400 con page/limit/sortBy/order). */
+export type ExportAccountsPayableFilters = Omit<AccountPayableFiltersDto, 'page' | 'limit' | 'sortBy' | 'order'>;
+
+/** Filtros del historial de pagos de CxP; el rango aplica sobre la fecha de pago. */
+export interface ExportPayablePaymentsFilters {
+  dateFrom?: string;
+  dateTo?: string;
+  supplierId?: string;
+  paymentMethod?: PaymentMethod;
+  search?: string;
+}
+
 // ============================================
 // RESPONSES - DESACTIVAR / REACTIVAR
 // ============================================

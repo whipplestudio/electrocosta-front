@@ -11,6 +11,9 @@ import { FloatingSelect } from "@/components/ui/floating-select"
 import { FloatingDatePicker } from "@/components/ui/floating-date-picker"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { ExportExcelButton } from "@/components/export-excel-button"
+import { todayForFilename } from "@/lib/download-xlsx"
 import {
   Dialog,
   DialogContent,
@@ -19,12 +22,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { CheckCircle, Clock, DollarSign, History, CreditCard, Building2, FileText, Wallet, Receipt, Pencil, AlertCircle, Calendar } from "lucide-react"
+import { CheckCircle, Clock, DollarSign, History, CreditCard, Building2, FileText, Wallet, Receipt, Pencil, AlertCircle, Calendar, ChevronDown, Download } from "lucide-react"
 import { accountsPayableService } from "@/services/accounts-payable.service"
 import { suppliersService } from "@/services/suppliers.service"
 import { getForbiddenPermissionError } from "@/lib/api-client"
 import type { SupplierOption } from "@/types/suppliers"
-import type { AccountPayable, AccountsPayableSummary, RegisterPaymentDto, UpdatePaymentDto, Payment, AccountPayableStatus, PaymentMethod } from "@/types/accounts-payable"
+import type { AccountPayable, AccountsPayableSummary, RegisterPaymentDto, UpdatePaymentDto, Payment, AccountPayableStatus, PaymentMethod, ExportPayablePaymentsFilters, ExportAccountsPayableFilters } from "@/types/accounts-payable"
 import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 import { RouteProtection } from "@/components/route-protection"
 
@@ -84,6 +87,14 @@ function PagosPageContent() {
   // un proveedor ya desactivado.
   const [filterSuppliers, setFilterSuppliers] = useState<SupplierOption[]>([])
 
+  // Exportación a Excel
+  const [exportingAccounts, setExportingAccounts] = useState(false)
+  const [showExportPaymentsDialog, setShowExportPaymentsDialog] = useState(false)
+  const [exportDateFrom, setExportDateFrom] = useState<Date | undefined>()
+  const [exportDateTo, setExportDateTo] = useState<Date | undefined>()
+  const [exportMethod, setExportMethod] = useState('all')
+  const [exportSupplierId, setExportSupplierId] = useState('all')
+
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
   const [total, setTotal] = useState(0)
@@ -123,23 +134,29 @@ function PagosPageContent() {
     upcomingThisWeek: 0,
   })
 
+  // Filtros de la tabla, sin paginación ni orden: los comparten el listado y el export
+  // (el export responde 400 si recibe page/limit/sortBy/order).
+  const buildFilters = useCallback((): ExportAccountsPayableFilters => {
+    // Siempre filtrar por cuentas con saldo pendiente real (balance > 0), sin
+    // depender únicamente del status guardado en la cuenta: un status
+    // desincronizado (ej. 'paid' con balance > 0 tras corregir un monto)
+    // no debe ocultar la cuenta de esta vista.
+    const filters: ExportAccountsPayableFilters = { minBalance: 0.01 }
+    if (search) filters.search = search
+    if (filterSupplierId) filters.supplierId = filterSupplierId
+    return filters
+  }, [search, filterSupplierId])
+
   const fetchAccounts = useCallback(async () => {
     try {
       setLoading(true)
-      const params: any = { page, limit, sortBy: 'createdAt', order: 'desc' }
-      // Siempre filtrar por cuentas con saldo pendiente real (balance > 0), sin
-      // depender únicamente del status guardado en la cuenta: un status
-      // desincronizado (ej. 'paid' con balance > 0 tras corregir un monto)
-      // no debe ocultar la cuenta de esta vista.
-      params.minBalance = 0.01
-      if (search) {
-        params.search = search
-      }
-      if (filterSupplierId) {
-        params.supplierId = filterSupplierId
-      }
-      
-      const response = await accountsPayableService.getAll(params)
+      const response = await accountsPayableService.getAll({
+        page,
+        limit,
+        sortBy: 'createdAt',
+        order: 'desc',
+        ...buildFilters(),
+      })
       setAccounts(response.data)
       setTotal(response.total)
       setTotalPages(response.totalPages)
@@ -150,7 +167,7 @@ function PagosPageContent() {
     } finally {
       setLoading(false)
     }
-  }, [page, limit, search, filterSupplierId])
+  }, [page, limit, buildFilters])
 
   useEffect(() => {
     fetchAccounts()
@@ -457,6 +474,42 @@ function PagosPageContent() {
   // suma (invariante del contrato), no un único campo.
   const saldoAdeudado =
     summary.totalPending + summary.totalScheduled + summary.totalOverdue
+  const handleExportAccounts = async () => {
+    setExportingAccounts(true)
+    try {
+      await accountsPayableService.exportAccounts(
+        buildFilters(),
+        `cuentas-por-pagar-con-saldo_${todayForFilename()}.xlsx`,
+      )
+      toast.success('Archivo descargado')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el archivo')
+    } finally {
+      setExportingAccounts(false)
+    }
+  }
+
+  // Abrir el diálogo del historial: mes en curso y proveedor del filtro de la pantalla
+  const openExportPaymentsDialog = () => {
+    const now = new Date()
+    setExportDateFrom(new Date(now.getFullYear(), now.getMonth(), 1))
+    setExportDateTo(new Date(now.getFullYear(), now.getMonth() + 1, 0))
+    setExportMethod('all')
+    setExportSupplierId(filterSupplierId || 'all')
+    setShowExportPaymentsDialog(true)
+  }
+
+  const handleExportPayments = async () => {
+    const filters: ExportPayablePaymentsFilters = {}
+    if (exportDateFrom) filters.dateFrom = formatLocalDateISO(exportDateFrom)
+    if (exportDateTo) filters.dateTo = formatLocalDateISO(exportDateTo)
+    // FloatingSelect deja el valor vacío al limpiarlo: cuenta como "Todos"
+    if (exportSupplierId && exportSupplierId !== 'all') filters.supplierId = exportSupplierId
+    if (exportMethod && exportMethod !== 'all') filters.paymentMethod = exportMethod as PaymentMethod
+    await accountsPayableService.exportPayments(filters)
+    setShowExportPaymentsDialog(false)
+  }
+
   const cuentasConSaldo =
     summary.countPending + summary.countScheduled + summary.countOverdue
 
@@ -467,6 +520,31 @@ function PagosPageContent() {
           <h1 className="text-3xl font-bold tracking-tight">Pagos</h1>
           <p className="text-muted-foreground">Gestiona los pagos a proveedores</p>
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <ActionButton
+              type="button"
+              variant="outline"
+              size="sm"
+              loading={exportingAccounts}
+              loadingText="Exportando..."
+              startIcon={<Download className="h-4 w-4" />}
+              endIcon={<ChevronDown className="h-4 w-4" />}
+            >
+              Exportar Excel
+            </ActionButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={handleExportAccounts}>
+              <FileText className="h-4 w-4" />
+              Cuentas con saldo
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={openExportPaymentsDialog}>
+              <History className="h-4 w-4" />
+              Historial de pagos
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* KPI Cards */}
@@ -520,6 +598,61 @@ function PagosPageContent() {
         onRowsPerPageChange={handleRowsPerPageChange}
         rowsPerPageOptions={[10, 25, 50]}
       />
+
+      {/* Dialog: Exportar historial de pagos */}
+      <Dialog open={showExportPaymentsDialog} onOpenChange={setShowExportPaymentsDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Exportar historial de pagos</DialogTitle>
+            <DialogDescription>Pagos aplicados en el rango de fechas, en un archivo de Excel.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <FloatingDatePicker
+              label="Fecha de Pago"
+              value={{ from: exportDateFrom, to: exportDateTo }}
+              onChange={(range) => {
+                if (range && 'from' in range) {
+                  setExportDateFrom(range.from)
+                  setExportDateTo(range.to)
+                }
+              }}
+              mode="range"
+              placeholder="Seleccionar rango"
+            />
+            <FloatingSelect
+              label="Método de Pago"
+              value={exportMethod}
+              onChange={(value) => setExportMethod(value as string)}
+              options={[
+                { value: 'all', label: 'Todos los métodos' },
+                ...Object.entries(paymentMethodLabels).map(([method, label]) => ({ value: method, label })),
+              ]}
+              placeholder="Todos los métodos"
+            />
+            <FloatingSelect
+              label="Proveedor"
+              value={exportSupplierId}
+              onChange={(value) => setExportSupplierId(value as string)}
+              options={[
+                { value: 'all', label: 'Todos los proveedores' },
+                ...filterSuppliers.map((supplier) => ({
+                  value: supplier.id,
+                  label: supplier.status === 'active' ? supplier.name : `${supplier.name} (inactivo)`,
+                })),
+              ]}
+              placeholder="Todos los proveedores"
+              searchable
+              searchPlaceholder="Buscar proveedor..."
+            />
+          </div>
+          <DialogFooter>
+            <ActionButton variant="cancel" onClick={() => setShowExportPaymentsDialog(false)}>
+              Cancelar
+            </ActionButton>
+            <ExportExcelButton variant="primary" label="Exportar" onExport={handleExportPayments} />
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog: Registrar Pago */}
       <Dialog open={showRegisterDialog} onOpenChange={setShowRegisterDialog}>

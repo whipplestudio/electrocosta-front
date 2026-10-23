@@ -94,6 +94,7 @@ import apiClient from "@/lib/api-client"
 import { RouteProtection } from "@/components/route-protection"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog"
+import { ExportExcelButton } from "@/components/export-excel-button"
 import { DeleteAccountDialog } from "@/components/delete-account-dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { formatCurrency as fmtCurrency, formatNumber as fmtNumber } from "@/lib/format"
@@ -1054,6 +1055,11 @@ function CuentasCobrarPageContent() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          <ExportExcelButton
+            size="sm"
+            className="w-full md:w-auto md:h-9 md:px-3"
+            onExport={() => accountsReceivableService.exportAccounts(buildFilterDto())}
+          />
           <ActionButton variant="create" permissionCode="cuentas_cobrar.registro.crear" onClick={handleNuevaCuenta} size="sm" className="w-full md:w-auto md:h-9 md:px-3">
             Nueva Cuenta
           </ActionButton>

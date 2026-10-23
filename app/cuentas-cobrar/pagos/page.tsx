@@ -21,10 +21,18 @@ import {
 } from "@/components/ui/dialog"
 import { KpiCard, TotalKpiCard, DataTable, Column, Action, SelectFilter, ActionButton } from "@/components/ui"
 import { DynamicFormDialog } from "@/components/forms/dynamic-form"
-import { CheckCircle, Clock, DollarSign, FileText, Plus, Search, Calendar as CalendarIcon, Loader2, X, History, Receipt, CreditCard, Pencil, Filter, AlertCircle, TrendingUp, TrendingDown, Eye } from "lucide-react"
+import { CheckCircle, Clock, DollarSign, FileText, Plus, Search, Calendar as CalendarIcon, Loader2, X, History, Receipt, CreditCard, Pencil, ChevronDown, Download, Filter, AlertCircle, TrendingUp, TrendingDown, Eye } from "lucide-react"
 import { useAccountsReceivable } from "@/hooks/use-accounts-receivable"
 import { accountsReceivableService, paymentsService } from "@/services/accounts-receivable.service"
-import type { AccountReceivable, AccountsReceivableTotals, Payment, RegisterPaymentDto } from "@/types/accounts-receivable"
+import type { AccountReceivable, AccountsReceivableTotals, ExportReceivablePaymentsFilters, Payment, RegisterPaymentDto } from "@/types/accounts-receivable"
+import { ExportExcelButton } from "@/components/export-excel-button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { clientsService, type Client } from "@/services/clients.service"
+import { PaymentMethod } from "@/types/accounts-receivable"
+import { todayForFilename } from "@/lib/download-xlsx"
+import { formatLocalDateISO } from "@/lib/date-utils"
+import { FloatingSelect } from "@/components/ui/floating-select"
+import { FloatingDatePicker } from "@/components/ui/floating-date-picker"
 import { RouteProtection } from "@/components/route-protection"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
@@ -101,6 +109,15 @@ function AplicacionPagosContent() {
   
   // Filtros
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Exportación a Excel
+  const [exportingAccounts, setExportingAccounts] = useState(false)
+  const [showExportPaymentsDialog, setShowExportPaymentsDialog] = useState(false)
+  const [exportClients, setExportClients] = useState<Client[]>([])
+  const [exportDateFrom, setExportDateFrom] = useState<Date | undefined>()
+  const [exportDateTo, setExportDateTo] = useState<Date | undefined>()
+  const [exportMethod, setExportMethod] = useState('all')
+  const [exportClientId, setExportClientId] = useState('all')
   
   // Estados para edición de pago
   const [showEditDialog, setShowEditDialog] = useState(false)
@@ -139,6 +156,52 @@ function AplicacionPagosContent() {
 
     return filters
   }, [searchQuery])
+
+  // Exportar las cuentas con saldo con los mismos filtros de la tabla (sin paginación)
+  const handleExportAccounts = async () => {
+    setExportingAccounts(true)
+    try {
+      await accountsReceivableService.exportAccounts(
+        buildFilters(),
+        `cuentas-por-cobrar-con-saldo_${todayForFilename()}.xlsx`,
+      )
+      toast.success('Archivo descargado')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el archivo')
+    } finally {
+      setExportingAccounts(false)
+    }
+  }
+
+  // Abrir el diálogo del historial: mes en curso por defecto
+  const openExportPaymentsDialog = async () => {
+    const now = new Date()
+    setExportDateFrom(new Date(now.getFullYear(), now.getMonth(), 1))
+    setExportDateTo(new Date(now.getFullYear(), now.getMonth() + 1, 0))
+    setExportMethod('all')
+    setExportClientId('all')
+    setShowExportPaymentsDialog(true)
+    if (exportClients.length === 0) {
+      try {
+        const response = await clientsService.list()
+        setExportClients(response.data)
+      } catch (error) {
+        console.error('Error al cargar clientes:', error)
+        toast.error('No se pudo cargar la lista de clientes')
+      }
+    }
+  }
+
+  const handleExportPayments = async () => {
+    const filters: ExportReceivablePaymentsFilters = {}
+    if (exportDateFrom) filters.dateFrom = formatLocalDateISO(exportDateFrom)
+    if (exportDateTo) filters.dateTo = formatLocalDateISO(exportDateTo)
+    // FloatingSelect deja el valor vacío al limpiarlo: cuenta como "Todos"
+    if (exportClientId && exportClientId !== 'all') filters.clientId = exportClientId
+    if (exportMethod && exportMethod !== 'all') filters.paymentMethod = exportMethod as PaymentMethod
+    await accountsReceivableService.exportPayments(filters)
+    setShowExportPaymentsDialog(false)
+  }
 
   // Cargar totales desde el backend (con los mismos filtros que la tabla)
   const fetchTotals = useCallback(async (filters?: any) => {
@@ -451,6 +514,31 @@ function AplicacionPagosContent() {
           <h2 className="text-3xl font-bold tracking-tight">Aplicación de Pagos</h2>
           <p className="text-muted-foreground">Registro y aplicación de pagos recibidos</p>
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <ActionButton
+              type="button"
+              variant="outline"
+              size="sm"
+              loading={exportingAccounts}
+              loadingText="Exportando..."
+              startIcon={<Download className="h-4 w-4" />}
+              endIcon={<ChevronDown className="h-4 w-4" />}
+            >
+              Exportar Excel
+            </ActionButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={handleExportAccounts}>
+              <FileText className="h-4 w-4" />
+              Cuentas con saldo
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={openExportPaymentsDialog}>
+              <History className="h-4 w-4" />
+              Historial de pagos
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* KPIs de Pagos usando componentes reutilizables */}
@@ -558,6 +646,61 @@ function AplicacionPagosContent() {
           onRowsPerPageChange={(limit) => loadData(1, limit)}
           rowsPerPageOptions={[10, 25, 50]}
         />
+
+      {/* Dialog Exportar historial de pagos */}
+      <Dialog open={showExportPaymentsDialog} onOpenChange={setShowExportPaymentsDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Exportar historial de pagos</DialogTitle>
+            <DialogDescription>Pagos aplicados en el rango de fechas, en un archivo de Excel.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <FloatingDatePicker
+              label="Fecha de Pago"
+              value={{ from: exportDateFrom, to: exportDateTo }}
+              onChange={(range) => {
+                if (range && 'from' in range) {
+                  setExportDateFrom(range.from)
+                  setExportDateTo(range.to)
+                }
+              }}
+              mode="range"
+              placeholder="Seleccionar rango"
+            />
+            <FloatingSelect
+              label="Método de Pago"
+              value={exportMethod}
+              onChange={(value) => setExportMethod(value as string)}
+              options={[
+                { value: 'all', label: 'Todos los métodos' },
+                ...Object.values(PaymentMethod).map((method) => ({
+                  value: method,
+                  label: paymentMethodLabels[method] ?? method,
+                })),
+              ]}
+              placeholder="Todos los métodos"
+            />
+            <FloatingSelect
+              label="Cliente"
+              value={exportClientId}
+              onChange={(value) => setExportClientId(value as string)}
+              options={[
+                { value: 'all', label: 'Todos los clientes' },
+                ...exportClients.map((client) => ({ value: client.id, label: client.name })),
+              ]}
+              placeholder="Todos los clientes"
+              searchable
+              searchPlaceholder="Buscar cliente..."
+            />
+          </div>
+          <DialogFooter>
+            <ActionButton variant="cancel" onClick={() => setShowExportPaymentsDialog(false)}>
+              Cancelar
+            </ActionButton>
+            <ExportExcelButton variant="primary" label="Exportar" onExport={handleExportPayments} />
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog Registrar Pago con DynamicForm */}
       <Dialog open={showRegisterDialog} onOpenChange={setShowRegisterDialog}>

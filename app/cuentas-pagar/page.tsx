@@ -45,6 +45,7 @@ import type { AccountPayable, AccountPayableStatus, AccountsPayableSummary, Crea
 import { formatCurrency as fmtCurrency } from "@/lib/format"
 import { parseLocalDate, formatLocalDateISO } from "@/lib/date-utils"
 import { RouteProtection } from "@/components/route-protection"
+import { TruncatedText } from "@/components/ui/truncated-text"
 
 // Helper para formatear fechas sin conversión de zona horaria
 const formatDateWithoutTimezone = (dateString: string): string => {
@@ -764,6 +765,17 @@ function CuentasPagarPageContent() {
     {
       key: 'invoiceNumber',
       header: 'Factura',
+    },
+    {
+      key: 'description',
+      header: 'Descripción',
+      width: 240,
+      render: (row) =>
+        row.description?.trim() ? (
+          <TruncatedText text={row.description} className="text-sm text-muted-foreground" />
+        ) : (
+          <span className="text-sm text-muted-foreground">—</span>
+        ),
     },
     {
       key: 'macroClasificacion',

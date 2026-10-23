@@ -213,6 +213,18 @@ export interface AccountReceivableFilterDto {
   includeDeleted?: boolean;
 }
 
+/** Filtros del export de cuentas: los de la pantalla sin paginación (el back da 400 con page/limit). */
+export type ExportAccountsReceivableFilters = Omit<AccountReceivableFilterDto, 'page' | 'limit'>;
+
+/** Filtros del historial de pagos de CxC; el rango aplica sobre la fecha de pago. */
+export interface ExportReceivablePaymentsFilters {
+  dateFrom?: string;
+  dateTo?: string;
+  clientId?: string;
+  paymentMethod?: PaymentMethod;
+  search?: string;
+}
+
 export interface FollowUpFilterDto {
   accountReceivableId?: string;
   type?: FollowUpType;

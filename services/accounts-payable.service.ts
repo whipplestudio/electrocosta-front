@@ -1,4 +1,5 @@
 import apiClient, { handleApiError } from '@/lib/api-client';
+import { downloadXlsx, todayForFilename } from '@/lib/download-xlsx';
 import type {
   AccountPayable,
   PaginatedAccountsPayableResponse,
@@ -16,6 +17,8 @@ import type {
   ReactivateAccountPayableResponse,
   AccountPayableDeletionImpact,
   PermanentDeleteAccountPayableResponse,
+  ExportAccountsPayableFilters,
+  ExportPayablePaymentsFilters,
 } from '@/types/accounts-payable';
 
 export const accountsPayableService = {
@@ -215,5 +218,20 @@ export const accountsPayableService = {
     } catch (error) {
       throw new Error(handleApiError(error));
     }
+  },
+
+  // Exportación a Excel (el archivo se arma en el back con los mismos filtros de la pantalla)
+  async exportAccounts(
+    filters: ExportAccountsPayableFilters = {},
+    filename = `cuentas-por-pagar_${todayForFilename()}.xlsx`,
+  ): Promise<void> {
+    await downloadXlsx('/accounts-payable/export', { ...filters }, filename);
+  },
+
+  async exportPayments(
+    filters: ExportPayablePaymentsFilters = {},
+    filename = `pagos-cuentas-por-pagar_${todayForFilename()}.xlsx`,
+  ): Promise<void> {
+    await downloadXlsx('/accounts-payable/payments/export', { ...filters }, filename);
   },
 };

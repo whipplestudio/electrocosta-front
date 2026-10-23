@@ -1132,7 +1132,7 @@ function CuentasCobrarPageContent() {
         emptyMessage="No se encontraron cuentas por cobrar"
         // Filtros de búsqueda
         searchFilter={{
-          placeholder: 'Buscar cliente, factura o descripción...',
+          placeholder: 'Buscar cliente, proyecto, factura o descripción...',
           debounceMs: 400,
         }}
         searchValue={searchQuery}

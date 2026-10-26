@@ -637,7 +637,7 @@ function CuentasPagarPageContent() {
   const keyExtractor = useCallback((row: AccountPayable) => row.id, [])
 
   const searchFilterConfig = useMemo(() => ({
-    placeholder: 'Buscar proveedor, factura o descripción...',
+    placeholder: 'Buscar proveedor, proyecto, factura o descripción...',
     debounceMs: 400,
   }), [])
 

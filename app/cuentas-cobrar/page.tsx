@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -497,7 +497,7 @@ function CuentasCobrarPageContent() {
     return false
   }).length
 
-  const getEstadoBadge = (estado: string) => {
+  const getEstadoBadge = useCallback((estado: string) => {
     switch (estado) {
       case "vencido":
         return <Badge variant="destructive">Vencido</Badge>
@@ -510,7 +510,7 @@ function CuentasCobrarPageContent() {
       default:
         return <Badge variant="secondary">{estado}</Badge>
     }
-  }
+  }, [])
 
   const handleNuevaCuenta = () => {
     setSelectedCuenta(null)
@@ -531,12 +531,12 @@ function CuentasCobrarPageContent() {
     setIsDialogOpen(true)
   }
 
-  const handleVerDetalle = (cuenta: AccountReceivable) => {
+  const handleVerDetalle = useCallback((cuenta: AccountReceivable) => {
     setCuentaDetalle(cuenta)
     setIsDetalleDialogOpen(true)
-  }
+  }, [])
 
-  const handleEditarCuenta = (cuenta: AccountReceivable) => {
+  const handleEditarCuenta = useCallback((cuenta: AccountReceivable) => {
     setSelectedCuenta(cuenta)
     
     // Pre-llenar formulario con datos existentes
@@ -554,7 +554,7 @@ function CuentasCobrarPageContent() {
       description: cuenta.description || '',
     })
     setIsDialogOpen(true)
-  }
+  }, [])
 
   const handleSubmitForm = async () => {
     // Validaciones básicas
@@ -652,7 +652,7 @@ function CuentasCobrarPageContent() {
     setPage(1)
   }
 
-  const handleVerHistorial = async (account: AccountReceivable) => {
+  const handleVerHistorial = useCallback(async (account: AccountReceivable) => {
     setSelectedAccountForHistory(account)
     setLoadingHistory(true)
     setIsHistoryDialogOpen(true)
@@ -666,7 +666,7 @@ function CuentasCobrarPageContent() {
     } finally {
       setLoadingHistory(false)
     }
-  }
+  }, [])
 
   // Abrir dialog de editar pago
   const handleOpenEditPayment = (payment: Payment) => {
@@ -817,7 +817,7 @@ function CuentasCobrarPageContent() {
   }
 
   // Configuración de columnas para el DataTable
-  const columns: Column<AccountReceivable>[] = [
+  const columns = useMemo<Column<AccountReceivable>[]>(() => [
     {
       key: 'client',
       header: 'Cliente',
@@ -889,16 +889,16 @@ function CuentasCobrarPageContent() {
         <Badge variant="outline">{row.category?.name || 'Sin categoría'}</Badge>
       ),
     },
-  ]
+  ], [getEstadoBadge])
 
   // Las desactivadas (sólo visibles con "Ver desactivadas") se atenúan salvo la
   // celda del menú de acciones, que sigue siendo el sitio para reactivarlas.
-  const getRowSx = (row: AccountReceivable) => (
+  const getRowSx = useCallback((row: AccountReceivable) => (
     row.deletedAt ? { '& .MuiTableCell-root:not(:last-of-type)': { opacity: 0.5 } } : undefined
-  )
+  ), [])
 
   // Configuración de acciones para el DataTable
-  const actions: Action<AccountReceivable>[] = [
+  const actions = useMemo<Action<AccountReceivable>[]>(() => [
     {
       label: 'Ver detalle',
       icon: <Eye size={16} />,
@@ -940,7 +940,7 @@ function CuentasCobrarPageContent() {
       onClick: (row) => setCuentaAEliminar(row),
       permissionCode: 'cuentas_cobrar.registro.eliminar_permanente',
     },
-  ]
+  ], [handleVerDetalle, handleVerHistorial, handleEditarCuenta])
 
   // Configuración de filtros de selección para el DataTable
   const selectFilters: SelectFilter[] = [
@@ -1204,7 +1204,7 @@ function CuentasCobrarPageContent() {
           setPage(1)
           fetchAccounts(buildFilterDto(), 1, newLimit)
         }}
-        rowsPerPageOptions={[10, 25, 50]}
+        rowsPerPageOptions={[10, 15, 25, 50, 100, 500, 1000]}
       />
 
       {/* Sheet de Filtros Avanzados - Mobile First */}

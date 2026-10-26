@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -213,8 +213,15 @@ function AplicacionPagosContent() {
     }
   }, [])
 
+  // Límite vigente de la tabla. Vive en un ref para que las recargas (búsqueda,
+  // filtros, tras registrar un pago) lo reutilicen sin que cambiarlo dispare
+  // por sí mismo otra carga.
+  const limitRef = useRef(10)
+  const isFirstLoadRef = useRef(true)
+
   // Cargar datos con paginación
-  const loadData = useCallback(async (page = 1, limit = 10) => {
+  const loadData = useCallback(async (page = 1, limit = limitRef.current) => {
+    limitRef.current = limit
     const filters = buildFilters()
     // En paralelo: los totales no dependen de la página, pero deben refrescarse
     // en los mismos puntos que la tabla para no quedar obsoletos.
@@ -224,20 +231,16 @@ function AplicacionPagosContent() {
     ])
   }, [fetchAccounts, fetchTotals, buildFilters])
 
-  // Cargar datos iniciales
+  // Carga inicial inmediata; al cambiar la búsqueda, con debounce para no
+  // llamar mientras el usuario escribe. Una sola petición en ambos casos.
   useEffect(() => {
-    loadData(1, 10)
-  }, [loadData])
-
-  // Recargar cuando cambien los filtros (solo buscar, no clientFilter)
-  useEffect(() => {
-    // Debounce para evitar llamadas múltiples mientras el usuario escribe
+    const delay = isFirstLoadRef.current ? 0 : 400
+    isFirstLoadRef.current = false
     const timer = setTimeout(() => {
-      loadData(1, 10)
-    }, 400)
+      loadData(1)
+    }, delay)
     return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery])
+  }, [loadData])
 
   // Formatear número con separadores de miles (permite punto decimal mientras se escribe)
   const formatNumber = (value: string): string => {

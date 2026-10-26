@@ -293,14 +293,13 @@ function CuentasPagarPageContent() {
     }
   }
 
+  // Opciones de selects: una sola vez al montar (el listado lo pide el efecto de abajo)
   useEffect(() => {
-    const filterDto = buildFilterDto()
-    fetchAccounts(filterDto, page, limit)
     loadSuppliersAndCategories()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Recargar datos cuando cambian filtros básicos o paginación
+  // Cargar datos al montar y recargar cuando cambian filtros básicos o paginación
   useEffect(() => {
     const filterDto = buildFilterDto()
     fetchAccounts(filterDto, page, limit)
@@ -652,7 +651,7 @@ function CuentasPagarPageContent() {
     totalPages,
   }), [page, limit, total, totalPages])
 
-  const rowsPerPageOptions = useMemo(() => [10, 25, 50], [])
+  const rowsPerPageOptions = useMemo(() => [10, 15, 25, 50, 100, 500, 1000], [])
 
   // Funciones de carga masiva
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

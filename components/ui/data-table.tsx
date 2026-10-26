@@ -142,7 +142,7 @@ function MD3TablePagination({
   page: number
   rowsPerPage: number
   onPageChange: (event: unknown, newPage: number) => void
-  onRowsPerPageChange?: (event: React.ChangeEvent<HTMLInputElement>) => void
+  onRowsPerPageChange?: (rowsPerPage: number) => void
   rowsPerPageOptions?: number[]
 }) {
   const totalPages = Math.max(1, Math.ceil(count / rowsPerPage))
@@ -168,6 +168,13 @@ function MD3TablePagination({
     }
   }
 
+  // Si el límite actual no está entre las opciones se añade, para que el select
+  // muestre el valor real en vez de quedar en blanco.
+  const selectOptions = rowsPerPageOptions.includes(rowsPerPage)
+    ? rowsPerPageOptions
+    : [...rowsPerPageOptions, rowsPerPage].sort((a, b) => a - b)
+  const showRowsSelector = rowsPerPageOptions.length > 0 && !!onRowsPerPageChange
+
   const handleInputBlur = () => {
     const target = Math.min(Math.max(1, parseInt(inputPage || '1', 10)), totalPages)
     if (target !== page) {
@@ -191,18 +198,73 @@ function MD3TablePagination({
         backgroundColor: SYSTEM_COLORS.background,
       }}
     >
-      <Typography
-        variant="body2"
+      <Box
         sx={{
-          color: SYSTEM_COLORS.foregroundMuted,
+          display: 'flex',
+          alignItems: 'center',
+          gap: { xs: 1, sm: 1.5 },
           mr: { sm: 1.5 },
-          fontSize: { xs: '12px', sm: '14px' },
           order: { xs: 2, sm: 1 },
-          whiteSpace: 'nowrap',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
         }}
       >
-        {(page - 1) * rowsPerPage + 1}-{Math.min(page * rowsPerPage, count)} de {count}
-      </Typography>
+        {showRowsSelector && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <select
+              value={rowsPerPage}
+              onChange={(e) => onRowsPerPageChange?.(Number(e.target.value))}
+              aria-label="Registros por página"
+              style={{
+                height: '32px',
+                fontSize: '14px',
+                fontWeight: 500,
+                color: SYSTEM_COLORS.foreground,
+                backgroundColor: SYSTEM_COLORS.background,
+                border: `1px solid ${SYSTEM_COLORS.border}`,
+                borderRadius: '8px',
+                outline: 'none',
+                padding: '0 4px',
+                cursor: 'pointer',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = SYSTEM_COLORS.primary
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = SYSTEM_COLORS.border
+              }}
+            >
+              {selectOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <Typography
+              variant="body2"
+              sx={{
+                color: SYSTEM_COLORS.foregroundMuted,
+                fontSize: { xs: '12px', sm: '14px' },
+                whiteSpace: 'nowrap',
+              }}
+            >
+              por página
+            </Typography>
+          </Box>
+        )}
+        <Typography
+          variant="body2"
+          sx={{
+            color: SYSTEM_COLORS.foregroundMuted,
+            fontSize: { xs: '12px', sm: '14px' },
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {count === 0
+            ? '0 de 0'
+            : `${(page - 1) * rowsPerPage + 1}-${Math.min(page * rowsPerPage, count)} de ${count}`}
+        </Typography>
+      </Box>
 
       <Box sx={{ 
         display: 'flex', 
@@ -292,10 +354,14 @@ function ActionsMenu<T>({ actions, row }: { actions: Action<T>[]; row: T }) {
   const isAllowed = usePermissionGate()
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null)
   const open = Boolean(anchorEl)
+  // El Menu (y su ClickAwayListener) se monta perezosamente en la primera
+  // apertura; con cientos de filas evita montar uno por fila.
+  const [menuMounted, setMenuMounted] = React.useState(false)
   const menuRef = React.useRef<HTMLDivElement>(null)
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation()
+    setMenuMounted(true)
     setAnchorEl(event.currentTarget)
   }
 
@@ -340,6 +406,7 @@ function ActionsMenu<T>({ actions, row }: { actions: Action<T>[]; row: T }) {
       >
         <MoreVertIcon sx={{ fontSize: { xs: '18px', sm: '20px' } }} />
       </IconButton>
+      {menuMounted && (
       <ClickAwayListener onClickAway={handleClickAway}>
         <Menu
           anchorEl={anchorEl}
@@ -403,6 +470,7 @@ function ActionsMenu<T>({ actions, row }: { actions: Action<T>[]; row: T }) {
           ))}
         </Menu>
       </ClickAwayListener>
+      )}
     </>
   )
 }
@@ -566,6 +634,71 @@ function LoadingRows({ columns, hasActions, size }: { columns: number; hasAction
   )
 }
 
+// Estilos de fila constantes (fuera del render para no recrearlos por fila).
+const ROW_BASE_SX = {
+  '&:hover': {
+    backgroundColor: 'rgba(22, 78, 99, 0.04)',
+  },
+  '&:last-child .MuiTableCell-root': {
+    borderBottom: 'none',
+  },
+}
+
+const rowCellSx = (size: 'small' | 'medium') => ({
+  color: SYSTEM_COLORS.foreground,
+  borderBottom: `1px solid ${SYSTEM_COLORS.border}`,
+  py: size === 'small' ? 1 : 1.5,
+  px: 2,
+})
+
+const ROW_SX_BY_SIZE = {
+  small: { ...ROW_BASE_SX, '& .MuiTableCell-root': rowCellSx('small') },
+  medium: { ...ROW_BASE_SX, '& .MuiTableCell-root': rowCellSx('medium') },
+}
+
+interface DataTableRowProps<T> {
+  row: T
+  index: number
+  columns: Column<T>[]
+  actions?: Action<T>[]
+  size: 'small' | 'medium'
+  getRowSx?: (row: T, index: number) => SxProps<Theme> | undefined
+}
+
+// Fila memoizada: se vuelve a pintar solo si cambia alguna de sus props (por
+// referencia). Si el padre recrea `columns`, `actions` o `getRowSx` en cada
+// render, la fila se repinta igual, así que el contenido dinámico no se queda
+// obsoleto; memoizar esas props en la pantalla es lo que evita el repintado.
+function DataTableRowInner<T>({ row, index, columns, actions, size, getRowSx }: DataTableRowProps<T>) {
+  const extraSx = getRowSx?.(row, index)
+  return (
+    <TableRow hover sx={extraSx ? { ...ROW_SX_BY_SIZE[size], ...extraSx } : ROW_SX_BY_SIZE[size]}>
+      {columns.map((column) => (
+        <TableCell
+          key={column.key}
+          align={column.align || 'left'}
+          sx={{ width: column.width, ...column.sx }}
+        >
+          {column.render
+            ? column.render(row, index)
+            : (row as Record<string, unknown>)[column.key] as React.ReactNode}
+        </TableCell>
+      ))}
+      {actions && (
+        <TableCell align="right">
+          <ActionsMenu actions={actions} row={row} />
+        </TableCell>
+      )}
+    </TableRow>
+  )
+}
+
+const DataTableRow = React.memo(DataTableRowInner) as typeof DataTableRowInner
+
+// Altura máxima del área con scroll de una tabla paginada: viewport menos el
+// espacio de cabecera, filtros y pie; con un mínimo para que no quede aplastada.
+const PAGINATED_MAX_HEIGHT = 'max(360px, calc(100vh - 300px))'
+
 // Main DataTable component
 export function DataTable<T>({
   columns,
@@ -637,16 +770,23 @@ export function DataTable<T>({
     onPageChange?.(newPage)
   }
 
-  const handleRowsPerPageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newRowsPerPage = parseInt(event.target.value, 10)
-    onRowsPerPageChange?.(newRowsPerPage)
-  }
-
   const hasPagination = pagination !== undefined
   const hasActions = actions && actions.length > 0
   const hasActiveFilters = searchValue !== '' || Object.values(filterValues).some((v) => v !== '' && (!Array.isArray(v) || v.length > 0))
 
   const hasAnyFilters = !!searchFilter || (selectFilters && selectFilters.length > 0)
+
+  // Con paginación la tabla tiene scroll interno (altura ligada al viewport) y el
+  // pie queda fuera del área con scroll. Sin paginación (diálogos) no cambia nada.
+  const effectiveMaxHeight = maxHeight ?? (hasPagination ? PAGINATED_MAX_HEIGHT : undefined)
+  const effectiveStickyHeader = stickyHeader || hasPagination
+
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null)
+  const currentPage = pagination?.page
+  const currentLimit = pagination?.limit
+  React.useEffect(() => {
+    scrollContainerRef.current?.scrollTo({ top: 0 })
+  }, [currentPage, currentLimit])
 
   return (
     <Paper
@@ -676,8 +816,9 @@ export function DataTable<T>({
         />
       )}
       <TableContainer 
+        ref={scrollContainerRef}
         sx={{ 
-          maxHeight: maxHeight,
+          maxHeight: effectiveMaxHeight,
           overflowX: 'auto',
           // Hide scrollbar on mobile for cleaner look, but keep functionality
           '&::-webkit-scrollbar': {
@@ -693,7 +834,7 @@ export function DataTable<T>({
         }}
       >
         <Table
-          stickyHeader={stickyHeader}
+          stickyHeader={effectiveStickyHeader}
           size={size}
           sx={{
             minWidth: { xs: '100%', sm: 650 },
@@ -718,6 +859,7 @@ export function DataTable<T>({
                 sx={{
                   backgroundColor: SYSTEM_COLORS.muted,
                   '& .MuiTableCell-root': {
+                    backgroundColor: SYSTEM_COLORS.muted,
                     color: SYSTEM_COLORS.foreground,
                     fontWeight: 500,
                     fontSize: { xs: '12px', sm: '14px' },
@@ -764,42 +906,15 @@ export function DataTable<T>({
               </TableRow>
             ) : (
               data.map((row, index) => (
-                <TableRow
+                <DataTableRow
                   key={keyExtractor(row, index)}
-                  hover
-                  sx={{
-                    '&:hover': {
-                      backgroundColor: 'rgba(22, 78, 99, 0.04)',
-                    },
-                    '& .MuiTableCell-root': {
-                      color: SYSTEM_COLORS.foreground,
-                      borderBottom: `1px solid ${SYSTEM_COLORS.border}`,
-                      py: size === 'small' ? 1 : 1.5,
-                      px: 2,
-                    },
-                    '&:last-child .MuiTableCell-root': {
-                      borderBottom: 'none',
-                    },
-                    ...getRowSx?.(row, index),
-                  }}
-                >
-                  {columns.map((column) => (
-                    <TableCell
-                      key={column.key}
-                      align={column.align || 'left'}
-                      sx={{ width: column.width, ...column.sx }}
-                    >
-                      {column.render
-                        ? column.render(row, index)
-                        : (row as Record<string, unknown>)[column.key] as React.ReactNode}
-                    </TableCell>
-                  ))}
-                  {hasActions && (
-                    <TableCell align="right">
-                      <ActionsMenu actions={actions} row={row} />
-                    </TableCell>
-                  )}
-                </TableRow>
+                  row={row}
+                  index={index}
+                  columns={columns}
+                  actions={hasActions ? actions : undefined}
+                  size={size}
+                  getRowSx={getRowSx}
+                />
               ))
             )}
           </TableBody>
@@ -812,7 +927,7 @@ export function DataTable<T>({
           page={pagination.page}
           rowsPerPage={pagination.limit}
           onPageChange={handlePageChange}
-          onRowsPerPageChange={handleRowsPerPageChange}
+          onRowsPerPageChange={onRowsPerPageChange}
           rowsPerPageOptions={rowsPerPageOptions}
         />
       )}
